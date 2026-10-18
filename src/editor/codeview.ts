@@ -81,7 +81,14 @@ export class CodeView implements NodeView {
       this.preview.contentEditable = "false";
       if (this.kind === "math") this.preview.className = "md-math-preview mathjax-block md-mathjax-preview";
       else { this.preview.className = "md-diagram-panel md-fences-adv-panel"; this.dom.classList.add("md-fences-advanced"); }
-      this.preview.addEventListener("mousedown", (e) => { e.preventDefault(); this.cm.focus(); });
+      // Clicking the rendered preview enters edit mode: move the PM selection inside the node (adds
+      // .md-focus → CodeMirror becomes visible), then focus CodeMirror.
+      this.preview.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        const p = this.getPos(); if (p == null) return;
+        this.view.dispatch(this.view.state.tr.setSelection(TextSelection.create(this.view.state.doc, p + 1)));
+        requestAnimationFrame(() => { this.cm.refresh(); this.cm.focus(); this.cm.setCursor(0, 0); });
+      });
       this.dom.appendChild(this.preview);
     }
     this.schedulePreview(0);

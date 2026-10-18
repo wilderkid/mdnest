@@ -25,6 +25,7 @@ document.body.classList.add("os-linux", "pin-outline");
 const sidebar = new Sidebar(host, (p) => openFile(p));
 document.body.appendChild(sidebar.el);
 const content = document.createElement("content"); document.body.appendChild(content);
+const writeEl = document.createElement("div"); content.appendChild(writeEl);
 const source = new SourceMode(document.body);
 const footer = document.createElement("footer"); footer.className = "ty-footer";
 footer.innerHTML = `<button id="sidebar-toggle" title="Toggle sidebar">☰</button><span id="file-title">Untitled</span><span class="footer-spacer"></span>
@@ -35,7 +36,7 @@ let toastTimer: any;
 const notify = (m: string) => { toast.textContent = m; toast.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => toast.classList.remove("show"), 2600); };
 
 let changeTimer: any;
-const editor: Editor = createEditor(content, WELCOME, {
+const editor: Editor = createEditor(writeEl, WELCOME, {
   decorationProviders,
   onChange: () => {
     setDirty(true);

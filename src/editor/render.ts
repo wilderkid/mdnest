@@ -5,7 +5,7 @@ export function loadMathJax(): Promise<any> {
   mjReady = new Promise((resolve, reject) => {
     (window as any).MathJax = {
       tex: { inlineMath: [["$", "$"]], displayMath: [["$$", "$$"]], tags: "ams", packages: { "[+]": ["ams"] } },
-      svg: { fontCache: "global" },
+      svg: { fontCache: "local" },
       startup: { typeset: false, ready: () => { (window as any).MathJax.startup.defaultReady(); resolve((window as any).MathJax); } },
       loader: { paths: { "mathjax-newcm": "./vendor/mathjax-newcm-font" } },
       options: { enableMenu: false },

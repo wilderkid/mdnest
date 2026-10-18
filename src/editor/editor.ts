@@ -1,4 +1,4 @@
-import { EditorState, Plugin, PluginKey, NodeSelection } from "prosemirror-state";
+import { EditorState, Plugin, PluginKey, NodeSelection, TextSelection } from "prosemirror-state";
 import { EditorView, DecorationSet } from "prosemirror-view";
 import { history } from "prosemirror-history";
 import { dropCursor } from "prosemirror-dropcursor";
@@ -38,7 +38,15 @@ export function createEditor(mount: HTMLElement, markdown: string, hooks: Editor
     buildInputRules(schema), ...buildKeymaps(schema, hooks.keys), history(), dropCursor(), gapCursor(),
     columnResizing(), tableEditing(), revealPlugin(), externalDecorations(hooks),
   ];
-  const mkState = (md: string) => EditorState.create({ doc: parseMarkdown(md), plugins });
+  const mkState = (md: string) => {
+    const doc = parseMarkdown(md);
+    // start the caret in the first prose textblock (not inside front matter / a code node view,
+    // which would hand focus to CodeMirror)
+    let pos = -1;
+    doc.descendants((n, p) => { if (pos >= 0) return false; if (n.isTextblock && !n.type.spec.code) { pos = p + 1; return false; } return true; });
+    const selection = pos >= 0 ? TextSelection.create(doc, pos) : undefined;
+    return EditorState.create({ doc, plugins, selection });
+  };
   const view = new EditorView({ mount }, {
     state: mkState(markdown),
     nodeViews: nodeViews() as any,
