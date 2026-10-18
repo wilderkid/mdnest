@@ -4,3 +4,6 @@ src-tauri/target/
 .grok-*.log
 *.log
 dev-data/workspace/.tmp*
+public/vendor/
+dev-data/themes/
+src-tauri/resources/themes/

@@ -9,7 +9,7 @@ import { MarkdownParser, MarkdownSerializer, MarkdownSerializerState, defaultMar
 import { Node as PMNode } from "prosemirror-model";
 import { schema } from "./schema";
 
-function mathPlugin(md: MarkdownIt) {
+function mathPlugin(md: any) {
   // block: $$ ... $$ on their own lines
   md.block.ruler.before("fence", "math_block", (state, startLine, endLine, silent) => {
     const start = state.bMarks[startLine] + state.tShift[startLine];
@@ -43,7 +43,7 @@ function mathPlugin(md: MarkdownIt) {
   });
 }
 
-function frontMatterPlugin(md: MarkdownIt) {
+function frontMatterPlugin(md: any) {
   md.block.ruler.before("hr", "front_matter", (state, startLine, endLine, silent) => {
     if (startLine !== 0) return false;
     const line0 = state.src.slice(state.bMarks[0], state.eMarks[0]);
@@ -64,7 +64,7 @@ function frontMatterPlugin(md: MarkdownIt) {
   });
 }
 
-function typoraExtras(md: MarkdownIt) {
+function typoraExtras(md: any) {
   md.core.ruler.push("mdnest_extras", (state) => {
     const t = state.tokens;
     for (let i = 0; i < t.length; i++) {
@@ -135,7 +135,7 @@ export const parser = new MarkdownParser(schema, md, {
 
 const d = defaultMarkdownSerializer;
 function serializeCellInline(state: MarkdownSerializerState, cell: PMNode) {
-  const sub = new MarkdownSerializerState(serializer.nodes, serializer.marks, {});
+  const sub = new (MarkdownSerializerState as any)(serializer.nodes, serializer.marks, {});
   sub.renderInline(cell);
   return (sub as any).out.replace(/\|/g, "\\|").replace(/\n/g, " ").trim();
 }

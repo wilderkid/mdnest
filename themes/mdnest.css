@@ -1,0 +1,24 @@
+/* mdnest — default theme (original work, MIT) */
+:root {
+  --bg-color: #fdfdfc; --text-color: #2b2d31; --side-bar-bg-color: #f3f3f1; --control-text-color: #5d6068;
+  --primary-color: #3d6fd9; --select-text-bg-color: #cfe0ff; --active-file-bg-color: rgba(61,111,217,.12);
+  --mermaid-theme: neutral;
+}
+html { font-size: 16px; }
+#write { font-family: "Open Sans", "Noto Sans", "Noto Sans CJK SC", system-ui, sans-serif; color: var(--text-color); line-height: 1.7; max-width: 820px; }
+#write h1, #write h2, #write h3, #write h4, #write h5, #write h6 { font-weight: 650; line-height: 1.3; color: #1d1f23; letter-spacing: -.01em; }
+#write h1 { font-size: 2.1em; margin: 1.1em 0 .6em; }
+#write h2 { font-size: 1.6em; margin: 1.3em 0 .5em; padding-bottom: .25em; border-bottom: 1px solid #e6e6e2; }
+#write h3 { font-size: 1.3em; } #write h4 { font-size: 1.1em; } #write h5, #write h6 { font-size: 1em; color: #555; }
+#write a { color: var(--primary-color); text-decoration: none; border-bottom: 1px solid rgba(61,111,217,.3); }
+#write strong { font-weight: 650; } #write mark { background: #fff1a8; padding: 0 .15em; border-radius: 2px; }
+#write code { background: #efefec; border-radius: 4px; padding: .1em .35em; color: #b4365e; }
+#write blockquote { border-left: 3px solid #c9cfdb; color: #555a63; background: #f6f7f9; padding: .3em 1em; border-radius: 0 4px 4px 0; }
+#write .md-fences { background: #f4f4f1; border: 1px solid #e7e7e2; border-radius: 6px; padding: 10px 8px; }
+#write .md-fences-advanced:not(.md-focus) { border-color: transparent; }
+#write table th { background: #f1f1ee; } #write table tr:nth-child(2n) td { background: #fafaf8; }
+#write hr { border-top: 1px solid #ddd; }
+.cm-s-inner .cm-keyword { color: #8b3fb8; } .cm-s-inner .cm-string { color: #2f7d32; } .cm-s-inner .cm-number { color: #b35a00; }
+.cm-s-inner .cm-comment { color: #8a8f98; font-style: italic; } .cm-s-inner .cm-def { color: #1f5fbf; } .cm-s-inner .cm-variable-2 { color: #1f5fbf; }
+.cm-s-inner .cm-property { color: #0f6e7a; } .cm-s-inner .cm-atom { color: #b35a00; } .cm-s-inner .cm-builtin { color: #0f6e7a; } .cm-s-inner .cm-tag { color: #8b3fb8; }
+.cm-s-inner .cm-attribute { color: #b35a00; } .cm-s-inner .cm-meta { color: #888; } .cm-s-inner .cm-operator { color: #555; }

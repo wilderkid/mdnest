@@ -1,0 +1,18 @@
+/* mdnest night — default dark theme (original work, MIT) */
+@import "mdnest.css";
+:root {
+  --bg-color: #1e1f22; --text-color: #d5d7db; --side-bar-bg-color: #18191b; --control-text-color: #a2a6ad;
+  --primary-color: #7aa2f7; --select-text-bg-color: #36486b; --item-hover-bg-color: rgba(255,255,255,.06);
+  --active-file-bg-color: rgba(122,162,247,.18); --mermaid-theme: dark;
+}
+#write { color: var(--text-color); }
+#write h1, #write h2, #write h3, #write h4, #write h5, #write h6 { color: #eceef1; }
+#write h2 { border-bottom-color: #33353a; } #write code { background: #2a2c30; color: #f29bb6; }
+#write blockquote { background: #24262a; border-left-color: #4a5060; color: #b8bcc4; }
+#write .md-fences { background: #232528; border-color: #2f3236; } #write mark { background: #6b5d1a; color: #fff; }
+#write table th { background: #26282c; } #write table tr:nth-child(2n) td { background: #222427; }
+#write table th, #write table td { border-color: #3a3d42; }
+.cm-s-inner .cm-keyword { color: #c792ea; } .cm-s-inner .cm-string { color: #a5d6a7; } .cm-s-inner .cm-number { color: #f78c6c; }
+.cm-s-inner .cm-def, .cm-s-inner .cm-variable-2 { color: #82aaff; } .cm-s-inner .cm-property, .cm-s-inner .cm-builtin { color: #89ddff; }
+.cm-s-inner .cm-comment { color: #6b7280; }
+.CodeMirror-cursor { border-left-color: #ddd !important; }
