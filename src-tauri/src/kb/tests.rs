@@ -118,3 +118,10 @@ fn dispatch_json_and_queries() {
     assert_eq!(fts_query("向量 db").unwrap(), "\"向 量\" OR \"db\"");
     fs::remove_dir_all(root.parent().unwrap()).ok();
 }
+
+#[test]
+fn fts_query_drops_stopwords() {
+    assert_eq!(super::fts_query("when do we ship to customers?").unwrap(), "\"ship\" OR \"customers\"");
+    assert_eq!(super::fts_query("to be").unwrap(), "\"to\" OR \"be\"");
+    assert!(super::fts_query("  ").is_none());
+}

@@ -7,7 +7,7 @@ import path from "node:path";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export async function startNative({ app, display = ":78", port = 4444, env = {}, width = 1200, height = 800 } = {}) {
+export async function startNative({ app, display = ":78", port = 4444, env = {}, width = 1200, height = 800, args = [] } = {}) {
   const procs = [];
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), "mdnest-native-"));
   const baseEnv = {
@@ -37,7 +37,7 @@ export async function startNative({ app, display = ":78", port = 4444, env = {},
   for (let i = 0; i < 50; i++) { try { await fetch(base + "/status"); break; } catch { await sleep(200); } }
   let sid;
   try {
-    const s = await call("POST", "/session", { capabilities: { alwaysMatch: { "tauri:options": { application: path.resolve(app), args: ["--no-restore"] } } } });
+    const s = await call("POST", "/session", { capabilities: { alwaysMatch: { "tauri:options": { application: path.resolve(app), args: ["--no-restore", ...args] } } } });
     sid = s.sessionId;
   } catch (e) { for (const p of procs) p.kill(); throw new Error(e.message + "\n" + tdLog.slice(-1500)); }
   const S = `/session/${sid}`;

@@ -32,3 +32,15 @@ Measured on 2026-10-19, same method. Each row interleaves two samples per build.
 | Phase 3 `a855c93`, AI off | 8,283,160 B | 4.93 MiB | 198 / 198 MB | 251 / 252 MB |
 
 With AI off, RAM changes by about +1–2 MB, all of it in the Rust process. The binary grows by 1.95 MB (reqwest + rustls/ring, tokio, keyring with the Secret Service/D-Bus stack). The frontend adds about 4 kB to the main chunk; the AI UI is lazy (runtime 6.6 kB, panel 3.7 kB + 1.5 kB CSS) and only loads once AI is enabled.
+
+## Part A + library (2026-10-19)
+
+Same method (`scripts/measure-ram.sh LABEL BIN 30 1 [FILE]`, `--no-restore`, fresh profile), one sample per build.
+
+| Build | Binary | .deb | Welcome page | sample.md |
+|---|---|---|---|---|
+| Phase 3 `a855c93`, AI off | 8,283,160 B | 4.93 MiB | 198 MB | 251–252 MB |
+| A5 native-tls, AI off | 7,277,896 B | 4.39 MiB | — | — |
+| + library (feature on), library off | 8,633,152 B | 5.09 MiB | 193 MB | 246 MB |
+
+The library adds 1.36 MB to the binary over the native-tls build (SQLite with FTS5 1.0 MB, sqlite-vec, notify) and 0.70 MiB to the .deb. Overall it is still 0.35 MB above Phase 3, since native-tls saved 1.0 MB. With the library off, RAM is unchanged (within noise, −5 MB): nothing is opened, and the library runtime (6.7 kB JS) loads lazily. When the library is on, the index for the 5-note smoke folder is 3.4 MB (768-dim vectors, mostly sqlite-vec's preallocated chunk). A local llama-server with nomic-embed-text Q4_K_M uses about 185 MB RSS, in its own process.

@@ -83,7 +83,8 @@ export async function embedPending(batch = 32) {
       if (ac.signal.aborted) { set({ phase: "paused", message: "Paused" }); return; }
       const pending = await ctx.index.call<{ id: number; input: string }[]>("pending", { limit: batch });
       if (!pending.length) break;
-      const vecs = await ai.embed(pending.map((p) => p.input.slice(0, 8000)), { signal: ac.signal, batch });
+      const pre = taskPrefix(model, "doc");
+      const vecs = await ai.embed(pending.map((p) => pre + p.input.slice(0, 8000)), { signal: ac.signal, batch });
       await ctx.index.call("putVectors", { model, items: pending.map((p, i) => [p.id, vecs[i]]) });
       done += pending.length;
       set({ done, total: Math.max(total, done) });
@@ -97,6 +98,12 @@ export async function embedPending(batch = 32) {
 
 export function pause() { job?.abort(); }
 
+/** Task prefixes some embedding models are trained with (nomic-embed-text: search_document / search_query). */
+export function taskPrefix(model: string, kind: "doc" | "query"): string {
+  if (/nomic-embed/i.test(model)) return kind === "doc" ? "search_document: " : "search_query: ";
+  return "";
+}
+
 const qcache = new Map<string, number[]>();
 async function queryVector(q: string, signal?: AbortSignal): Promise<number[] | undefined> {
   if (!vectorsWanted() || status.phase === "error") return undefined;
@@ -105,7 +112,7 @@ async function queryVector(q: string, signal?: AbortSignal): Promise<number[] | 
   const key = st.model + "\u0000" + q;
   if (qcache.has(key)) return qcache.get(key);
   try {
-    const [v] = await ai.embed([q], { signal });
+    const [v] = await ai.embed([taskPrefix(st.model, "query") + q], { signal });
     if (qcache.size > 50) qcache.clear();
     qcache.set(key, v);
     return v;

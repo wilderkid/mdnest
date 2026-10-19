@@ -56,16 +56,28 @@ pub fn fts_prep(s: &str) -> String {
 }
 
 /// Turn free text into a safe FTS5 query: quoted terms OR-ed (CJK runs become phrases).
+/// Very common English words: matching on them alone would let BM25 rank unrelated chunks
+/// ("ship *to* customers" → any note containing "to"). Dropped unless the query is only these.
+const STOP: &[&str] = &["a", "an", "and", "are", "as", "at", "be", "by", "do", "does", "for", "from", "how", "i", "in", "is", "it",
+    "of", "on", "or", "so", "that", "the", "this", "to", "was", "we", "what", "when", "where", "which", "who", "why", "with", "you"];
+
 pub fn fts_query(q: &str) -> Option<String> {
+    let all = fts_terms(q, false);
+    if all.is_empty() { return None; }
+    let content = fts_terms(q, true);
+    Some(if content.is_empty() { all } else { content }.join(" OR "))
+}
+
+fn fts_terms(q: &str, skip_stop: bool) -> Vec<String> {
     let mut terms = Vec::new();
     for raw in q.split(|c: char| c.is_whitespace() || ",.;:!?()[]{}\"'`*#".contains(c)) {
         let t = raw.trim();
-        if t.is_empty() { continue; }
+        if t.is_empty() || (skip_stop && STOP.contains(&t.to_lowercase().as_str())) { continue; }
         let p = fts_prep(t);
         let p = p.split_whitespace().collect::<Vec<_>>().join(" ");
         terms.push(format!("\"{}\"", p.replace('"', "")));
     }
-    if terms.is_empty() { None } else { Some(terms.join(" OR ")) }
+    terms
 }
 
 fn rel_of(root: &Path, p: &Path) -> String {

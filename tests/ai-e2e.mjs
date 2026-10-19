@@ -282,7 +282,7 @@ try {
   try {
     await load();
     await openSettings();
-    const note = await page.locator(".mdn-settings .mdn-note").innerText();
+    const note = await page.locator(".mdn-settings .mdn-note", { hasText: "Nothing is sent while AI is off" }).first().innerText();
     ok(/Nothing is sent while AI is off/.test(note), "b) settings show the privacy note", note.slice(0, 80));
     await shot("02-privacy-note.png");
     dialogMode = "dismiss";

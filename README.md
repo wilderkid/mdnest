@@ -16,6 +16,13 @@ node tests/phase2.mjs           # Phase 2 E2E suite (35 checks; needs `npx vite 
 node tests/mock-openai.mjs      # OpenAI-compatible mock (default :1421, or MOCK_OPENAI_PORT). Fake key test-key-123 only
 node tests/ai-e2e.mjs           # AI plugin E2E (starts the mock; needs preview on :4173, or starts it) → screenshots/ai/
 npx tsx tests/ai.ts             # AI plugin unit tests (no network)
+node tests/ai-polish.mjs        # diff views, inline-only block edits, usage limits → screenshots/ai-polish/
+npx tsx tests/library.ts        # library runtime unit tests (mock index + provider)
+node tests/library-e2e.mjs      # library E2E: kb-cli bridge + mock embeddings → screenshots/library/
+                                # (needs: cargo build --release --bin kb-cli; preview on :4173)
+# real desktop smokes (Xvfb + tauri-driver + webkit2gtk-driver); key read from env at runtime only:
+( set -a; . ~/.grok/relay.env; set +a; node tests/native/relay-smoke.mjs )     # AI polish through the relay
+( set -a; . ~/.grok/relay.env; set +a; node tests/native/library-smoke.mjs )   # + local embeddings on :11434
 npx tsx tests/markers.ts        # editable-marker unit tests
 npx tsx tests/refs.ts           # footnotes + reference links (round-trip, markers)
 node tests/fixes.mjs            # E2E: footnotes/ref links, WebKitGTK-style paste/drop payloads
@@ -92,6 +99,15 @@ Gallery themes used for testing are copied unmodified into `dev-data/themes` (gi
 - **Reference links/images**: `[text][id]`, `[text][]`, `[text]`, `![alt][id]` keep their form on save. `[id]: url "title"` definitions are kept verbatim as a `.md-def-link` block (hidden in export). Editing an id re-resolves against the document's definitions. Soft line breaks inside paragraphs are preserved.
 - CLI: `mdnest FILE [--theme NAME] [--export-html OUT] [--export-pdf OUT] [--quit] [--no-restore] [--debug-log PATH]` (exit code 1 when an export fails). Settings → Editor → "Reopen last file on startup" (default on).
 - Packaging: `mdnest_<ver>_amd64.deb` (package `mdnest`, `/usr/lib/mdnest`). The display name "MD Nest" comes from the window title and `src-tauri/deb/mdnest.desktop`.
+
+## AI plugin and library
+
+- **Suggestions** are decorations until accepted. The view depends on the edit: short edits show an in-place word diff; longer ones show a rendered card (headings, emphasis, lists) with the changed sentences highlighted; when most sentences change (>70%, ≥3 sentences) it is labelled "full rewrite". A whole-block selection sends only the inline text; `#`, list markers and quote prefixes stay in the document and are kept on accept.
+- **Usage**: requests and tokens per day (from the provider's `usage` fields, `stream_options.include_usage`; estimated as chars/4 and marked ≈ when missing), shown in the AI panel. Optional daily request/token limits (Settings → AI; 0 = none) are checked before any network call.
+- **Library** (Settings → Library, off by default): a per-folder index in Rust (SQLite FTS5 + sqlite-vec, `app_data/library/<hash>.sqlite`). Markdown is chunked by heading (path, lines, hash); re-indexing is incremental (only changed chunks are re-embedded, a file watcher picks up edits) and skips the AI exclude list plus the library's own excludes. The Library panel does hybrid search (BM25 + vector kNN fused with RRF; badges show *keyword* / *meaning*) and lists notes related to the open file. `@library` in AI chat retrieves numbered sources; the answer's `[n]` citations and the source list open the file at the cited line. If embeddings fail, the library falls back to keyword search.
+- **Embeddings endpoint**: any OpenAI-compatible `POST /v1/embeddings` (Settings → AI → Embeddings URL / model / optional key). The default is a local Ollama, `http://localhost:11434/v1` with `nomic-embed-text` (`ollama pull nomic-embed-text`). llama.cpp works too: `llama-server -m nomic-embed-text-v1.5.Q4_K_M.gguf --embedding --pooling mean -c 2048 -ub 2048 --port 11434 --alias nomic-embed-text`. For nomic models the `search_document:` / `search_query:` task prefixes are added automatically. The xAI relay does **not** offer embeddings: `/v1/models` lists only chat, image and video models, and `/v1/embeddings` answers "Embeddings API is not supported for this platform".
+- **Plugin APIs**: `index` permission → `ctx.index.call(op, args)` (scan, pending, putVectors, search, related, stats, clear; the root is injected) and `ctx.index.watch(cb)`; `workspace` permission → `ctx.workspace.root()` and `openAt(path, line)`. `ai.provider@1` gained `embed(texts)`, `embedInfo()` and `registerMention()`. Cargo feature `library` (default on) gates the Rust index; `kb-cli` exposes the same JSON dispatch to the browser dev host.
+- **TLS**: reqwest uses native-tls (OpenSSL on Linux; the .deb depends on `libssl3 | libssl3t64`) instead of rustls/ring.
 
 ### WebKitGTK paste/drop notes
 - A clipboard image never reaches the `paste` event; ProseMirror captures the native paste and gets `<img src="blob:…">`, and MD Nest fetches those bytes.

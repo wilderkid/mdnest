@@ -98,6 +98,7 @@ function fakeAi(opts: { failAt?: number; enabled?: boolean } = {}) {
   ok(r.context.startsWith("[1] a.md › A › B (lines 3–5)\n") && r.context.endsWith("…") && r.context.length < 1600, "context numbered and truncated");
   rt.init(fakeCtx(ix, { maxDistance: "abc" }), ai); ok(rt.maxDistance() === 0.8, "bad cut-off falls back to 0.8");
 }
+ok(rt.taskPrefix("nomic-embed-text", "query") === "search_query: " && rt.taskPrefix("nomic-embed-text:v1.5", "doc") === "search_document: " && rt.taskPrefix("text-embedding-3-small", "doc") === "", "task prefixes only for nomic models");
 // mention helpers
 {
   const off = registerMention({ trigger: "@library", title: "L", resolve: async () => ({ context: "", sources: [] }) });
