@@ -104,6 +104,8 @@ pub fn run() {
             commands::pick_save_path,
             commands::read_text_file,
             commands::write_text_file,
+            commands::read_file_bytes,
+            commands::write_file_bytes,
             commands::list_dir,
             commands::list_themes,
             commands::default_workspace,

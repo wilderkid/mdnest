@@ -10,6 +10,10 @@ export interface Host {
   pickSavePath(defaultName?: string, ext?: "md" | "html" | "pdf"): Promise<string | null>;
   readFile(path: string): Promise<string>;
   writeFile(path: string, text: string): Promise<void>;
+  /** Raw file bytes as standard base64. */
+  readFileBytes(path: string): Promise<string>;
+  /** Atomic write of standard-base64 bytes. */
+  writeFileBytes(path: string, base64: string): Promise<void>;
   listDir(path: string): Promise<DirEntry[]>;
   listThemes(): Promise<string[]>;
   themeUrl(file: string): string;          // e.g. "drake.css", "base.user.css"

@@ -37,6 +37,10 @@ import {
   linkAt, selectLine, selectStyledScope, selectWord, selectionHtml, setImageAlign, setImageZoom, setTaskStatus, toggleTaskList,
 } from "./editor/editops";
 import { pairBracketsOn, pairMarkdownOn, PAIR_BRACKETS_KEY, PAIR_MARKDOWN_KEY } from "./editor/autopair";
+import {
+  ENCODINGS, SAVE_ENCODINGS, EOL_KEY, FALLBACK_KEY, applyEol, b64ToBytes, bytesToB64, decodeAs, defaultEol,
+  encodeText, encodingLabel, fallbackEncoding, openBytes, type SaveEncoding,
+} from "./editor/encoding";
 import { openContextMenu, type ContextItem } from "./shell/sidebar";
 import { APP_VERSION } from "./version";
 import {
@@ -49,7 +53,10 @@ import { handleNativeDrop, pathsFromUriList, type NativeDrop } from "./shell/dro
 /** Untitled empty document shown under the welcome page. Word count stays 0 while it is visible. */
 const EMPTY_DOC = "";
 
-const state = { path: null as string | null, dirty: false, lastSaved: "", mtime: null as number | null, conflict: false };
+const state = {
+  path: null as string | null, dirty: false, lastSaved: "", mtime: null as number | null, conflict: false,
+  encoding: "UTF-8" as SaveEncoding, eol: defaultEol(),
+};
 const commands: Command[] = [];
 const decorationProviders: DecorationProvider[] = [];
 // citation / search-hit jump highlight: a node decoration survives the block re-rendering
@@ -67,7 +74,7 @@ const writeEl = document.createElement("div"); content.appendChild(writeEl);
 const source = new SourceMode(document.body, () => { setDirty(true); scheduleAutosave(); });
 const footer = document.createElement("footer"); footer.className = "ty-footer";
 footer.innerHTML = `<button id="sidebar-toggle" title="Toggle sidebar">☰</button><span id="file-title">Untitled</span><span class="footer-spacer"></span>
-  <span id="footer-readonly" hidden>Read-only</span><span id="footer-word-count"></span><select id="theme-select" title="Theme"></select><button id="source-toggle" title="Source mode (Ctrl+/)">&lt;/&gt;</button>`;
+  <span id="footer-readonly" hidden>Read-only</span><button type="button" id="footer-encoding" title="Encoding and line endings"></button><span id="footer-word-count"></span><select id="theme-select" title="Theme"></select><button id="source-toggle" title="Source mode (Ctrl+/)">&lt;/&gt;</button>`;
 document.body.appendChild(footer);
 const toast = document.createElement("div"); toast.id = "mdn-toast"; document.body.appendChild(toast);
 let toastTimer: any;
@@ -110,6 +117,11 @@ function updateCount() { const t = editor.view.state.doc.textContent; const { wo
 function setTitle() {
   const name = state.path ? state.path.split(/[\\/]/).pop()! : "Untitled";
   document.getElementById("file-title")!.textContent = name; document.title = name + " — MD Nest";
+  paintEncoding();
+}
+function paintEncoding() {
+  const el = document.getElementById("footer-encoding");
+  if (el) el.textContent = encodingLabel(state.encoding, state.eol);
 }
 
 function currentMarkdown() { return source.active ? source.value() : editor.getMarkdown(); }
@@ -224,6 +236,8 @@ async function newUntitled() {
   cancelPendingSuggestions(editor.view);
   state.path = null;
   state.lastSaved = "";
+  state.encoding = "UTF-8";
+  state.eol = defaultEol();
   setDirty(false);
   if (source.active) source.show(EMPTY_DOC);
   editor.setMarkdown(EMPTY_DOC);
@@ -263,16 +277,24 @@ async function reopenClosed() {
   await openFile(p);
 }
 
-async function openFile(path: string) {
+async function loadOpened(path: string, text: string, encoding: SaveEncoding, eol: "LF" | "CRLF") {
+  cancelPendingSuggestions(editor.view);
+  state.path = path; const dir = path.replace(/[\\/][^\\/]*$/, "");
+  setImageBase(host.fileUrl(dir + "/"));
+  state.encoding = encoding; state.eol = eol;
+  if (source.active) source.show(text); editor.setMarkdown(text);
+  state.lastSaved = editor.getMarkdown(); setDirty(false); setTitle(); afterLoad(); sidebar.markActive(path); hideWelcome();
+  state.mtime = await host.mtime(path).catch(() => null); state.conflict = false; addRecent(path);
+  localStorage.setItem("mdnest.lastFile", path); plugins.emit("file-opened", path);
+  scheduleMenu();
+}
+async function openFile(path: string, encoding?: string) {
   try {
-    const text = await host.readFile(path);
-    cancelPendingSuggestions(editor.view);
-    state.path = path; const dir = path.replace(/[\\/][^\\/]*$/, "");
-    setImageBase(host.fileUrl(dir + "/"));
-    if (source.active) source.show(text); editor.setMarkdown(text);
-    state.lastSaved = editor.getMarkdown(); setDirty(false); setTitle(); afterLoad(); sidebar.markActive(path); hideWelcome();
-    state.mtime = await host.mtime(path).catch(() => null); state.conflict = false; addRecent(path);
-    localStorage.setItem("mdnest.lastFile", path); plugins.emit("file-opened", path);
+    const bytes = b64ToBytes(await host.readFileBytes(path));
+    const opened = openBytes(bytes, fallbackEncoding());
+    const enc = (encoding ?? opened.encoding) as SaveEncoding;
+    const text = encoding ? decodeAs(bytes, encoding) : opened.text;
+    await loadOpened(path, text, enc, opened.eol);
   } catch (e: any) { notify("Open failed: " + (e.message ?? e)); }
 }
 /** Open a file and reveal the top-level block at a 1-based source line, briefly highlighted. */
@@ -316,7 +338,18 @@ async function save(as: boolean) {
   if (!p) return;
   const md = currentMarkdown();
   try {
-    await host.writeFile(p, md); const first = state.path !== p; state.path = p; state.lastSaved = md; setDirty(false); setTitle();
+    const encoded = encodeText(applyEol(md, state.eol), state.encoding);
+    if (encoded.unmapped.length) {
+      const sample = encoded.unmapped.join(" ");
+      const useUtf8 = confirm(`Some characters cannot be saved as ${state.encoding} (${sample}). Save as UTF-8 instead?`);
+      if (!useUtf8) { notify("Save cancelled"); return; }
+      state.encoding = "UTF-8";
+      const again = encodeText(applyEol(md, state.eol), "UTF-8");
+      await host.writeFileBytes(p, bytesToB64(again.bytes));
+    } else {
+      await host.writeFileBytes(p, bytesToB64(encoded.bytes));
+    }
+    const first = state.path !== p; state.path = p; state.lastSaved = md; setDirty(false); setTitle();
     state.mtime = await host.mtime(p).catch(() => null); state.conflict = false;
     if (first) { setImageBase(host.fileUrl(p.replace(/[\\/][^\\/]*$/, "") + "/")); addRecent(p); }
     if (!quietSave) notify("Saved " + p); plugins.emit("file-saved", p);
@@ -350,6 +383,19 @@ function renderRecent() {
   if (!recentEl) return;
   recentEl.innerHTML = recent().map((p) => `<div class="file-library-node file-tree-node recent-file" data-path="${p.replace(/"/g, "&quot;")}"><div class="file-node-content"><span class="file-node-icon">◦</span><span class="file-node-title">${p.split(/[\\/]/).pop()}</span></div><div class="recent-dir">${p.replace(/[\\/][^\\/]*$/, "")}</div></div>`).join("") || `<div class="outline-item" style="opacity:.6">No recent files</div>`;
   recentEl.querySelectorAll<HTMLElement>(".recent-file").forEach((n) => (n.onclick = () => openFile(n.dataset.path!)));
+}
+function setSaveEncoding(enc: SaveEncoding) {
+  state.encoding = enc;
+  setDirty(true);
+  paintEncoding();
+  scheduleMenu();
+  notify("Save encoding: " + (enc === "UTF-8-BOM" ? "UTF-8 with BOM" : enc));
+}
+async function reopenWith(enc: string) {
+  if (!state.path) { notify("No file to reopen"); return; }
+  if (state.dirty && !(await guard("reopening with another encoding"))) return;
+  await openFile(state.path, enc);
+  notify("Reopened as " + enc);
 }
 async function reloadFromDisk(force = false) {
   if (!state.path) return;
@@ -455,6 +501,23 @@ const plugins = new PluginManager({
   { id: "file.exportHtml", title: "File: Export HTML…", run: () => exportHtml() },
   { id: "file.exportPdf", title: "File: Export PDF…", run: () => exportPdf() },
   { id: "file.reload", title: "File: Reload from Disk", run: () => reloadFromDisk(true) },
+  { id: "file.eol.lf", title: "File: Line Endings LF", run: () => { state.eol = "LF"; setDirty(true); paintEncoding(); scheduleMenu(); } },
+  { id: "file.eol.crlf", title: "File: Line Endings CRLF", run: () => { state.eol = "CRLF"; setDirty(true); paintEncoding(); scheduleMenu(); } },
+  { id: "file.reopen.utf8", title: "File: Reopen UTF-8", run: () => reopenWith("UTF-8") },
+  { id: "file.reopen.gb18030", title: "File: Reopen GB18030", run: () => reopenWith("GB18030") },
+  { id: "file.reopen.gbk", title: "File: Reopen GBK", run: () => reopenWith("GBK") },
+  { id: "file.reopen.big5", title: "File: Reopen Big5", run: () => reopenWith("Big5") },
+  { id: "file.reopen.shiftjis", title: "File: Reopen Shift_JIS", run: () => reopenWith("Shift_JIS") },
+  { id: "file.reopen.euckr", title: "File: Reopen EUC-KR", run: () => reopenWith("EUC-KR") },
+  { id: "file.reopen.win1252", title: "File: Reopen windows-1252", run: () => reopenWith("windows-1252") },
+  { id: "file.reopen.utf16le", title: "File: Reopen UTF-16LE", run: () => reopenWith("UTF-16LE") },
+  { id: "file.saveenc.utf8", title: "File: Save as UTF-8", run: () => setSaveEncoding("UTF-8") },
+  { id: "file.saveenc.utf8bom", title: "File: Save as UTF-8 with BOM", run: () => setSaveEncoding("UTF-8-BOM") },
+  { id: "file.saveenc.gb18030", title: "File: Save as GB18030", run: () => setSaveEncoding("GB18030") },
+  { id: "file.saveenc.gbk", title: "File: Save as GBK", run: () => setSaveEncoding("GBK") },
+  { id: "file.saveenc.big5", title: "File: Save as Big5", run: () => setSaveEncoding("Big5") },
+  { id: "file.saveenc.shiftjis", title: "File: Save as Shift_JIS", run: () => setSaveEncoding("Shift_JIS") },
+  { id: "file.saveenc.utf16le", title: "File: Save as UTF-16LE", run: () => setSaveEncoding("UTF-16LE") },
   { id: "file.autosave", title: "File: Toggle Autosave", run: () => { const on = localStorage.getItem(AUTOSAVE_KEY) !== "1"; localStorage.setItem(AUTOSAVE_KEY, on ? "1" : "0"); notify("Autosave " + (on ? "on" : "off")); } },
   { id: "view.recent", title: "View: Recent Files", run: () => { document.body.classList.add("pin-outline"); sidebar.select("recent"); } },
   { id: "view.settings", title: "Preferences: Settings", run: () => { document.body.classList.add("pin-outline"); sidebar.select("settings"); } },
@@ -477,7 +540,13 @@ async function createIn(dir: string, kind: "file" | "dir") {
   const name = kind === "file" ? await uniqueNewName(dir, "Untitled", ".md") : await uniqueNewName(dir, "Untitled folder", "");
   const path = joinPath(dir, name);
   try {
-    if (kind === "file") { await host.createFile(path); await openFile(path); }
+    if (kind === "file") {
+      await host.createFile(path);
+      await openFile(path);
+      state.eol = defaultEol();
+      state.encoding = "UTF-8";
+      paintEncoding();
+    }
     else await host.createDir(path);
     sidebar.expandedAdd(dir);
     await sidebar.refresh();
@@ -1177,6 +1246,8 @@ function menuState(windows = openWindows): MenuState {
     pairBrackets: pairBracketsOn(),
     pairMarkdown: pairMarkdownOn(),
     readonly,
+    eol: state.eol,
+    encoding: state.encoding,
     inCode: inCodeNow(),
     onLink: !!linkAt(editor.view.state),
     onImage: !!imageSelection(editor.view.state),
@@ -1429,6 +1500,34 @@ editor.view.dom.addEventListener("contextmenu", (e) => editorContextMenu(e));
 window.addEventListener("mdn-open-link", (e) => { void openLinkHref(String((e as CustomEvent).detail || "")); });
 window.addEventListener("mdn-notify", (e) => notify(String((e as CustomEvent).detail || "")));
 document.getElementById("footer-word-count")!.addEventListener("click", () => toggleWordPopover());
+document.getElementById("footer-encoding")!.addEventListener("click", (e) => {
+  const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+  openContextMenu(r.left, Math.max(8, r.top - 220), [
+    { id: "eol", label: "Line ending", submenu: [
+      { id: "file.eol.lf", label: state.eol === "LF" ? "✓ LF" : "LF" },
+      { id: "file.eol.crlf", label: state.eol === "CRLF" ? "✓ CRLF" : "CRLF" },
+    ] },
+    { id: "reopen", label: "Reopen with Encoding", submenu: [
+      { id: "file.reopen.utf8", label: "UTF-8" },
+      { id: "file.reopen.gb18030", label: "GB18030" },
+      { id: "file.reopen.gbk", label: "GBK" },
+      { id: "file.reopen.big5", label: "Big5" },
+      { id: "file.reopen.shiftjis", label: "Shift_JIS" },
+      { id: "file.reopen.euckr", label: "EUC-KR" },
+      { id: "file.reopen.win1252", label: "windows-1252" },
+      { id: "file.reopen.utf16le", label: "UTF-16LE" },
+    ] },
+    { id: "saveenc", label: "Save with Encoding", submenu: [
+      { id: "file.saveenc.utf8", label: state.encoding === "UTF-8" ? "✓ UTF-8" : "UTF-8" },
+      { id: "file.saveenc.utf8bom", label: state.encoding === "UTF-8-BOM" ? "✓ UTF-8 with BOM" : "UTF-8 with BOM" },
+      { id: "file.saveenc.gb18030", label: state.encoding === "GB18030" ? "✓ GB18030" : "GB18030" },
+      { id: "file.saveenc.gbk", label: state.encoding === "GBK" ? "✓ GBK" : "GBK" },
+      { id: "file.saveenc.big5", label: state.encoding === "Big5" ? "✓ Big5" : "Big5" },
+      { id: "file.saveenc.shiftjis", label: state.encoding === "Shift_JIS" ? "✓ Shift_JIS" : "Shift_JIS" },
+      { id: "file.saveenc.utf16le", label: state.encoding === "UTF-16LE" ? "✓ UTF-16LE" : "UTF-16LE" },
+    ] },
+  ], (id) => runCommand(id));
+});
 document.addEventListener("mousedown", (e) => {
   if (!wordPop.hidden && !wordPop.contains(e.target as Node) && (e.target as HTMLElement).id !== "footer-word-count") wordPop.hidden = true;
 });
@@ -1459,6 +1558,13 @@ sidebar.addTab("settings", "⚙", undefined, {
       <label><input type="checkbox" id="set-reopen" ${localStorage.getItem(REOPEN_KEY) !== "0" ? "checked" : ""}> Reopen last file on startup</label>
       <label><input type="checkbox" id="set-pair-brackets" ${pairBracketsOn() ? "checked" : ""}> Auto-pair brackets and quotes</label>
       <label><input type="checkbox" id="set-pair-md" ${pairMarkdownOn() ? "checked" : ""}> Auto-pair Markdown syntax</label>
+      <label>Default line ending for new files<br><select id="set-eol">
+        <option value="LF" ${defaultEol() === "LF" ? "selected" : ""}>LF</option>
+        <option value="CRLF" ${defaultEol() === "CRLF" ? "selected" : ""}>CRLF</option>
+      </select></label>
+      <label>Fallback encoding<br><select id="set-fallback">
+        ${ENCODINGS.map((e) => `<option value="${e}" ${fallbackEncoding() === e ? "selected" : ""}>${e}</option>`).join("")}
+      </select></label>
       <h4>Images</h4><label>When pasting / dropping images, copy them to<br><select id="set-imgfolder">
       ${["./assets", "./${filename}.assets"].map((o) => `<option value="${o}" ${o === folder ? "selected" : ""}>${o}</option>`).join("")}
       <option value="custom" ${["./assets", "./${filename}.assets"].includes(folder) ? "" : "selected"}>custom…</option></select>
@@ -1468,6 +1574,8 @@ sidebar.addTab("settings", "⚙", undefined, {
     (el.querySelector("#set-reopen") as HTMLInputElement).onchange = (e) => localStorage.setItem(REOPEN_KEY, (e.target as HTMLInputElement).checked ? "1" : "0");
     (el.querySelector("#set-pair-brackets") as HTMLInputElement).onchange = (e) => { localStorage.setItem(PAIR_BRACKETS_KEY, (e.target as HTMLInputElement).checked ? "1" : "0"); scheduleMenu(); };
     (el.querySelector("#set-pair-md") as HTMLInputElement).onchange = (e) => { localStorage.setItem(PAIR_MARKDOWN_KEY, (e.target as HTMLInputElement).checked ? "1" : "0"); scheduleMenu(); };
+    (el.querySelector("#set-eol") as HTMLSelectElement).onchange = (e) => localStorage.setItem(EOL_KEY, (e.target as HTMLSelectElement).value);
+    (el.querySelector("#set-fallback") as HTMLSelectElement).onchange = (e) => localStorage.setItem(FALLBACK_KEY, (e.target as HTMLSelectElement).value);
     const fsel = el.querySelector("#set-imgfolder") as HTMLSelectElement, fcus = el.querySelector("#set-imgfolder-custom") as HTMLInputElement;
     fsel.onchange = () => { if (fsel.value !== "custom") { localStorage.setItem(IMAGE_FOLDER_KEY, fsel.value); fcus.value = fsel.value; } else fcus.focus(); };
     fcus.onchange = () => { localStorage.setItem(IMAGE_FOLDER_KEY, fcus.value.trim() || "./assets"); fsel.value = ["./assets", "./${filename}.assets"].includes(fcus.value) ? fcus.value : "custom"; };

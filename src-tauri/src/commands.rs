@@ -65,6 +65,42 @@ pub async fn read_text_file(path: String) -> Result<String, String> {
     fs::read_to_string(&path).map_err(|e| e.to_string())
 }
 
+/// Raw file bytes as standard base64. The WebView decodes legacy encodings.
+#[tauri::command]
+pub async fn read_file_bytes(path: String) -> Result<String, String> {
+    use base64::Engine;
+    let bytes = fs::read(&path).map_err(|e| e.to_string())?;
+    Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
+}
+
+/// Atomic write of standard-base64 bytes (sibling temp file, then rename).
+#[tauri::command]
+pub async fn write_file_bytes(path: String, data: String) -> Result<(), String> {
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD.decode(data.as_bytes()).map_err(|e| e.to_string())?;
+    write_bytes_atomic(&path, &bytes)
+}
+
+fn write_bytes_atomic(path: &str, bytes: &[u8]) -> Result<(), String> {
+    let dest = Path::new(path);
+    if let Some(parent) = dest.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+    }
+    let mut tmp = path.to_string();
+    tmp.push_str(".tmp");
+    {
+        let mut file = fs::File::create(&tmp).map_err(|e| e.to_string())?;
+        file.write_all(bytes).map_err(|e| e.to_string())?;
+        file.sync_all().map_err(|e| e.to_string())?;
+    }
+    fs::rename(&tmp, dest).map_err(|e| {
+        let _ = fs::remove_file(&tmp);
+        e.to_string()
+    })
+}
+
 /// Write via a sibling temp file, then rename over the destination.
 #[tauri::command]
 pub async fn write_text_file(path: String, text: String) -> Result<(), String> {

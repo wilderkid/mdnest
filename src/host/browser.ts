@@ -7,6 +7,8 @@ export const browserHost: Host = {
   async pickSavePath(name = "untitled.md", _ext?: string) { return prompt("Save as:", (await this.defaultWorkspace()) + "/" + name); },
   async readFile(path) { return (await j(await fetch("/api/read?path=" + encodeURIComponent(path)))).text; },
   async writeFile(path, text) { await j(await fetch("/api/write", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path, text }) })); },
+  async readFileBytes(path) { return (await j(await fetch("/api/readb?path=" + encodeURIComponent(path)))).data; },
+  async writeFileBytes(path, data) { await j(await fetch("/api/writeb", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path, data, unique: false }) })); },
   async listDir(path): Promise<DirEntry[]> { return (await j(await fetch("/api/list?path=" + encodeURIComponent(path)))).entries; },
   async listThemes() { return (await j(await fetch("/api/themes"))).themes; },
   themeUrl(file) { return "/themes/" + file; },

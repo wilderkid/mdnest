@@ -56,6 +56,50 @@ try {
   await page.screenshot({ path: path.join(OUT, "file-watch.png") });
 
   ok(errors.length === 0, "B1 no page errors", errors.join(" | "));
+
+  // ---------- B2: encodings and line endings ----------
+  const footerEnc = await page.locator("#footer-encoding").innerText();
+  ok(/UTF-8/.test(footerEnc) && /LF|CRLF/.test(footerEnc), "B2 footer shows encoding and line ending", footerEnc);
+  await page.screenshot({ path: path.join(OUT, "footer-encoding.png") });
+  await page.locator("#mdn-menubar").locator("button.mdn-menu-label", { hasText: "File" }).click();
+  const encRow = page.locator("#mdn-menubar .mdn-menu.mdn-menu-open > .dropdown-menu > .mdn-menu-sub").filter({ hasText: /^Encoding/ }).first();
+  await encRow.hover();
+  await page.waitForTimeout(200);
+  await page.screenshot({ path: path.join(OUT, "encoding-menu.png") });
+  await page.keyboard.press("Escape");
+
+  // Fixture is generated here, not committed. GB18030 bytes for 中文 (lead/trail pairs).
+  const gbPath = path.join(TMP, "gb18030.md");
+  const fixture = Buffer.from([0xd6, 0xd0, 0xce, 0xc4, 0x0a]);
+  fs.writeFileSync(gbPath, fixture);
+  ok(!fixture.includes(Buffer.from("中文")), "B2 fixture is not UTF-8 Chinese");
+  await page.evaluate(async (p) => {
+    window.mdnest.state.path = p;
+    await window.mdnest.runCommand("file.reopen.gb18030");
+  }, gbPath);
+  await page.waitForTimeout(400);
+  ok((await md()).includes("中文"), "B2 reopen with GB18030 shows Chinese", await md());
+  const encNow = await page.evaluate(() => window.mdnest.state.encoding);
+  ok(encNow === "GB18030", "B2 document encoding is GB18030", encNow);
+  await page.locator("#write").click();
+  await page.keyboard.press("Control+End");
+  await page.keyboard.type("编辑");
+  await page.waitForTimeout(200);
+  await run("file.save");
+  await page.waitForTimeout(400);
+  const saved = fs.readFileSync(gbPath);
+  const back = await page.evaluate(async (b64) => {
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder("gb18030").decode(bytes);
+  }, saved.toString("base64"));
+  ok(back.includes("中文") && back.includes("编辑"), "B2 saved bytes stay GB18030", back);
+  ok(!saved.includes(Buffer.from("编辑")), "B2 saved file is not UTF-8 for the edit");
+  fs.rmSync(gbPath, { force: true });
+  fs.rmSync(outside, { force: true });
+
+  ok(errors.length === 0, "B2 no page errors", errors.join(" | "));
 } catch (e) {
   ok(false, "parity-012b threw", e?.message || String(e));
 } finally {

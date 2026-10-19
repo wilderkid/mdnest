@@ -297,6 +297,7 @@ function devFs(): Plugin {
     try {
       if (url.pathname === "/api/workspace") return send(200, { path: ROOT });
       if (url.pathname === "/api/read") { const p = inside(ROOT, url.searchParams.get("path") ?? ""); if (!p) return send(403, "outside sandbox", "text/plain"); return send(200, { text: fs.readFileSync(p, "utf8") }); }
+      if (url.pathname === "/api/readb") { const p = inside(ROOT, url.searchParams.get("path") ?? ""); if (!p) return send(403, "outside sandbox", "text/plain"); return send(200, { data: fs.readFileSync(p).toString("base64") }); }
       if (url.pathname === "/api/list") {
         const p = inside(ROOT, url.searchParams.get("path") ?? ""); if (!p) return send(403, "outside sandbox", "text/plain");
         const entries = fs.readdirSync(p, { withFileTypes: true }).filter((d) => !d.name.startsWith(".") && d.name !== "node_modules")

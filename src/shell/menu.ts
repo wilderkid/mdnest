@@ -36,6 +36,8 @@ export interface MenuState {
   pairMarkdown?: boolean;
   maximized?: boolean;
   readonly?: boolean;
+  eol?: "LF" | "CRLF";
+  encoding?: string;
   inCode?: boolean;
   onLink?: boolean;
   onImage?: boolean;
@@ -70,6 +72,31 @@ export function menuTemplate(mac: boolean): MenuNode[] {
       item("file.rename", "Rename…"),
       item("file.duplicate", "Duplicate"),
       item("file.reload", "Reload from Disk"),
+      { id: "file.lineEndings", label: "Line Endings", submenu: [
+        item("file.eol.lf", "LF"),
+        item("file.eol.crlf", "CRLF"),
+      ] },
+      { id: "file.encoding", label: "Encoding", submenu: [
+        { id: "file.reopenEncoding", label: "Reopen with Encoding", submenu: [
+          item("file.reopen.utf8", "UTF-8"),
+          item("file.reopen.gb18030", "GB18030"),
+          item("file.reopen.gbk", "GBK"),
+          item("file.reopen.big5", "Big5"),
+          item("file.reopen.shiftjis", "Shift_JIS"),
+          item("file.reopen.euckr", "EUC-KR"),
+          item("file.reopen.win1252", "windows-1252"),
+          item("file.reopen.utf16le", "UTF-16LE"),
+        ] },
+        { id: "file.saveEncoding", label: "Save with Encoding", submenu: [
+          item("file.saveenc.utf8", "UTF-8"),
+          item("file.saveenc.utf8bom", "UTF-8 with BOM"),
+          item("file.saveenc.gb18030", "GB18030"),
+          item("file.saveenc.gbk", "GBK"),
+          item("file.saveenc.big5", "Big5"),
+          item("file.saveenc.shiftjis", "Shift_JIS"),
+          item("file.saveenc.utf16le", "UTF-16LE"),
+        ] },
+      ] },
       item("file.openLocation", "Open File Location"),
       item("file.revealSidebar", "Reveal in Sidebar"),
       sep(),
@@ -355,6 +382,15 @@ function applyState(node: MenuNode, state: MenuState, commands: Command[], occup
   if (node.id === "edit.autoPair.brackets") return { ...node, enabled, checked: state.pairBrackets !== false };
   if (node.id === "edit.autoPair.markdown") return { ...node, enabled, checked: !!state.pairMarkdown };
   if (node.id === "view.readonly") return { ...node, enabled, checked: !!state.readonly };
+  if (node.id === "file.eol.lf") return { ...node, enabled, checked: state.eol !== "CRLF" };
+  if (node.id === "file.eol.crlf") return { ...node, enabled, checked: state.eol === "CRLF" };
+  if (node.id === "file.saveenc.utf8") return { ...node, enabled, checked: state.encoding === "UTF-8" };
+  if (node.id === "file.saveenc.utf8bom") return { ...node, enabled, checked: state.encoding === "UTF-8-BOM" };
+  if (node.id === "file.saveenc.gb18030") return { ...node, enabled, checked: state.encoding === "GB18030" };
+  if (node.id === "file.saveenc.gbk") return { ...node, enabled, checked: state.encoding === "GBK" };
+  if (node.id === "file.saveenc.big5") return { ...node, enabled, checked: state.encoding === "Big5" };
+  if (node.id === "file.saveenc.shiftjis") return { ...node, enabled, checked: state.encoding === "Shift_JIS" };
+  if (node.id === "file.saveenc.utf16le") return { ...node, enabled, checked: state.encoding === "UTF-16LE" };
   let accel = node.accel;
   if (node.id && occupied.has(normalizeKey(node.accel))) accel = undefined;
   else accel = accelFor(node, occupied);

@@ -36,7 +36,7 @@ What really was Windows-specific (before):
 | | done | partial | missing | win-broken | n/a |
 |---|---|---|---|---|---|
 | Before (0.1.0) | 28 | 42 | 85 | 4 | 4 |
-| After (0.1.2 so far) | 153 | 0 | 6 | 0 | 4 |
+| After (0.1.2 so far) | 154 | 0 | 5 | 0 | 4 |
 
 Counted by `python3 scripts/parity-count.py` (163 rows; an empty After cell inherits Before).
 
@@ -82,7 +82,7 @@ Counted by `python3 scripts/parity-count.py` (163 rows; an empty After cell inhe
 | Welcome page with Open File / Open Folder buttons | | missing | done | #mdn-welcome; also New File and recent list |
 | Launch: restore last folder / file |  | done | done | setting Reopen last file |
 | Autosave |  | done | done | setting |
-| Line endings (CRLF/LF), encodings |  | missing | missing | files are read and written as UTF-8; no encoding or newline picker |
+| Line endings (CRLF/LF), encodings |  | missing | done | BOM / UTF-8 / fallback (default GB18030); footer and File ▸ Line Endings / Encoding; save reuses both |
 
 ## Edit
 
@@ -265,7 +265,7 @@ Still missing or only partial after 0.1.1. Each note says why.
 
 - **Window menu** (done). Window has Minimize (Ctrl+M), Maximize/Restore (Zoom on macOS), Always on Top, Full Screen, and the open MD Nest windows. View still has an Always on Top alias.
 - **Export to Word / pandoc** (missing). No pandoc integration. Export is PDF, HTML, and HTML without styles.
-- **Line endings and encodings** (missing). Files are read and written as UTF-8. There is no CRLF/LF or encoding picker.
+- **Line endings and encodings** (done). Open detects a BOM, else strict UTF-8, else the fallback encoding (default GB18030). Save reuses the encoding and the majority line ending. The footer shows both; File ▸ Line Endings and Encoding reopen or save with a chosen encoding. Legacy charsets use a TextDecoder reverse map.
 - **Smart punctuation, spell check, emoji autocomplete** (missing). Not built. The editor keeps `spellcheck` off.
 - **Copy code content** (done). Each code fence has a Copy button in `.code-tooltip`. Edit ▸ Code Tools ▸ Copy Code Content copies the fence at the caret. The button is not exported.
 - **Table align and move** (done). Paragraph ▸ Table and the table context menu add, delete, and move rows and columns, align a column (written to the GFM delimiter row), copy the table as Markdown, and delete the table. The floating toolbar has the same commands under "…".

@@ -149,6 +149,8 @@ footer.ty-footer button, footer.ty-footer select { font: inherit; color: inherit
 footer.ty-footer button:hover, footer.ty-footer select:hover { border-color: rgba(127,127,127,.35); }
 footer .footer-spacer { flex: 1; } #footer-word-count { opacity: .85; white-space: nowrap; }
 #footer-readonly { margin-right: 8px; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; opacity: .8; }
+#footer-encoding { font: inherit; color: inherit; background: transparent; border: 1px solid transparent; border-radius: 4px; padding: 2px 6px; cursor: pointer; opacity: .85; white-space: nowrap; }
+#footer-encoding:hover { border-color: rgba(127,127,127,.35); }
 body.ty-readonly #write { cursor: default; }
 .md-htmlblock-editor { border: 1px dashed rgba(127,127,127,.45); border-radius: 4px; margin: 4px 0; }
 .md-htmlblock-editor .CodeMirror { height: auto; background: transparent; }
