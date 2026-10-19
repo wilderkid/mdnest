@@ -6,7 +6,7 @@ Status of each user-visible Typora feature in MD Nest. Sources: our own clean-ro
 
 Legend: **done** · **partial** (exists but incomplete or hidden) · **missing** (never built) · **win-broken**
 (exists, does not work on Windows) · **n/a** (deliberately out of scope).
-"Before" = v0.1.0 (commit 27b86e8), the build the user installed. "After" = this work (v0.1.1).
+"Before" = v0.1.0 (commit 27b86e8), the build the user installed. "After" = this work (v0.1.2).
 Shortcuts are Windows/Linux. On macOS, Ctrl becomes Cmd.
 
 ## Diagnosis summary (why the Windows build looked bare)
@@ -36,7 +36,7 @@ What really was Windows-specific (before):
 | | done | partial | missing | win-broken | n/a |
 |---|---|---|---|---|---|
 | Before (0.1.0) | 28 | 42 | 85 | 4 | 4 |
-| After (0.1.2 so far) | 157 | 0 | 2 | 0 | 4 |
+| After (0.1.2) | 159 | 0 | 0 | 0 | 4 |
 
 Counted by `python3 scripts/parity-count.py` (163 rows; an empty After cell inherits Before).
 
@@ -211,7 +211,7 @@ Counted by `python3 scripts/parity-count.py` (163 rows; an empty After cell inhe
 | Context menu: copy file path | | missing | done | |
 | Context menu: open in new window | | missing | done | |
 | Outline: highlight current heading | | missing | done | .outline-item-active |
-| Outline: collapse / expand |  | missing | missing | outline lists headings; no collapse control |
+| Outline: collapse / expand |  | missing | done | .outline-expander, outline-item-open/-closed; Expand All / Collapse All |
 | File tree keyboard navigation | | missing | done | arrows, Enter, F2, Delete |
 | Live refresh when files change on disk | | missing | done | fs_watch (notify) or Vite fs.watch; expanded folders and the list refresh; selection kept; focus refresh when the watcher is not built |
 
@@ -261,24 +261,9 @@ Counted by `python3 scripts/parity-count.py` (163 rows; an empty After cell inhe
 
 ## Remaining gaps
 
-Still missing or only partial after 0.1.1. Each note says why.
+The menu inventory is done, partial, n/a, or win-broken with nothing left missing. Two behaviours stay partial, and one input rule was never a menu row of its own:
 
-- **Window menu** (done). Window has Minimize (Ctrl+M), Maximize/Restore (Zoom on macOS), Always on Top, Full Screen, and the open MD Nest windows. View still has an Always on Top alias.
-- **Export to Word / pandoc** (done). File → Export → Word (.docx) writes OOXML in TypeScript (STORE zip, no pandoc). Word (pandoc), OpenOffice, RTF, EPUB, LaTeX, MediaWiki, reStructuredText, Textile, OPML, Org mode, and a custom writer run when pandoc is installed. Without it, those items show "Pandoc not found" with Install Pandoc and Re-check. Built-in Word, HTML, and PDF stay available.
-- **Line endings and encodings** (done). Open detects a BOM, else strict UTF-8, else the fallback encoding (default GB18030). Save reuses the encoding and the majority line ending. The footer shows both; File ▸ Line Endings and Encoding reopen or save with a chosen encoding. Legacy charsets use a TextDecoder reverse map.
-- **Smart punctuation** (done). Edit ▸ Smart Punctuation (off by default) turns straight quotes into curly quotes, `--` into an en dash, `---` into an em dash, and `...` into an ellipsis. A line of only hyphens stays a rule or front matter. Code, math, and link marks are skipped. Undo restores the typed characters.
-- **Spell check** (done). Edit ▸ Spell Check (off by default) sets `spellcheck` on `#write` and on CodeMirror source mode. Linux enables WebKitGTK spell checking (enchant/hunspell, languages from `$LANG`, else `en_US`). Windows and macOS use the WebView's own checker.
-- **Emoji autocomplete** (done). Typing `:` plus two letters opens `.md-emoji-suggest`. Enter, Tab, or a click inserts the character, and a finished `:smile:` converts too. Edit ▸ Emoji & Symbols opens a searchable grid. The setting is on by default. Code and math are skipped. Shortcodes come from gemoji (MIT).
-- **Copy code content** (done). Each code fence has a Copy button in `.code-tooltip`. Edit ▸ Code Tools ▸ Copy Code Content copies the fence at the caret. The button is not exported.
-- **Table align and move** (done). Paragraph ▸ Table and the table context menu add, delete, and move rows and columns, align a column (written to the GFM delimiter row), copy the table as Markdown, and delete the table. The floating toolbar has the same commands under "…".
-- **Toggle task status** (done). Paragraph ▸ Task Status ▸ Toggle Task Status (Ctrl+Alt+X), Mark as Complete, and Mark as Incomplete act on every task in the selection. Clicking the checkbox still toggles one item.
-- **HTML block insert** (done). Paragraph ▸ HTML Block and a slash item insert a `<div>` template and place the caret inside its editor.
-- **Image align** (done). Format ▸ Image ▸ Align Left / Center / Right / Default writes an inline `<img>` style and round-trips with zoom.
-- **Open link** (done). Format ▸ Hyperlink Actions ▸ Open Link / Copy Link Address, the link context menu, and Ctrl+click. A relative `.md` link opens in MD Nest. Other URLs go through `open_external` (http(s), mailto, local files).
-- **Readonly mode** (done). View ▸ Readonly Mode sets `editable` false, adds `ty-readonly` and a footer indicator, and blocks source edits, slash, paste, and drop.
-- **Outline collapse** (done). Headings with children have an `.outline-expander`. Expand All / Collapse All live in the outline context menu and in View ▸ Outline ▸. Collapse state stays while the document is open.
-- **Live file refresh** (done). The open folder is watched (`fs_watch` / Vite `fs.watch`). Changed paths refresh the expanded folders and the list view, and the selection stays. Without the library feature the tree still refreshes on focus.
-- **Find next / previous** (done). F3 / Shift+F3 with the bar closed search the last query or the selection, wrap, and notify "Not found".
+- **`|a|b|` + Enter → table** (missing, empty After cell inherits Before). Tables come from the dialog, the slash menu, and Paragraph ▸ Table. Pressing Enter on a pipe row does not create a table. That input rule was outside the 0.1.2 work.
 - **Comment-only lines** (partial). An inline `<!-- note -->` is a mark and round-trips. A line that is only a comment parses as an HTML block, which is how markdown-it treats it.
 - **In-editor text drag on Windows** (partial). WebView2 HTML5 drops carry no paths, so folder and file drops use Tauri's drag-drop event. That turns off in-editor text drag-move on Windows.
-- **Hyperlink vs AI Rewrite** (done). Ctrl+K is always Hyperlink. AI Rewrite defaults to Ctrl+J and is configurable in AI settings ("Rewrite shortcut", a prosemirror-keymap name; empty disables it).
+- **Import** (n/a). Opening Word or other office files is left to pandoc, which is not an importer here. Export can write those formats when pandoc is installed.

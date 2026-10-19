@@ -35,6 +35,10 @@ node tests/parity.mjs           # menu bar, shortcuts, welcome (needs preview on
 node tests/parity-files.mjs     # file handling and sidebar (needs preview on :4173)
 node tests/parity-insert.mjs    # slash menu, input rules, editing shortcuts, toolbar (needs preview on :4173)
 npx tsx tests/parity-unit.ts    # marks, task-list and table input-rule unit tests
+node tests/parity-012.mjs        # 0.1.2 editing/UI (needs preview on :4173)
+node tests/parity-012b.mjs       # 0.1.2 files/text (needs preview on :4173)
+node tests/parity-012c.mjs       # 0.1.2 export: docx + pandoc modal (needs preview on :4173; MDNEST_PANDOC_HARNESS=1)
+npx tsx tests/parity-012-unit.ts # image align, encodings, docx zip unit tests
 node tests/native/parity-smoke.mjs   # GTK menu bar smoke (tauri-driver, Xvfb)
 tests/native/image-paste-drop.py src-tauri/target/release/mdnest   # native app under Xvfb (xdotool, xclip, python3-gi, xfwm4)
 scripts/measure-ram.sh LABEL BIN 30 3 [FILE]   # idle RAM: PSS over app + WebKit processes, fresh profile
@@ -99,6 +103,33 @@ Tauri commands: `secret_set`, `secret_has`, `secret_delete`, `secret_backend`, `
 The theme folder holds `<name>.css` and an optional `<name>/` asset folder. Load order is `<name>.css` → `base.user.css` → `<name>.user.css`, using link ids `#theme_css`, `#base_user_css` and `#theme_user_css`. Dark themes are detected from the computed body background. The Mermaid theme comes from `--mermaid-theme`.
 Gallery themes used for testing are copied unmodified into `dev-data/themes` (gitignored, not shipped).
 
+## 0.1.2
+
+- **Hyperlink** is always Ctrl+K. AI Rewrite defaults to Ctrl+J and can be changed in AI settings.
+- **Context menus** open Paragraph, Format, Insert, and Table beside the parent list.
+- **Window** menu: Minimize, Maximize/Restore (Zoom on macOS), Always on Top, Full Screen, and the open windows.
+- **Tables**: add, delete, and move rows and columns; column alignment round-trips; copy as Markdown. The floating toolbar has the same commands.
+- **Tasks, HTML blocks, image alignment, and open link** (Ctrl+click; relative `.md` links open in MD Nest).
+- **Find Next / Previous** (F3 / Shift+F3) work with the find bar closed.
+- **Readonly mode**, outline collapse, and a Copy button on each code fence.
+- **File tree** watches the open folder. **Line endings and encodings** are kept per document (footer shows e.g. `UTF-8 · LF`).
+- **Smart punctuation** (off by default) and **emoji autocomplete** (on by default). Edit ▸ Emoji & Symbols opens a searchable grid.
+- **Export**: built-in Word (`.docx`) plus pandoc writers when pandoc is installed.
+
+### Pandoc
+File → Export lists Word (pandoc), OpenOffice (`.odt`), RTF, EPUB, LaTeX, MediaWiki, reStructuredText, Textile, OPML, Org mode, and Custom pandoc format. MD Nest runs `pandoc` from PATH (and the usual Windows and macOS install folders) with the document folder as the working directory, so relative images resolve. If pandoc is missing, the item opens a "Pandoc not found" dialog with an Install Pandoc link (https://pandoc.org/installing.html) and Re-check. Built-in Word, HTML, and PDF do not need pandoc.
+
+### Spell check
+Edit ▸ Spell Check (and Settings ▸ Spell check) is off by default. It sets `spellcheck` on `#write` and on the CodeMirror source view.
+
+| Platform | Checker |
+|---|---|
+| Linux (WebKitGTK) | `WebContext` spell checking, languages from `$LANG` (falling back to `en_US`). Uses enchant/hunspell. If no dictionary is installed, the toggle still works and no words are marked. |
+| Windows (WebView2) | the OS spellchecker, through the `spellcheck` attribute |
+| macOS (WKWebView) | the system spellchecker, through the `spellcheck` attribute |
+
+Emoji shortcodes in `src/editor/emoji-data.ts` are generated from the [gemoji](https://github.com/wooorm/gemoji) package (MIT). The names come from [github/gemoji](https://github.com/github/gemoji) (MIT). Regenerate with `node scripts/gen-emoji.mjs`.
+
 ## Typora parity features
 
 Item-by-item status is in [docs/typora-parity-gap.md](docs/typora-parity-gap.md), including the shortcut table (Windows/Linux; Cmd on macOS).
@@ -115,7 +146,7 @@ Item-by-item status is in [docs/typora-parity-gap.md](docs/typora-parity-gap.md)
 - **Tables**: a toolbar on the focused table (add/remove row/col, align left/center/right, delete table), `Ctrl+T` to insert, `Ctrl+Enter` for a new row. Alignment round-trips to `|:--:|`.
 - **Images**: paste or drop → written to the configured folder next to the document (unique names, `image-YYYYMMDD-HHMMSS.png` for clipboard images). A relative, URL-encoded path is inserted. Unsaved documents use the workspace root.
 - **Find/replace**: `Ctrl+F` / `Ctrl+H`, case-sensitive and regex toggles, `$1` back-references, highlighting in text, code blocks and source mode.
-- **Export**: *File → Export HTML* (self-contained) and *Export PDF*.
+- **Export**: *File → Export HTML* (self-contained), *Export PDF*, and *Word (.docx)* (built in, no pandoc). Pandoc formats (Word, OpenOffice, RTF, EPUB, LaTeX, MediaWiki, reStructuredText, Textile, OPML, Org mode, or a custom writer) run when `pandoc` is on PATH. Without it, those items show an install dialog; HTML, PDF, and the built-in docx export still work.
 - Autosave (Settings → Editor, 1.5 s after the last edit), recent files (sidebar → Recent), external-change detection (2 s mtime poll: silent reload if clean, toast if dirty), syntax-colour fallback for themes without CodeMirror colours (e.g. Vue, Purple).
 - **Footnotes**: `[^label]` renders as `sup.md-footnote` (hover shows the note; click to edit `[^label]`, Ctrl+click jumps to the definition). `[^label]: text` definitions stay where they are written (`.md-def-footnote > .md-def-name + .md-def-content`).
 - **Reference links/images**: `[text][id]`, `[text][]`, `[text]`, `![alt][id]` keep their form on save. `[id]: url "title"` definitions are kept verbatim as a `.md-def-link` block (hidden in export). Editing an id re-resolves against the document's definitions. Soft line breaks inside paragraphs are preserved.
@@ -147,17 +178,6 @@ Item-by-item status is in [docs/typora-parity-gap.md](docs/typora-parity-gap.md)
 ### Memory
 Measured numbers and method: `docs/ram-notes.md`.
 Startup restores `mdnest.lastFile`, so a no-argument launch is only a "welcome screen" with a fresh profile. Compare builds with `scripts/measure-ram.sh`. It refuses to run while other WebKit processes are alive, because those share library pages and lower PSS.
-
-Emoji shortcodes in `src/editor/emoji-data.ts` are generated from the [gemoji](https://github.com/wooorm/gemoji) package (MIT). The names come from [github/gemoji](https://github.com/github/gemoji) (MIT). Regenerate with `node scripts/gen-emoji.mjs`.
-
-### Spell check
-Edit ▸ Spell Check (and Settings ▸ Spell check) is off by default. It sets `spellcheck` on `#write` and on the CodeMirror source view.
-
-| Platform | Checker |
-|---|---|
-| Linux (WebKitGTK) | `WebContext` spell checking, languages from `$LANG` (falling back to `en_US`). Uses enchant/hunspell. If no dictionary is installed, the toggle still works and no words are marked. |
-| Windows (WebView2) | the OS spellchecker, through the `spellcheck` attribute |
-| macOS (WKWebView) | the system spellchecker, through the `spellcheck` attribute |
 
 ### PDF platform notes
 | Platform | Path |
