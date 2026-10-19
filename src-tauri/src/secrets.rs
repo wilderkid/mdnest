@@ -335,10 +335,10 @@ mod tests {
         delete(None, "missing.key").unwrap();
         assert!(set(None, "Bad", "x").is_err());
 
-        let path = dir.join("secrets.json");
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
+            let path = dir.join("secrets.json");
             let mode = fs::metadata(&path).unwrap().permissions().mode() & 0o777;
             assert_eq!(mode, 0o600, "secrets.json mode was {mode:o}");
         }
