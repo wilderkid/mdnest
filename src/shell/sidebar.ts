@@ -383,12 +383,15 @@ export class Sidebar {
       `<div class="typora-search-item" data-path="${escapeHtml(h.path)}" data-line="${h.line}"><div class="file-list-item-file-name">${escapeHtml(baseName(h.path))}:${h.line}</div><div class="file-list-item-summary">${escapeHtml(h.snippet)}</div></div>`).join("");
     this.searchResult.innerHTML = (nameHtml || hitHtml) ? nameHtml + hitHtml : `<div class="outline-item" style="opacity:.6">No matches</div>`;
     this.searchResult.querySelectorAll<HTMLElement>(".file-list-item, .typora-search-item").forEach((n) => {
-      n.onclick = () => {
+      n.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
         const line = n.dataset.line ? +n.dataset.line : undefined;
         const path = n.dataset.path!;
-        if (line && (window as any).mdnest?.openAt) (window as any).mdnest.openAt(path, line);
+        const openAt = (window as any).mdnest?.openAt as undefined | ((p: string, line?: number) => void);
+        if (line && openAt) void openAt(path, line);
         else this.openFile(path);
-      };
+      });
     });
   }
 

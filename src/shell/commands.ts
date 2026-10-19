@@ -233,6 +233,8 @@ export function installKeyboardDispatcher(
     const cmd = commandForAccel(getCommands(), e);
     if (!cmd || !allowed(cmd.id)) return;
     const target = (e.target as Element | null) ?? document.activeElement;
+    // A text field keeps ordinary typing. The command palette still opens from one.
+    if (focusOutsideEditor(target) && !TEXT_EDIT.has(cmd.id) && cmd.id !== "view.palette") return;
     // Undo/redo/select-all inside the editor stay with ProseMirror history (one undo step).
     // Outside it (find bar, prompts, CodeMirror source) the dispatcher edits that field.
     if (TEXT_EDIT.has(cmd.id) && !focusOutsideEditor(target)) {
@@ -268,6 +270,8 @@ export function isPageChromeKey(e: KeyboardEvent): boolean {
   const mod = e.ctrlKey || e.metaKey;
   if (!mod) return false;
   if (key === "r" || key === "R") return true;
+  // Ctrl+P is Quick Open. Leave it for the command dispatcher (WebView2 print is already off).
+  if (key === "p" || key === "P") return false;
   if (!e.altKey && PAGE_KEYS.has(key)) return true;
   return false;
 }

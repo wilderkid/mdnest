@@ -87,9 +87,12 @@ body.pin-outline #typora-sidebar, body.open-sidebar #typora-sidebar { transform:
 .context-menu .mdn-menu-item.danger { color: #b33; }
 
 /* ---------- welcome + dialogs ---------- */
-#mdn-welcome { position: absolute; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center;
+#mdn-welcome { position: absolute; top: 0; right: 0; bottom: 0; left: 0; z-index: 4; display: flex; align-items: center; justify-content: center;
   background: var(--bg-color); color: var(--text-color); }
-#mdn-welcome .mdn-welcome-card { width: min(520px, 92%); text-align: center; }
+body.pin-outline #mdn-welcome, body.open-sidebar #mdn-welcome { left: var(--sidebar-width); }
+#mdn-welcome[hidden] { display: none !important; }
+#mdn-welcome .mdn-welcome-card { width: min(520px, 92%); text-align: center; pointer-events: auto; }
+#mdn-welcome { pointer-events: none; }
 #mdn-welcome h1 { font-weight: 600; letter-spacing: -.02em; margin: 0 0 6px; }
 #mdn-welcome .mdn-welcome-actions { display: flex; gap: 8px; justify-content: center; margin: 18px 0; flex-wrap: wrap; }
 #mdn-welcome .mdn-recent { text-align: left; margin-top: 8px; }

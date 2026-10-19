@@ -2,6 +2,7 @@
 // The binary must be a Tauri release build (npx tauri build --no-bundle) so the frontend is embedded.
 // Usage: node tests/native/parity-smoke.mjs [binary]
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { execFile, spawn } from "node:child_process";
 import { startNative } from "./wd.mjs";
@@ -77,6 +78,29 @@ print(w, h)
     return { name, md: window.mdnest.editor.getMarkdown().slice(0, 60) };
   });
   ok(String(level.md).includes("## "), "Ctrl+2 reaches the webview as heading 2", JSON.stringify(level));
+
+  // File commands through the real host, on a temp folder. No GTK menu clicking.
+  const tmp = path.join(os.tmpdir(), "mdnest-parity-native-" + Date.now().toString(36));
+  fs.mkdirSync(tmp, { recursive: true });
+  try {
+    const ops = await n.exec(async (dir) => {
+      const h = window.mdnest.host;
+      const file = dir + "/note.md";
+      await h.createFile(file);
+      await h.writeFile(file, "# Native\n");
+      const renamed = dir + "/note-renamed.md";
+      await h.renamePath(file, renamed);
+      const dup = await h.duplicatePath(renamed);
+      await h.trashPath(dup);
+      const kind = await h.pathKind(renamed);
+      const listed = await h.listFiles(dir, 20);
+      return { renamed, dup, kind, names: listed.map((f) => f.name), dupGone: (await h.pathKind(dup)) === "missing" };
+    }, tmp);
+    ok(ops.kind === "file" && ops.names.includes("note-renamed.md"), "native create + rename", JSON.stringify(ops.names));
+    ok(String(ops.dup).includes("copy") && ops.dupGone, "native duplicate + trash", ops.dup);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
 } catch (e) {
   ok(false, "native smoke threw", e.message || String(e));
 } finally {

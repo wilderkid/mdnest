@@ -33,10 +33,10 @@ What really was Windows-specific (before):
 
 ## Counts
 
-| | done | partial | missing | win-broken |
-|---|---|---|---|---|
-| Before (0.1.0) | see table | | | |
-| After (0.1.1) | see table | | | |
+| | done | partial | missing | win-broken | n/a |
+|---|---|---|---|---|---|
+| Before (0.1.0) | 28 | 42 | 85 | 4 | 4 |
+| After (0.1.1) | 94 | 19 | 46 | 0 | 4 |
 
 (Filled in from the tables below at the end of the work.)
 
@@ -52,34 +52,34 @@ What really was Windows-specific (before):
 
 | Item | Shortcut | Before | After | Notes |
 |---|---|---|---|---|
-| New | Ctrl+N | missing | partial | menu item + command id; dialog in part 2 |
-| New Window | Ctrl+Shift+N | missing | partial | menu item; window in part 2 |
-| Open… | Ctrl+O | partial | done | menu + shortcut |
+| New | Ctrl+N | missing | done | untitled doc; dirty guard Save / Don't Save / Cancel |
+| New Window | Ctrl+Shift+N | missing | done | WebviewWindow label w-<n>; capability windows main + w-* |
+| Open… | Ctrl+O | partial | done | menu + shortcut; dirty guard |
 | Open Folder… | Ctrl+Shift+O | partial | done | menu + shortcut |
-| Open Quickly (quick open by file name) | Ctrl+P | missing | partial | command id; UI in part 2 |
-| Open Recent submenu (+ Clear Items) | | partial | partial | submenu lists recent files; Clear Items in part 2 |
-| Reopen Closed File | Ctrl+Shift+T | missing | partial | command id; part 2 |
+| Open Quickly (quick open by file name) | Ctrl+P | missing | done | #typora-quick-open; recent first, then fuzzy names |
+| Open Recent submenu (+ Clear Items) | | partial | done | submenu + Clear Items; sidebar Recent tab kept |
+| Reopen Closed File | Ctrl+Shift+T | missing | done | closed-file stack |
 | Reload from Disk | | partial | done | menu item |
 | Save | Ctrl+S | done | done | menu + shortcut |
 | Save As… | Ctrl+Shift+S | partial | done | menu + shortcut |
 | Save All | | n/a | | single document per window |
-| Move To… | | missing | | |
-| Rename… / Duplicate | | missing | | |
-| Open File Location (reveal in Explorer/Finder) | | missing | | |
-| Reveal in Sidebar | | missing | | |
+| Move To… | | missing | done | folder picker + rename_path |
+| Rename… / Duplicate | | missing | done | prompt / unique "name copy.ext" |
+| Open File Location (reveal in Explorer/Finder) | | missing | done | explorer /select, open -R, FileManager1.ShowItems |
+| Reveal in Sidebar | | missing | done | expands ancestors in the tree |
 | Export → PDF | | partial | done | File → Export submenu |
 | Export → HTML | | partial | done | File → Export submenu |
-| Export → HTML (without styles) | | missing | partial | menu item; export path in a later part |
+| Export → HTML (without styles) | | missing | done | styles omitted; welcome page not in the export |
 | Export → Word / pandoc formats | | missing | | needs pandoc |
 | Import | | n/a | | pandoc |
-| Print… | Ctrl+Alt+P | missing | | |
+| Print… | Ctrl+Alt+P | missing | done | export HTML through the print dialog |
 | Properties / word count info | | partial | | footer word count |
 | Preferences… | Ctrl+, | partial | done | menu opens the sidebar settings tab |
-| Close | Ctrl+W | missing | partial | command id; dirty guard in part 2 |
-| Quit | Ctrl+Q | missing | partial | menu item (omitted on macOS, where it is in the app menu) |
+| Close | Ctrl+W | missing | done | dirty guard; Tauri close request uses the same modal |
+| Quit | Ctrl+Q | missing | done | menu item (omitted on macOS, where it is in the app menu) |
 | Drag a .md file onto the window → open | | missing | done | handleNativeDrop; Windows uses tauri drag-drop |
 | Drag a folder onto the window → open folder | | missing | done | same handler |
-| Welcome page with Open File / Open Folder buttons | | missing | | one line of text |
+| Welcome page with Open File / Open Folder buttons | | missing | done | #mdn-welcome; also New File and recent list |
 | Launch: restore last folder / file | | done | | setting "Reopen last file" |
 | Autosave | | done | | setting |
 | Line endings (CRLF/LF), encodings | | missing | | |
@@ -102,7 +102,7 @@ What really was Windows-specific (before):
 | Find… | Ctrl+F | done | done | menu + shortcut |
 | Find Next / Previous | F3 / Shift+F3 | partial | partial | menu items; find-bar behaviour unchanged |
 | Replace | Ctrl+H | done | done | menu + shortcut |
-| Find in files (sidebar search) | Ctrl+Shift+F | partial | | library plugin, only when indexing is on |
+| Find in files (sidebar search) | Ctrl+Shift+F | partial | done | #file-library-search-input; content hits open at the line |
 | Smart punctuation / substitutions | | missing | | |
 | Spell check | | missing | | |
 | Emoji & symbols / :emoji: autocomplete | | missing | | |
@@ -167,8 +167,8 @@ What really was Windows-specific (before):
 | Typewriter mode | F9 | missing | | |
 | Toggle sidebar | Ctrl+Shift+L | partial | done | menu + shortcut + footer |
 | Outline | Ctrl+Shift+1 | partial | done | menu shows the outline tab |
-| Articles (file list view) | Ctrl+Shift+2 | missing | | |
-| File tree | Ctrl+Shift+3 | partial | | tree only, no toolbar |
+| Articles (file list view) | Ctrl+Shift+2 | missing | done | #file-library-list excerpt, time, parent |
+| File tree | Ctrl+Shift+3 | partial | done | tree + footer toolbar |
 | Status bar toggle | | missing | | footer always shown |
 | Word count (footer, popover) | | partial | | words only |
 | Full screen | F11 | missing | | |
@@ -184,36 +184,36 @@ What really was Windows-specific (before):
 | Item | Shortcut | Before | After | Notes |
 |---|---|---|---|---|
 | Themes menu listing theme CSS files | | partial | done | radio items + footer select |
-| Open theme folder | | missing | | |
+| Open theme folder | | missing | done | reveal_path on the config themes dir (browser: toast) |
 | base.user.css / name.user.css | | done | | |
-| Help: Markdown reference / quick start | | missing | | |
+| Help: Markdown reference / quick start | | missing | done | modal with a short reference |
 | Help: About (version) | | missing | done | toast "MD Nest 0.1.1" |
-| Help: Keyboard shortcuts | | missing | | |
+| Help: Keyboard shortcuts | | missing | done | modal listing registered accelerators |
 
 ## Sidebar
 
 | Item | Shortcut | Before | After | Notes |
 |---|---|---|---|---|
-| File tree (`#file-library-tree`) | | done | | Markdown + txt only |
-| Article list with excerpt and mtime (`#file-library-list`) | | missing | | |
-| Tree / list switch | | missing | | |
-| Bottom bar: new file | | missing | | |
-| Bottom bar: new folder | | missing | | |
-| Bottom bar: open folder | | missing | | |
-| Bottom bar: sort (name / modified / created / natural) | | missing | | fixed name order |
-| Bottom bar: search in folder | | partial | | library plugin "Library" tab when indexing is on |
-| Refresh folder | | missing | | |
-| Context menu: new file / new folder | | missing | | |
-| Context menu: rename | | missing | | |
-| Context menu: delete (to recycle bin / trash) | | missing | | |
-| Context menu: duplicate | | missing | | |
-| Context menu: reveal in Explorer / Finder | | missing | | |
-| Context menu: copy file path | | missing | | |
-| Context menu: open in new window | | missing | | |
-| Outline: highlight current heading | | missing | | |
+| File tree (`#file-library-tree`) | | done | done | Markdown + txt; same extension set as the walk |
+| Article list with excerpt and mtime (`#file-library-list`) | | missing | done | excerpt, time, parent loc |
+| Tree / list switch | | missing | done | selection persisted in localStorage |
+| Bottom bar: new file | | missing | done | #sidebar-footer |
+| Bottom bar: new folder | | missing | done | |
+| Bottom bar: open folder | | missing | done | |
+| Bottom bar: sort (name / modified / created / natural) | | missing | done | asc/desc persisted |
+| Bottom bar: search in folder | | partial | done | focuses #file-library-search-input |
+| Refresh folder | | missing | done | also on window focus |
+| Context menu: new file / new folder | | missing | done | .context-menu on nodes and blank area |
+| Context menu: rename | | missing | done | inline edit, Enter/Esc |
+| Context menu: delete (to recycle bin / trash) | | missing | done | confirm modal, then trash |
+| Context menu: duplicate | | missing | done | |
+| Context menu: reveal in Explorer / Finder | | missing | done | label follows OS |
+| Context menu: copy file path | | missing | done | |
+| Context menu: open in new window | | missing | done | |
+| Outline: highlight current heading | | missing | done | .outline-item-active |
 | Outline: collapse / expand | | missing | | |
-| File tree keyboard navigation | | missing | | |
-| Live refresh when files change on disk | | missing | | |
+| File tree keyboard navigation | | missing | done | arrows, Enter, F2, Delete |
+| Live refresh when files change on disk | | missing | partial | refresh on focus and after our own operations |
 
 ## Quick insert (Typora has no slash menu; these are its Markdown input rules and shortcuts)
 

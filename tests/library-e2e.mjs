@@ -125,18 +125,13 @@ try {
 
   // 6) library exclude → folder dropped on re-index
   await page.evaluate(() => localStorage.setItem("mdnest.plugin.library.exclude", JSON.stringify("budget")));
-  await page.keyboard.press("Control+Shift+P");
-  await page.locator("#mdn-palette input").fill("Library: Re-index now");
-  await page.locator("#mdn-palette .pal-item", { hasText: "Library: Re-index now" }).first().click();
+  await page.evaluate(() => window.mdnest.runCommand("library.reindex"));
   s = await waitIdle((x) => x.files === 2);
   ok(s.files === 2, "library exclude drops budget/ on re-index", JSON.stringify(s));
 
   // 7) dark theme panel, keyword-only fallback when embeddings fail
   await page.evaluate(() => localStorage.setItem("mdnest.plugin.ai.embedModel", JSON.stringify("missing")));
-  await page.locator("#mdn-palette input").waitFor({ state: "detached" }).catch(() => {});
-  await page.keyboard.press("Control+Shift+P");
-  await page.locator("#mdn-palette input").fill("Library: Rebuild index");
-  await page.locator("#mdn-palette .pal-item", { hasText: "Library: Rebuild index" }).first().click();
+  await page.evaluate(() => window.mdnest.runCommand("library.rebuild"));
   await openPanel("library");
   await page.waitForFunction(() => /Embeddings unavailable/.test(document.querySelector(".mdn-lib-status")?.textContent ?? ""), null, { timeout: 10000 }).catch(() => {});
   const st = await page.locator(".mdn-lib-status").innerText();
