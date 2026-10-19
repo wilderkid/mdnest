@@ -34,7 +34,8 @@ export function setLang(l: Lang) {
 }
 export function saveLangSetting(s: LangSetting) {
   localStorage.setItem(LANG_KEY, s);
-  setLang(resolveLang(s));
+  // an explicit choice wins over the session's ?lang= override
+  setLang(s === "auto" ? resolveLang(s) : s);
 }
 
 const fill = (s: string, vars?: Record<string, string | number>) =>

@@ -540,7 +540,8 @@ export function renderMenuBar(root: HTMLElement, spec: MenuNode[], run: (id: str
   for (const top of spec) {
     const wrap = document.createElement("div");
     wrap.className = "mdn-menu";
-    wrap.dataset.menu = (top.label || "").toLowerCase();
+    // stable across UI languages: "menu.file" → "file"
+    wrap.dataset.menu = top.id?.startsWith("menu.") ? top.id.slice(5) : (top.label || "").toLowerCase();
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "mdn-menu-label";
