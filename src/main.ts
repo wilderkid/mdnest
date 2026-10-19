@@ -5,15 +5,18 @@ import "codemirror/lib/codemirror.css";
 import "prosemirror-view/style/prosemirror.css";
 import "prosemirror-tables/style/tables.css";
 import "./styles/base.css";
+import "./styles/shell.css";
 import { host } from "./host";
 import { createEditor, Editor } from "./editor/editor";
 import { setImageBase } from "./editor/schema";
 import { SourceMode } from "./shell/source";
 import { Sidebar } from "./shell/sidebar";
-import { ThemeManager, displayName } from "./shell/themes";
+import { ThemeManager, displayName, applyShellStyle, applyShellColors, shellStyle, SHELL_KEY } from "./shell/themes";
 import { openPalette } from "./shell/palette";
 import { PluginManager, Command, SettingSpec, DecorationProvider, cancelPendingSuggestions } from "./plugins/api";
 import { escapeHtml } from "./editor/render";
+import { t, lang, wordsLabel, minutesLabel, tTitle, langSetting, saveLangSetting, type LangSetting } from "./i18n";
+import { icon } from "./shell/icons";
 import { openPrompt } from "./editor/prompt";
 import { countWords } from "./plugins/builtin/word-stats";
 import wordStats from "./plugins/builtin/word-stats";
@@ -70,6 +73,7 @@ decorationProviders.push((st) => citeFlash && citeFlash.doc === st.doc ? Decorat
 const settingSpecs: { owner: string; specs: SettingSpec[] }[] = [];
 
 document.body.classList.add(osClass(), "pin-outline");
+applyShellStyle();
 applyOsClass();
 const sidebar = new Sidebar(host, (p) => openFile(p));
 document.body.appendChild(sidebar.el);
@@ -77,12 +81,19 @@ const content = document.createElement("content"); document.body.appendChild(con
 const writeEl = document.createElement("div"); content.appendChild(writeEl);
 const source = new SourceMode(document.body, () => { setDirty(true); scheduleAutosave(); });
 const footer = document.createElement("footer"); footer.className = "ty-footer";
-footer.innerHTML = `<button id="sidebar-toggle" title="Toggle sidebar">☰</button><span id="file-title">Untitled</span><span class="footer-spacer"></span>
-  <span id="footer-readonly" hidden>Read-only</span><button type="button" id="footer-encoding" title="Encoding and line endings"></button><span id="footer-word-count"></span><select id="theme-select" title="Theme"></select><button id="source-toggle" title="Source mode (Ctrl+/)">&lt;/&gt;</button>`;
+footer.innerHTML = `<button id="sidebar-toggle" title="${t("Toggle sidebar")} (Ctrl+Shift+L)" aria-label="${t("Toggle sidebar")}">${icon("panel", 15)}</button>
+  <span class="mdn-crumbs" id="file-crumbs"><span class="crumb-path"></span><span id="file-title">${t("Untitled")}</span></span>
+  <span class="mdn-saved" id="footer-saved" hidden>${icon("check", 12, 2.2)}<span class="saved-text"></span></span>
+  <span class="footer-spacer"></span>
+  <span id="footer-readonly" hidden>${t("Read-only")}</span>
+  <span id="footer-word-count" class="sb-group" role="button" tabindex="0"></span>
+  <button type="button" id="footer-encoding" class="sb-group sb-pill" title="${t("Encoding and line endings")}"></button>
+  <span id="theme-chip" class="sb-group">${icon("palette", 13)}<select id="theme-select" class="sb-pill" title="${t("Theme")}" aria-label="${t("Theme")}"></select></span>
+  <button id="source-toggle" class="sb-group" title="${t("Source mode (Ctrl+/)")}" aria-label="${t("Source Code Mode")}">${icon("code", 15)}</button>`;
 document.body.appendChild(footer);
 const toast = document.createElement("div"); toast.id = "mdn-toast"; document.body.appendChild(toast);
 let toastTimer: any;
-const notify = (m: string) => { toast.textContent = m; toast.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => toast.classList.remove("show"), 2600); };
+const notify = (m: string) => { toast.textContent = t(m); toast.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => toast.classList.remove("show"), 2600); };
 
 let changeTimer: any;
 // Set by the keyboard dispatcher just before it runs a command, so the editor keymap
@@ -116,12 +127,43 @@ const editor: Editor = createEditor(writeEl, EMPTY_DOC, {
 editor.view.dom.id = "write";
 editor.view.dom.addEventListener("pointerdown", () => { if (welcomeVisible() && !state.path) hideWelcome(); });
 
-function setDirty(d: boolean) { state.dirty = d; document.getElementById("file-title")!.classList.toggle("dirty", d); }
-function updateCount() { const t = editor.view.state.doc.textContent; const { words } = countWords(t); document.getElementById("footer-word-count")!.textContent = `${words} words`; }
+function setDirty(d: boolean) { state.dirty = d; document.getElementById("file-title")!.classList.toggle("dirty", d); paintSaved(); }
+function paintSaved() {
+  const el = document.getElementById("footer-saved");
+  if (!el) return;
+  el.hidden = !state.path;
+  el.classList.toggle("dirty", state.dirty);
+  el.querySelector(".saved-text")!.textContent = t(state.dirty ? "Unsaved" : "Saved");
+  el.querySelector("svg")?.setAttribute("style", state.dirty ? "display:none" : "");
+}
+function updateCount() {
+  const { words } = countWords(editor.view.state.doc.textContent);
+  const el = document.getElementById("footer-word-count")!;
+  el.textContent = lang() === "zh-CN" && words ? `${wordsLabel(words)} · ${minutesLabel(Math.max(1, Math.round(words / 400)))}` : wordsLabel(words);
+}
 function setTitle() {
-  const name = state.path ? state.path.split(/[\\/]/).pop()! : "Untitled";
+  const name = state.path ? state.path.split(/[\\/]/).pop()! : t("Untitled");
   document.getElementById("file-title")!.textContent = name; document.title = name + " — MD Nest";
+  paintCrumbs();
   paintEncoding();
+  paintSaved();
+}
+/** Status-bar breadcrumb: workspace / folders / (file title). Paths outside the workspace show the parent folder. */
+function paintCrumbs() {
+  const holder = document.querySelector("#file-crumbs .crumb-path");
+  if (!holder) return;
+  const p = state.path;
+  let parts: string[] = [];
+  if (p) {
+    const root = sidebar.root;
+    const dir = p.replace(/[\\/][^\\/]*$/, "");
+    if (root && (dir === root || dir.startsWith(root + "/") || dir.startsWith(root + "\\"))) {
+      parts = [root.split(/[\\/]/).pop() || root, ...dir.slice(root.length).split(/[\\/]/).filter(Boolean)];
+    } else parts = [dir.split(/[\\/]/).pop() || dir];
+    if (parts.length > 3) parts = [parts[0], "…", ...parts.slice(-2)];
+  }
+  holder.innerHTML = parts.map((x) => `<span class="crumb">${escapeHtml(x)}</span><span class="sep">/</span>`).join("");
+  (holder as HTMLElement).title = p || "";
 }
 function paintEncoding() {
   const el = document.getElementById("footer-encoding");
@@ -382,11 +424,8 @@ function clearRecent() {
   try { scheduleMenu(); } catch { /* boot */ }
   if (welcomeVisible()) showWelcome();
 }
-let recentEl: HTMLElement | null = null;
 function renderRecent() {
-  if (!recentEl) return;
-  recentEl.innerHTML = recent().map((p) => `<div class="file-library-node file-tree-node recent-file" data-path="${p.replace(/"/g, "&quot;")}"><div class="file-node-content"><span class="file-node-icon">◦</span><span class="file-node-title">${p.split(/[\\/]/).pop()}</span></div><div class="recent-dir">${p.replace(/[\\/][^\\/]*$/, "")}</div></div>`).join("") || `<div class="outline-item" style="opacity:.6">No recent files</div>`;
-  recentEl.querySelectorAll<HTMLElement>(".recent-file").forEach((n) => (n.onclick = () => openFile(n.dataset.path!)));
+  sidebar.setRecent(recent());
 }
 function setSaveEncoding(enc: SaveEncoding) {
   state.encoding = enc;
@@ -864,6 +903,7 @@ sidebar.setActions({
   openFolder: () => pickFolder(),
   openWindow: (path) => openNewWindow(path),
   copyPath: (path) => copyPath(path),
+  clearRecent: () => clearRecent(),
   notify,
 });
 
@@ -1657,7 +1697,7 @@ registerCoreSlash(editor.view, {
   insertImage: () => { void insertLocalImage(); },
   promptLink: () => { void promptHyperlink(); },
 });
-sidebar.addTab("settings", "⚙", undefined, {
+sidebar.addTab("settings", "Settings", undefined, {
   id: "settings", title: "Settings", render: (el) => {
     const folder = imageFolderPattern();
     const core = `<h4>Editor</h4><label><input type="checkbox" id="set-autosave" ${localStorage.getItem(AUTOSAVE_KEY) === "1" ? "checked" : ""}> Autosave (1.5 s after edits)</label>
@@ -1770,7 +1810,7 @@ async function saveOrClearSecret(btn: HTMLButtonElement) {
   } catch (e: any) { notify("Secret " + (e?.message ?? e)); }
   if (status) await refreshSecretStatus(status);
 }
-sidebar.addTab("recent", "Recent", undefined, { id: "recent", title: "Recent", render: (el) => { recentEl = el; renderRecent(); return () => (recentEl = null); } });
+renderRecent();
 sidebar.select("files");
 function onNativeDrop(drop: NativeDrop) {
   return handleNativeDrop(drop, {

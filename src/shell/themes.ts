@@ -39,6 +39,7 @@ export class ThemeManager {
     const bg = getComputedStyle(document.body).backgroundColor.match(/\d+/g)?.map(Number) ?? [255, 255, 255];
     document.body.classList.toggle("mdn-dark", (bg[0] * 299 + bg[1] * 587 + bg[2] * 114) / 1000 < 128);
     document.body.classList.toggle("mdn-cm-fallback", !themeColorsCode());
+    applyShellColors();
     resetMermaidTheme();
     this.onChange(name);
   }
@@ -57,4 +58,45 @@ function themeColorsCode(): boolean {
   const colored = [".cm-keyword", ".cm-string", ".cm-comment"].filter((k) => c(k) !== plain).length;
   probe.remove();
   return colored >= 2;
+}
+
+const BASE_PRIMARY = "#4a7bd0";
+const transparent = (c: string) => !c || c === "transparent" || /rgba\([^)]*,\s*0\)$/.test(c);
+
+/**
+ * Shell colours follow the active theme: the page background and text colour come from #write
+ * (falling back to body), the accent from the theme's --primary-color when it sets its own.
+ * shell.css mixes every other shell token from these three.
+ */
+export function applyShellColors() {
+  const root = document.documentElement;
+  const write = document.getElementById("write");
+  const pick = (els: (Element | null)[], prop: "backgroundColor" | "color") => {
+    for (const el of els) {
+      if (!el) continue;
+      const v = getComputedStyle(el)[prop];
+      if (!transparent(v)) return v;
+    }
+    return "";
+  };
+  const bg = pick([write, write?.parentElement ?? null, document.body, root], "backgroundColor") || "#ffffff";
+  const fg = pick([write, document.body], "color") || "#1f2330";
+  root.style.setProperty("--mdn-tbg", bg);
+  root.style.setProperty("--mdn-tfg", fg);
+  const primary = getComputedStyle(root).getPropertyValue("--primary-color").trim();
+  if (primary && primary.toLowerCase() !== BASE_PRIMARY) root.style.setProperty("--mdn-taccent", primary);
+  else root.style.removeProperty("--mdn-taccent");
+}
+
+export type ShellStyle = "b" | "plain";
+export const SHELL_KEY = "mdnest.shellStyle";
+export function shellStyle(): ShellStyle {
+  let q: string | null = null;
+  try { q = new URLSearchParams(location.search).get("shell"); } catch { /* none */ }
+  const v = q || localStorage.getItem(SHELL_KEY) || "b";
+  return v === "plain" ? "plain" : "b";
+}
+export function applyShellStyle(s: ShellStyle = shellStyle()) {
+  document.body.classList.remove("shell-b", "shell-plain");
+  document.body.classList.add("shell-" + s);
 }

@@ -35,7 +35,22 @@ export interface Command {
   when?: () => boolean;
 }
 
-export interface SidebarPanel { id: string; title: string; render: (el: HTMLElement) => void | (() => void) }
+/** A button in a sidebar panel header. `icon` is a shell icon name (see shell/icons.ts). */
+export interface PanelAction { id: string; title: string; icon: string; run: (ev: MouseEvent) => void }
+
+export interface SidebarPanel {
+  id: string;
+  title: string;
+  render: (el: HTMLElement) => void | (() => void);
+  /** Activity-rail icon name (shell/icons.ts). Unknown names fall back to the title's first letter. */
+  icon?: string;
+  /** Header icon buttons, right-aligned. */
+  actions?: PanelAction[];
+  /** Optional extra header row under the title (chips, search box). Called once. */
+  renderHead?: (el: HTMLElement) => void | (() => void);
+  /** Optional footer line under the panel body. Called once. */
+  renderFoot?: (el: HTMLElement) => void | (() => void);
+}
 
 export interface SettingOption { value: string; label: string }
 
