@@ -27,10 +27,25 @@ export class Sidebar {
   select(id: string) {
     for (const [k, p] of this.panels) {
       const on = k === id; p.tab.classList.toggle("active", on); p.body.classList.toggle("active", on);
+      // Render once and keep the element. Tab switches hide via CSS so plugin state survives.
       if (on && p.panel && !p.cleanup) p.cleanup = p.panel.render(p.body) || true;
-      if (!on && p.panel && p.cleanup) { if (typeof p.cleanup === "function") p.cleanup(); p.cleanup = undefined; p.body.innerHTML = ""; }
     }
     document.body.classList.toggle("ty-show-outline", id === "outline");
+  }
+  /** Show the sidebar and select a plugin panel. `id` is the panel id without the `p-` tab prefix. */
+  reveal(id: string) {
+    document.body.classList.add("pin-outline");
+    const tab = this.panels.has(id) ? id : this.panels.has("p-" + id) ? "p-" + id : id;
+    this.select(tab);
+  }
+  /** Call a panel's render again without wiping sibling panels. */
+  rerender(id: string) {
+    const tab = this.panels.has(id) ? id : "p-" + id;
+    const p = this.panels.get(tab);
+    if (!p?.panel) return;
+    if (typeof p.cleanup === "function") p.cleanup();
+    p.body.innerHTML = "";
+    p.cleanup = p.panel.render(p.body) || true;
   }
   async openFolder(path: string) {
     this.root = path; this.tree.innerHTML = "";

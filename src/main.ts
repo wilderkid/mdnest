@@ -9,7 +9,9 @@ import { SourceMode } from "./shell/source";
 import { Sidebar } from "./shell/sidebar";
 import { ThemeManager, displayName } from "./shell/themes";
 import { openPalette } from "./shell/palette";
-import { PluginManager, Command, SettingSpec, DecorationProvider } from "./plugins/api";
+import { PluginManager, Command, SettingSpec, DecorationProvider, cancelPendingSuggestions } from "./plugins/api";
+import { escapeHtml } from "./editor/render";
+import { openPrompt } from "./editor/prompt";
 import { countWords } from "./plugins/builtin/word-stats";
 import wordStats from "./plugins/builtin/word-stats";
 import readingGoal from "./plugins/builtin/reading-goal";
@@ -53,6 +55,7 @@ const editor: Editor = createEditor(writeEl, WELCOME, {
   },
   onImageFiles: (files, pos) => { insertImageFiles(editor.view, host, state.path, files, pos, notify); return true; },
   keys: { toggleSource, save: () => save(false), saveAs: () => save(true), open: pickAndOpen, openFolder: pickFolder, palette: () => openPalette(commands) },
+  commands: () => commands,
 });
 editor.view.dom.id = "write";
 
@@ -65,6 +68,8 @@ function setTitle() {
 
 function currentMarkdown() { return source.active ? source.value() : editor.getMarkdown(); }
 function toggleSource() {
+  // Suggestions are decorations. Drop them before the document is replaced or hidden.
+  cancelPendingSuggestions(editor.view);
   if (source.active) { const md = source.hide(); editor.setMarkdown(md); afterLoad(); editor.view.focus(); }
   else source.show(editor.getMarkdown());
   findBar.refresh();
@@ -74,6 +79,7 @@ function afterLoad() { sidebar.updateOutline(editor.view); updateCount(); }
 async function openFile(path: string) {
   try {
     const text = await host.readFile(path);
+    cancelPendingSuggestions(editor.view);
     state.path = path; const dir = path.replace(/[\\/][^\\/]*$/, "");
     setImageBase(host.fileUrl(dir + "/"));
     if (source.active) source.show(text); editor.setMarkdown(text);
@@ -189,9 +195,21 @@ const addCmd = (c: Command) => { const i = commands.findIndex((x) => x.id === c.
 const plugins = new PluginManager({
   addCommand: (c) => addCmd(c), runCommand: (id) => commands.find((c) => c.id === id)?.run(),
   addSidebarPanel: (p) => sidebar.addTab("p-" + p.id, p.title, undefined, p),
-  notify, addDecorations: (p) => decorationProviders.push(p),
-  getMarkdown: () => currentMarkdown(), getState: () => editor.view.state, refreshDecorations: () => editor.refreshDecorations(),
+  notify,
+  revealPanel: (id) => sidebar.reveal(id),
+  prompt: (opts) => openPrompt(editor.view, opts),
+  addDecorations: (p) => decorationProviders.push(p),
+  getMarkdown: () => currentMarkdown(),
+  getState: () => editor.view.state,
+  getView: () => editor.view,
+  refreshDecorations: () => editor.refreshDecorations(),
   addSettings: (owner, specs) => settingSpecs.push({ owner, specs }),
+  getSetting: (owner, key) => {
+    const raw = localStorage.getItem(plugins.settingKey(owner, key));
+    return raw == null ? undefined : JSON.parse(raw);
+  },
+  settingsFor: (owner) => settingSpecs.find((s) => s.owner === owner)?.specs ?? [],
+  host,
 });
 [
   { id: "file.open", title: "File: Open…", key: "Ctrl+O", run: pickAndOpen },
@@ -235,23 +253,75 @@ sidebar.addTab("settings", "⚙", undefined, {
       ${["./assets", "./${filename}.assets"].map((o) => `<option value="${o}" ${o === folder ? "selected" : ""}>${o}</option>`).join("")}
       <option value="custom" ${["./assets", "./${filename}.assets"].includes(folder) ? "" : "selected"}>custom…</option></select>
       <input id="set-imgfolder-custom" type="text" value="${folder}" style="margin-top:4px"></label>`;
-    el.innerHTML = `<div class="mdn-settings">` + core + settingSpecs.map(({ owner, specs }) => `<h4>${owner}</h4>` + specs.map((s) => {
-      const v = JSON.parse(localStorage.getItem(plugins.settingKey(owner, s.key)) ?? JSON.stringify(s.default));
-      return s.type === "boolean" ? `<label><input type="checkbox" data-o="${owner}" data-k="${s.key}" ${v ? "checked" : ""}> ${s.title}</label>`
-        : `<label>${s.title}<br><input type="${s.type === "number" ? "number" : "text"}" data-o="${owner}" data-k="${s.key}" value="${v}"></label>`;
-    }).join("")).join("") + (plugins.errors.length ? `<h4>Plugin errors</h4>` + plugins.errors.map((e) => `<div>${e.id}: ${e.error}</div>`).join("") : "") + `</div>`;
+    el.innerHTML = `<div class="mdn-settings">` + core + settingSpecs.map(({ owner, specs }) => `<h4>${escapeHtml(owner)}</h4>` + specs.map((s) => renderSetting(owner, s)).join("")).join("") + (plugins.errors.length ? `<h4>Plugin errors</h4>` + plugins.errors.map((e) => `<div>${escapeHtml(e.id)}: ${escapeHtml(e.error)}</div>`).join("") : "") + `</div>`;
     (el.querySelector("#set-autosave") as HTMLInputElement).onchange = (e) => localStorage.setItem(AUTOSAVE_KEY, (e.target as HTMLInputElement).checked ? "1" : "0");
     (el.querySelector("#set-reopen") as HTMLInputElement).onchange = (e) => localStorage.setItem(REOPEN_KEY, (e.target as HTMLInputElement).checked ? "1" : "0");
     const fsel = el.querySelector("#set-imgfolder") as HTMLSelectElement, fcus = el.querySelector("#set-imgfolder-custom") as HTMLInputElement;
     fsel.onchange = () => { if (fsel.value !== "custom") { localStorage.setItem(IMAGE_FOLDER_KEY, fsel.value); fcus.value = fsel.value; } else fcus.focus(); };
     fcus.onchange = () => { localStorage.setItem(IMAGE_FOLDER_KEY, fcus.value.trim() || "./assets"); fsel.value = ["./assets", "./${filename}.assets"].includes(fcus.value) ? fcus.value : "custom"; };
-    el.querySelectorAll<HTMLInputElement>("input[data-o]").forEach((inp) => inp.onchange = () => {
-      const v = inp.type === "checkbox" ? inp.checked : inp.type === "number" ? +inp.value : inp.value;
+    el.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>("[data-o]").forEach((inp) => inp.onchange = () => {
+      const v = inp instanceof HTMLInputElement && inp.type === "checkbox" ? inp.checked
+        : inp instanceof HTMLInputElement && inp.type === "number" ? +inp.value : inp.value;
       localStorage.setItem(plugins.settingKey(inp.dataset.o!, inp.dataset.k!), JSON.stringify(v));
+      if (inp.dataset.type === "url" && typeof v === "string") plugins.noteUrlSetting(inp.dataset.o!, inp.dataset.k!, v);
       plugins.emit("settings-changed", inp.dataset.o, inp.dataset.k, v); editor.refreshDecorations();
     });
+    el.querySelectorAll<HTMLButtonElement>("button[data-secret]").forEach((btn) => btn.onclick = () => saveOrClearSecret(btn));
+    el.querySelectorAll<HTMLElement>("[data-secret-status]").forEach((node) => refreshSecretStatus(node));
   },
 });
+
+function renderSetting(owner: string, s: SettingSpec): string {
+  if (s.when) { try { if (!s.when()) return ""; } catch { return ""; } }
+  const raw = localStorage.getItem(plugins.settingKey(owner, s.key));
+  const v = raw == null ? s.default : JSON.parse(raw);
+  const title = escapeHtml(s.title);
+  if (s.type === "note") return `<p class="mdn-note">${escapeHtml(s.text ?? s.title)}</p>`;
+  if (s.type === "boolean") return `<label><input type="checkbox" data-o="${owner}" data-k="${s.key}" ${v ? "checked" : ""}> ${title}</label>`;
+  if (s.type === "select") {
+    const opts = (s.options ?? []).map((o) => `<option value="${escapeHtml(o.value)}" ${String(v) === o.value ? "selected" : ""}>${escapeHtml(o.label)}</option>`).join("");
+    return `<label>${title}<br><select data-o="${owner}" data-k="${s.key}">${opts}</select></label>`;
+  }
+  if (s.type === "text") return `<label>${title}<br><textarea data-o="${owner}" data-k="${s.key}" rows="3">${escapeHtml(String(v ?? ""))}</textarea></label>`;
+  if (s.type === "url") return `<label>${title}<br><input type="url" data-o="${owner}" data-k="${s.key}" data-type="url" value="${escapeHtml(String(v ?? ""))}"></label>`;
+  if (s.type === "secret") {
+    return `<div class="mdn-secret" data-secret-row="${owner}.${s.key}"><label>${title}</label>
+      <input type="password" autocomplete="off" data-secret-input="${owner}.${s.key}" placeholder="not shown after save">
+      <span class="mdn-secret-actions"><button type="button" data-secret="set" data-o="${owner}" data-k="${s.key}">Save</button>
+      <button type="button" data-secret="clear" data-o="${owner}" data-k="${s.key}">Clear</button></span>
+      <span class="mdn-secret-status" data-secret-status="${owner}.${s.key}">…</span></div>`;
+  }
+  return `<label>${title}<br><input type="${s.type === "number" ? "number" : "text"}" data-o="${owner}" data-k="${s.key}" value="${escapeHtml(String(v ?? ""))}"></label>`;
+}
+
+async function refreshSecretStatus(node: HTMLElement) {
+  const id = node.dataset.secretStatus!;
+  const dot = id.indexOf(".");
+  const owner = id.slice(0, dot), key = id.slice(dot + 1);
+  try {
+    const sid = `${owner}.${key}`.toLowerCase();
+    const [has, backend] = await Promise.all([host.secrets.has(sid), host.secrets.backend()]);
+    node.textContent = has ? `stored ✓ (${backend})` : `not stored (${backend})`;
+  } catch { node.textContent = "unavailable"; }
+}
+
+async function saveOrClearSecret(btn: HTMLButtonElement) {
+  const owner = btn.dataset.o!, key = btn.dataset.k!;
+  const sid = `${owner}.${key}`;
+  const row = btn.closest(".mdn-secret");
+  const input = row?.querySelector("input") as HTMLInputElement | null;
+  const status = row?.querySelector("[data-secret-status]") as HTMLElement | null;
+  try {
+    if (btn.dataset.secret === "clear") await host.secrets.delete(sid);
+    else {
+      const value = input?.value ?? "";
+      if (!value) { notify("Enter a value to store"); return; }
+      await host.secrets.set(sid, value);
+      if (input) input.value = "";
+    }
+  } catch (e: any) { notify("Secret " + (e?.message ?? e)); }
+  if (status) await refreshSecretStatus(status);
+}
 sidebar.addTab("recent", "Recent", undefined, { id: "recent", title: "Recent", render: (el) => { recentEl = el; renderRecent(); return () => (recentEl = null); } });
 sidebar.select("files");
 (window as any).mdnest = { editor, host, notify, exportHtmlString, findBar, state };

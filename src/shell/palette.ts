@@ -8,7 +8,10 @@ export function openPalette(cmds: Command[]) {
   let sel = 0, shown: Command[] = [];
   const draw = () => {
     const q = input.value.toLowerCase();
-    shown = cmds.filter((c) => c.title.toLowerCase().includes(q) || c.id.includes(q)).slice(0, 30);
+    shown = cmds.filter((c) => {
+      if (c.when) { try { if (!c.when()) return false; } catch { return false; } }
+      return c.title.toLowerCase().includes(q) || c.id.includes(q);
+    }).slice(0, 30);
     sel = Math.min(sel, Math.max(0, shown.length - 1));
     list.innerHTML = shown.map((c, i) => `<div class="pal-item${i === sel ? " sel" : ""}" data-i="${i}">${c.title}${c.key ? `<small>${c.key}</small>` : ""}</div>`).join("");
   };

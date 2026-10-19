@@ -48,6 +48,8 @@ The desktop host uses the OS keyring (macOS Keychain, Windows Credential Manager
 
 `data: [DONE]` ends an SSE stream. `cancel()` aborts the in-flight request. A 429 or 5xx (and a connection failure) is retried at most twice, with exponential backoff, and only before the first payload byte is forwarded.
 
+Plugins call these through `ctx.net.stream` and `ctx.secrets` (`has` / `backend` only). `ctx.net` allows origins listed in `manifest.permissions.net` plus that plugin's `url` settings, and prefixes `secretRef` to `${pluginId}.${key}` (lowercased). Suggestions, slash items, and editor read/write live on `ctx.editor`; pending suggestion text is decoration-only and never enters the document until accepted.
+
 Tauri commands: `secret_set`, `secret_has`, `secret_delete`, `secret_backend`, `net_stream`, `net_cancel`. The browser equivalents are `POST /api/secret/set|delete`, `GET /api/secret/has|backend`, `POST /api/net/stream` (newline-delimited JSON events) and `POST /api/net/cancel`.
 
 ## Layout
@@ -66,7 +68,7 @@ Tauri commands: `secret_set`, `secret_has`, `secret_delete`, `secret_backend`, `
 | `src/editor/views.ts` | inline math, TOC, and HTML-block views |
 | `src/editor/rules.ts` | input rules (`#`, `>`, `-`, `1.`, `[ ]`, ```` ``` ````, `$$`, `---`, `**`, `*`, `` ` ``, `~~`, `==`, `$`) and keymaps |
 | `src/shell/*` | sidebar (file tree and outline in `#typora-sidebar`), source mode (`#typora-source`), theme manager, command palette |
-| `src/plugins/api.ts` | plugin API: manifest `{id, version, depends}`, commands, sidebar panels, settings, decoration hook, events |
+| `src/plugins/api.ts` | plugin API: manifest (`depends`, `provides`/`consumes`, permissions), commands (hotkey + `when`), sidebar, settings, editor read/write/suggest, slash items, `ctx.net` / `ctx.secrets` |
 | `src/plugins/builtin/*` | `word-stats` example and the `reading-goal` plugin that depends on it |
 | `src/host/*` | HostAPI: Tauri implementation plus a browser dev implementation. `host.secrets` and `host.net` are the plugin platform (see above) |
 | `src-tauri/` | Rust backend: commands, `mdtheme://` and `mdfile://` protocols, theme seeding, secrets (`secrets.rs`), streaming HTTP + SSE (`net.rs`, `sse.rs`) |
