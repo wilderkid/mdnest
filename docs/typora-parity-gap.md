@@ -187,7 +187,7 @@ Counted by `python3 scripts/parity-count.py` (163 rows; an empty After cell inhe
 | Open theme folder | | missing | done | reveal_path on the config themes dir (browser: toast) |
 | base.user.css / name.user.css |  | done | done |  |
 | Help: Markdown reference / quick start | | missing | done | modal with a short reference |
-| Help: About (version) | | missing | done | toast "MD Nest 0.1.1" |
+| Help: About (version) | | missing | done | toast "MD Nest 0.1.2" |
 | Help: Keyboard shortcuts | | missing | done | modal listing registered accelerators |
 
 ## Sidebar
