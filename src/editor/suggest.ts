@@ -162,7 +162,7 @@ function widget(view: EditorView, it: SugRecord) {
     const v = viewOf(it);
     el.classList.add("md-sug-v-" + v);
     if (v !== "words") el.classList.add("md-sug-card");
-    diff.appendChild(renderProposal(v, it.text, it.originalText, it.inline));
+    diff.appendChild(renderProposal(v, it.text, it.originalText, it.inline, it.originalMd));
     if (it.phase === "running") diff.appendChild(span("md-sug-caret", ""));
   }
   el.appendChild(diff);

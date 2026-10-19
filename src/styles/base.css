@@ -241,3 +241,6 @@ body.typora-sourceview-on content { visibility: hidden; }
 .md-def-footnote .md-def-content { flex: 1; min-width: 0; color: var(--text-color, inherit); }
 .md-def-link { white-space: pre-wrap; font-family: var(--monospace, ui-monospace, monospace); font-size: .85em; color: var(--mdn-muted, #6b7280); margin: .4em 0; }
 .typora-export .md-def-link { display: none; }
+/* links inside a pending suggestion are previews, not navigation */
+#write .md-sug-diff a { pointer-events: none; }
+#write .md-sug-diff .md-inline-math .md-math-preview { display: inline; }

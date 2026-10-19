@@ -8,29 +8,38 @@ export function tokenize(s: string): string[] {
   return s.match(/\s+|\S+/g) ?? [];
 }
 
-/** Longest-common-subsequence word diff. O(n*m); suggestion texts are short. */
-export function wordDiff(a: string, b: string): DiffOp[] {
-  const A = tokenize(a), B = tokenize(b);
+/**
+ * Generic LCS diff over token lists compared by `key`. Returns runs of equal / deleted / inserted
+ * tokens (for "eq" runs the tokens are taken from B, the new side). O(n*m); suggestion texts are short.
+ */
+export function diffBy<T>(A: T[], B: T[], key: (t: T) => string): { op: DiffOp["op"]; items: T[] }[] {
+  const ka = A.map(key), kb = B.map(key);
   const n = A.length, m = B.length;
   const dp: number[][] = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
   for (let i = n - 1; i >= 0; i--) {
     for (let j = m - 1; j >= 0; j--) {
-      dp[i][j] = A[i] === B[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+      dp[i][j] = ka[i] === kb[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
     }
   }
-  const ops: DiffOp[] = [];
-  const push = (op: DiffOp["op"], text: string) => {
+  const ops: { op: DiffOp["op"]; items: T[] }[] = [];
+  const push = (op: DiffOp["op"], t: T) => {
     const last = ops[ops.length - 1];
-    if (last && last.op === op) last.text += text;
-    else ops.push({ op, text });
+    if (last && last.op === op) last.items.push(t);
+    else ops.push({ op, items: [t] });
   };
   let i = 0, j = 0;
   while (i < n && j < m) {
-    if (A[i] === B[j]) { push("eq", A[i]); i++; j++; }
+    if (ka[i] === kb[j]) { push("eq", B[j]); i++; j++; }
     else if (dp[i + 1][j] >= dp[i][j + 1]) { push("del", A[i]); i++; }
     else { push("ins", B[j]); j++; }
   }
   while (i < n) { push("del", A[i]); i++; }
   while (j < m) { push("ins", B[j]); j++; }
   return ops;
+}
+
+/** Plain-text word diff. */
+export function wordDiff(a: string, b: string): DiffOp[] {
+  const id = (s: string) => s;
+  return diffBy(tokenize(a), tokenize(b), id).map((o) => ({ op: o.op, text: o.items.join("") }));
 }

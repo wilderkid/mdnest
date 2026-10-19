@@ -9,7 +9,7 @@ import {
   acceptTransaction, addMeta, patchMeta, suggestKey, suggestPlugin, beginRecord, type SugRecord,
 } from "../src/editor/suggest";
 import { selectionMarkdown, contextMarkdown, sliceForInsert, normalizeRange } from "../src/editor/insertmd";
-import { chooseView, changedSentences, sentences } from "../src/editor/sugview";
+import { chooseView, changedSentences, sentences, inlineDiff, originalInline, parseProposal } from "../src/editor/sugview";
 import { originAllowed, secretIdFor, PluginManager, type EditorPlugin, type PluginHost } from "../src/plugins/api";
 
 let fail = 0;
@@ -203,6 +203,38 @@ function items(st: EditorState) {
   ok(cs.changed.size === 1 && cs.list.length === 3, "one changed sentence of three → " + [...cs.changed]);
   ok(chooseView("replace", false, long, "Totally new. Entirely different words. Nothing kept at all.") === "block", "most sentences changed → block rewrite");
   ok(chooseView("insert", true, "", "anything") === "insert", "insert mode → insert");
+}
+
+// --- formatted word diff (marks preserved) ---
+{
+  const txt = (f: any) => f.textBetween(0, f.size);
+  const inl = (md: string) => parseProposal(md, true).frag;
+  const marksOf = (f: any) => { const r: string[] = []; f.forEach((n: any) => n.marks.forEach((m: any) => r.push(m.type.name))); return r; };
+  const show = (ops: any[]) => JSON.stringify(ops.map((o) => [o.op, o.frag.textBetween(0, o.frag.size, "", (n: any) => "$" + n.attrs.tex + "$"), marksOf(o.frag)]));
+  let ops = inlineDiff(inl("the **quick** cat"), inl("the **slow** cat"));
+  const ins = ops.find((o) => o.op === "ins")!, del = ops.find((o) => o.op === "del")!;
+  ok(txt(ins.frag) === "slow" && marksOf(ins.frag).includes("strong"), "bold kept on inserted word → " + show(ops));
+  ok(txt(del.frag) === "quick" && marksOf(del.frag).includes("strong"), "bold kept on deleted word");
+  ok(ops.filter((o) => o.op === "eq").map((o) => o.frag.textBetween(0, o.frag.size)).join("|") === "the | cat", "unchanged words stay equal");
+  ops = inlineDiff(inl("*very* good"), inl("*very* nice"));
+  ok(ops[0].op === "eq" && marksOf(ops[0].frag).includes("em") && txt(ops[0].frag).startsWith("very"), "italic kept on equal run → " + show(ops));
+  ops = inlineDiff(inl("use the code here"), inl("use the `code` here"));
+  ok(ops.some((o) => o.op === "del" && o.frag.textBetween(0, o.frag.size) === "code" && !marksOf(o.frag).length) && ops.some((o) => o.op === "ins" && marksOf(o.frag).includes("code")), "formatting-only change shows as change (code mark) → " + show(ops));
+  ops = inlineDiff(inl("see the docs"), inl("see the [docs](https://example.org/d)"));
+  const link = ops.find((o) => o.op === "ins")!;
+  let href = ""; link.frag.forEach((n) => n.marks.forEach((m) => { if (m.type.name === "link") href = m.attrs.href; }));
+  ok(href === "https://example.org/d", "link mark with href kept → " + show(ops));
+  ops = inlineDiff(inl("[docs](https://a.org) here"), inl("[docs](https://b.org) here"));
+  ok(ops.some((o) => o.op === "del") && ops.some((o) => o.op === "ins"), "changed link target is a change");
+  ops = inlineDiff(inl("area $a^2$ grows"), inl("area $a^2$ grows fast"));
+  let atom = false; ops.filter((o) => o.op === "eq").forEach((o) => o.frag.forEach((n) => { if (n.type.name === "inline_math") atom = true; }));
+  ok(atom && ops.at(-1)!.op === "ins", "inline math stays an atom in the diff → " + show(ops));
+  ops = inlineDiff(inl("x $a^2$"), inl("x $b^2$"));
+  ok(ops.some((o) => o.op === "del" && o.frag.firstChild?.attrs.tex === "a^2") && ops.some((o) => o.op === "ins" && o.frag.firstChild?.attrs.tex === "b^2"), "changed formula: old/new math atoms");
+  ok(inlineDiff(inl("**a** b"), inl("**a** b")).every((o) => o.op === "eq"), "identical formatted text is all eq");
+  const fb = originalInline("**mis**match", "something else");
+  ok(txt(fb) === "something else" && !marksOf(fb).length, "original falls back to plain text when Markdown and text disagree");
+  ok(marksOf(originalInline("**bold** x", "bold x")).includes("strong"), "original Markdown parsed with marks");
 }
 
 setTimeout(() => process.exit(fail ? 1 : 0), 20);

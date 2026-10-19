@@ -1,13 +1,14 @@
 // Rendering of pending suggestions. Proposed Markdown is parsed and rendered with the
 // editor schema (formatted, never raw syntax). Granularity:
-//  - "words":     short inline edits — in-place word diff over plain text, original hidden
+//  - "words":     short inline edits — in-place word diff over formatted tokens (marks kept), original hidden
 //  - "sentences": longer edits — rendered proposal, changed/new sentences highlighted, original struck
 //  - "block":     rewrites that changed most sentences — rendered proposal marked as a full rewrite
 //  - "insert":    generated text — rendered proposal
-import { DOMSerializer, Fragment, Node as PMNode } from "prosemirror-model";
+import { DOMSerializer, Fragment, Mark, Node as PMNode } from "prosemirror-model";
 import { schema } from "./schema";
 import { parseMarkdown } from "./markdown";
-import { wordDiff } from "./diff";
+import { diffBy, tokenize } from "./diff";
+import { renderTex } from "./render";
 
 export type SugView = "words" | "sentences" | "block" | "insert";
 
@@ -107,20 +108,90 @@ function markSentences(root: HTMLElement, origPlain: string) {
   }
 }
 
-/** Build the proposal DOM (inside the .md-sug-diff container). */
-export function renderProposal(view: SugView, md: string, origPlain: string, inlineTarget: boolean): HTMLElement {
-  const { frag, inline } = parseProposal(md, inlineTarget);
-  if (view === "words") {
-    const out = document.createElement("span");
-    for (const op of wordDiff(origPlain, plainOf(frag))) {
-      if (op.op === "eq") out.appendChild(document.createTextNode(op.text));
-      else { const s = document.createElement("span"); s.className = op.op === "ins" ? "md-sug-ins" : "md-sug-old"; s.textContent = op.text; out.appendChild(s); }
-    }
-    return out;
+// ---------- formatted word diff ----------
+
+/** One diff token: a word or a whitespace run with its marks, or an inline atom (math, image, break…). */
+export interface InlineTok { text: string; marks: readonly Mark[]; node?: PMNode }
+
+const markKey = (m: Mark) => m.type.name + (m.type.name === "link" ? "(" + m.attrs.href + ")" : "");
+/** Tokens compare by text plus formatting, so "word" → "**word**" shows as a change. Whitespace
+ *  compares by text only (a space inside vs. outside a bold run is not an edit). */
+export function tokKey(t: InlineTok): string {
+  if (t.node) return "\u0001" + t.node.type.name + ":" + JSON.stringify(t.node.attrs);
+  if (/^\s+$/.test(t.text)) return t.text;
+  return t.text + "\u0002" + t.marks.filter((m) => m.type.name !== "md_src").map(markKey).sort().join(",");
+}
+
+export function inlineTokens(frag: Fragment): InlineTok[] {
+  const out: InlineTok[] = [];
+  frag.forEach((n) => {
+    if (n.isText) {
+      const marks = n.marks.filter((m) => m.type.name !== "md_src");
+      for (const w of tokenize(n.text!)) out.push({ text: w, marks });
+    } else if (n.isInline) out.push({ text: n.attrs?.tex ?? n.textContent ?? "", marks: n.marks, node: n });
+    else n.forEach((c) => out.push(...inlineTokens(Fragment.from(c)))); // defensive: unexpected block
+  });
+  return out;
+}
+
+const tokNodes = (toks: InlineTok[]): PMNode[] => toks.map((t) => t.node ?? schema.text(t.text, t.marks as Mark[]));
+
+/** Word diff over two inline fragments; each run is an inline Fragment that keeps its marks. */
+export function inlineDiff(orig: Fragment, next: Fragment): { op: "eq" | "ins" | "del"; frag: Fragment }[] {
+  return diffBy(inlineTokens(orig), inlineTokens(next), tokKey).map((r) => ({ op: r.op, frag: Fragment.fromArray(tokNodes(r.items)) }));
+}
+
+/** Original inline content for the word diff: the parsed original Markdown when it matches the
+ *  captured plain text, else the plain text itself (unformatted). */
+export function originalInline(origMd: string | undefined, origPlain: string): Fragment {
+  if (origMd) {
+    const p = parseProposal(origMd, true);
+    if (p.inline && norm(plainOf(p.frag)) === norm(origPlain)) return p.frag;
   }
-  const body = serialize(frag, inline);
-  if (inline) body.className = "md-sug-inline";
-  if (view === "sentences") markSentences(body, origPlain);
-  else if (view === "block") body.classList.add("md-sug-rewrite");
-  return body;
+  return origPlain ? Fragment.from(schema.text(origPlain)) : Fragment.empty;
+}
+
+// ---------- math in proposals ----------
+
+/** Replace raw TeX of inline / display math in a proposal with MathJax SVG, as the editor does.
+ *  Async; the TeX text stays as fallback until (or if) MathJax renders. */
+export function renderMath(root: HTMLElement): Promise<void> {
+  const jobs: Promise<void>[] = [];
+  root.querySelectorAll<HTMLElement>(".md-inline-math:not([data-tex])").forEach((m) => {
+    const tex = m.textContent ?? "";
+    m.dataset.tex = tex; m.classList.add("md-math-container");
+    // a sentence highlight wrapped the TeX text inside; move it onto the formula before replacing it
+    if (m.querySelector(".md-sug-ins")) m.classList.add("md-sug-ins");
+    jobs.push(renderTex(tex, false).then((svg) => { m.innerHTML = `<span class="md-math-preview">${svg}</span>`; }, () => {}));
+  });
+  root.querySelectorAll<HTMLElement>(".md-math-block:not([data-tex])").forEach((m) => {
+    const tex = m.textContent ?? "";
+    m.dataset.tex = tex;
+    jobs.push(renderTex(tex, true).then((svg) => { m.innerHTML = `<div class="md-math-preview mathjax-block">${svg}</div>`; }, () => {}));
+  });
+  return Promise.all(jobs).then(() => {});
+}
+
+/** Build the proposal DOM (inside the .md-sug-diff container). */
+export function renderProposal(view: SugView, md: string, origPlain: string, inlineTarget: boolean, origMd?: string): HTMLElement {
+  const { frag, inline } = parseProposal(md, inlineTarget);
+  let out: HTMLElement;
+  if (view === "words") {
+    out = document.createElement("span");
+    const ser = DOMSerializer.fromSchema(schema);
+    const base = inline ? frag : Fragment.from(schema.text(plainOf(frag) || " "));
+    for (const r of inlineDiff(originalInline(origMd, origPlain), base)) {
+      let dom: Node;
+      try { dom = ser.serializeFragment(r.frag); } catch { dom = document.createTextNode(r.frag.textBetween(0, r.frag.size, "", (n) => n.attrs?.tex ?? "")); }
+      if (r.op === "eq") out.appendChild(dom);
+      else { const s = document.createElement("span"); s.className = r.op === "ins" ? "md-sug-ins" : "md-sug-old"; s.appendChild(dom); out.appendChild(s); }
+    }
+  } else {
+    out = serialize(frag, inline);
+    if (inline) out.className = "md-sug-inline";
+    if (view === "sentences") markSentences(out, origPlain);
+    else if (view === "block") out.classList.add("md-sug-rewrite");
+  }
+  if (typeof document !== "undefined" && out.querySelector(".md-inline-math, .md-math-block")) void renderMath(out);
+  return out;
 }
