@@ -135,6 +135,14 @@ export function menuTemplate(mac: boolean): MenuNode[] {
         item("paragraph.table.addColAfter", "Add Column After"),
         item("paragraph.table.deleteRow", "Delete Row"),
         item("paragraph.table.deleteColumn", "Delete Column"),
+        item("paragraph.table.moveRowUp", "Move Row Up"),
+        item("paragraph.table.moveRowDown", "Move Row Down"),
+        item("paragraph.table.moveColLeft", "Move Column Left"),
+        item("paragraph.table.moveColRight", "Move Column Right"),
+        item("paragraph.table.alignLeft", "Align Left"),
+        item("paragraph.table.alignCenter", "Align Center"),
+        item("paragraph.table.alignRight", "Align Right"),
+        item("paragraph.table.copy", "Copy Table"),
         item("paragraph.table.deleteTable", "Delete Table"),
       ] },
       item("paragraph.codeFence", "Code Fences", "CmdOrCtrl+Shift+K"),
@@ -236,7 +244,11 @@ export function menuTemplate(mac: boolean): MenuNode[] {
 const TABLE_IDS = new Set([
   "paragraph.table.addRowAbove", "paragraph.table.addRowBelow",
   "paragraph.table.addColBefore", "paragraph.table.addColAfter",
-  "paragraph.table.deleteRow", "paragraph.table.deleteColumn", "paragraph.table.deleteTable",
+  "paragraph.table.deleteRow", "paragraph.table.deleteColumn",
+  "paragraph.table.moveRowUp", "paragraph.table.moveRowDown",
+  "paragraph.table.moveColLeft", "paragraph.table.moveColRight",
+  "paragraph.table.alignLeft", "paragraph.table.alignCenter", "paragraph.table.alignRight",
+  "paragraph.table.copy", "paragraph.table.deleteTable",
 ]);
 const PATH_IDS = new Set(["file.openLocation", "file.revealSidebar", "file.moveTo", "file.rename", "file.duplicate", "file.reload"]);
 

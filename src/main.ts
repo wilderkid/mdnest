@@ -24,7 +24,7 @@ import { FindBar, SourceSearch } from "./shell/findbar";
 import { EditorSearch } from "./editor/search";
 import { insertImageFiles, IMAGE_FOLDER_KEY, imageFolderPattern } from "./shell/images";
 import { buildExportHtml, printHtml } from "./shell/export";
-import { insertTable } from "./editor/tabletools";
+import { insertTable, moveRow, moveColumn, setColumnAlign, tableMarkdown } from "./editor/tabletools";
 import { addColumnAfter, addColumnBefore, addRowAfter, addRowBefore, deleteColumn, deleteRow, deleteTable, isInTable } from "prosemirror-tables";
 import { setBlockType, toggleMark, wrapIn } from "prosemirror-commands";
 import { wrapInList, liftListItem, sinkListItem } from "prosemirror-schema-list";
@@ -695,6 +695,12 @@ function pmRun(fn: (state: any, dispatch?: any, view?: any) => boolean) {
 function inTableNow() {
   try { return isInTable(editor.view.state); } catch { return false; }
 }
+async function copyTableNow() {
+  const md = tableMarkdown(editor.view.state);
+  if (!md) return;
+  try { await navigator.clipboard.writeText(md); notify("Copied table"); }
+  catch { notify(md.split("\n")[0]); }
+}
 function togglePair(key: string, _defaultOn: boolean) {
   const on = key === PAIR_BRACKETS_KEY ? pairBracketsOn() : pairMarkdownOn();
   localStorage.setItem(key, on ? "0" : "1");
@@ -978,6 +984,14 @@ const markCmd = (name: string) => () => pmRun(toggleMark(schema.marks[name]));
   { id: "paragraph.table.deleteRow", title: "Table: Delete Row", when: () => inTableNow(), run: () => pmRun(deleteRow) },
   { id: "paragraph.table.deleteColumn", title: "Table: Delete Column", when: () => inTableNow(), run: () => pmRun(deleteColumn) },
   { id: "paragraph.table.deleteTable", title: "Table: Delete Table", when: () => inTableNow(), run: () => pmRun(deleteTable) },
+  { id: "paragraph.table.moveRowUp", title: "Table: Move Row Up", when: () => inTableNow(), run: () => pmRun(moveRow(-1)) },
+  { id: "paragraph.table.moveRowDown", title: "Table: Move Row Down", when: () => inTableNow(), run: () => pmRun(moveRow(1)) },
+  { id: "paragraph.table.moveColLeft", title: "Table: Move Column Left", when: () => inTableNow(), run: () => pmRun(moveColumn(-1)) },
+  { id: "paragraph.table.moveColRight", title: "Table: Move Column Right", when: () => inTableNow(), run: () => pmRun(moveColumn(1)) },
+  { id: "paragraph.table.alignLeft", title: "Table: Align Left", when: () => inTableNow(), run: () => pmRun(setColumnAlign("left")) },
+  { id: "paragraph.table.alignCenter", title: "Table: Align Center", when: () => inTableNow(), run: () => pmRun(setColumnAlign("center")) },
+  { id: "paragraph.table.alignRight", title: "Table: Align Right", when: () => inTableNow(), run: () => pmRun(setColumnAlign("right")) },
+  { id: "paragraph.table.copy", title: "Table: Copy Table", when: () => inTableNow(), run: () => copyTableNow() },
   { id: "paragraph.mathBlock", title: "Paragraph: Math Block", key: "CmdOrCtrl+Shift+M", run: () => pmRun(setBlockType(schema.nodes.math_block)) },
   { id: "paragraph.taskList", title: "Paragraph: Task List", key: "CmdOrCtrl+Shift+X", run: () => pmRun(toggleTaskList()) },
   { id: "paragraph.indent", title: "Paragraph: Indent", key: "CmdOrCtrl+]", run: () => pmRun(sinkListItem(schema.nodes.list_item)) },
@@ -1273,6 +1287,10 @@ function editorContextMenu(e: MouseEvent) {
     ["paragraph.table.addRowAbove", "Add Row Above"], ["paragraph.table.addRowBelow", "Add Row Below"],
     ["paragraph.table.addColBefore", "Add Column Before"], ["paragraph.table.addColAfter", "Add Column After"],
     ["paragraph.table.deleteRow", "Delete Row"], ["paragraph.table.deleteColumn", "Delete Column"],
+    ["paragraph.table.moveRowUp", "Move Row Up"], ["paragraph.table.moveRowDown", "Move Row Down"],
+    ["paragraph.table.moveColLeft", "Move Column Left"], ["paragraph.table.moveColRight", "Move Column Right"],
+    ["paragraph.table.alignLeft", "Align Left"], ["paragraph.table.alignCenter", "Align Center"], ["paragraph.table.alignRight", "Align Right"],
+    ["paragraph.table.copy", "Copy Table"],
     ["paragraph.table.deleteTable", "Delete Table"],
   ]) });
   if (link) {

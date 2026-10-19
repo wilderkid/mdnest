@@ -304,9 +304,15 @@ export const parser = new MarkdownParser(schema, md, {
   thead: { ignore: true },
   tbody: { ignore: true },
   tr: { block: "table_row" },
-  th: { block: "table_header", getAttrs: (tok) => ({ align: (/text-align:\s*(\w+)/.exec(tok.attrGet("style") || "") || [])[1] || null }) },
-  td: { block: "table_cell", getAttrs: (tok) => ({ align: (/text-align:\s*(\w+)/.exec(tok.attrGet("style") || "") || [])[1] || null }) },
+  th: { block: "table_header", getAttrs: (tok) => ({ align: cellAlign(tok) }) },
+  td: { block: "table_cell", getAttrs: (tok) => ({ align: cellAlign(tok) }) },
 });
+
+function cellAlign(tok: any): string | null {
+  const style = (/text-align:\s*(\w+)/.exec(tok.attrGet("style") || "") || [])[1];
+  if (style === "left" || style === "center" || style === "right") return style;
+  return null;
+}
 
 // prosemirror-markdown turns soft line breaks into spaces, which rewrites every wrapped paragraph on
 // save; keep them as "\n" (rendered as a space in export, as a line break while editing).

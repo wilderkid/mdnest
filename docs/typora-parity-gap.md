@@ -120,7 +120,7 @@ Counted by `python3 scripts/parity-count.py` (163 rows; an empty After cell inhe
 | Increase / Decrease heading level | Ctrl+= / Ctrl+- | missing | done | Ctrl+= / Ctrl+-; Typora order: paragraph → h6 → … → h1; h1 → … → h6 → paragraph |
 | Insert paragraph before / after |  | missing | done | Paragraph menu |
 | Table insert (rows × cols dialog) | Ctrl+T | partial | done | #table-insert-dialog |
-| Table submenu (add/delete row/col, align, move, delete table) |  | partial | partial | add/delete row and column, delete table; no align or move |
+| Table submenu (add/delete row/col, align, move, delete table) |  | partial | done | add/delete/move row and column, align left/center/right on the GFM delimiter, copy as Markdown, delete table; same commands in the floating toolbar |
 | Code fences | Ctrl+Shift+K | partial | done | menu + shortcut |
 | Math block | Ctrl+Shift+M | missing | done | Ctrl+Shift+M and $$ + Enter |
 | Quote | Ctrl+Shift+Q | partial | done | menu + shortcut |
@@ -268,7 +268,7 @@ Still missing or only partial after 0.1.1. Each note says why.
 - **Line endings and encodings** (missing). Files are read and written as UTF-8. There is no CRLF/LF or encoding picker.
 - **Smart punctuation, spell check, emoji autocomplete** (missing). Not built. The editor keeps `spellcheck` off.
 - **Copy code content** (missing). Code fences have no copy-content action.
-- **Table align and move** (partial). The table menu adds and deletes rows and columns and deletes the table. Alignment stays on the floating table toolbar. There is no move-row or move-column command.
+- **Table align and move** (done). Paragraph ▸ Table and the table context menu add, delete, and move rows and columns, align a column (written to the GFM delimiter row), copy the table as Markdown, and delete the table. The floating toolbar has the same commands under "…".
 - **Toggle task status** (partial). Clicking the checkbox toggles it. There is no menu command.
 - **HTML block insert** (partial). HTML blocks parse and round-trip. There is no insert command.
 - **Image align** (partial). Zoom 50/100/200% sets an `<img>` width style. There is no align control.

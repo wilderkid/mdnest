@@ -255,6 +255,9 @@ body.typora-sourceview-on content { visibility: hidden; }
 .mdn-toolbar button { font: inherit; color: inherit; background: transparent; border: 0; border-radius: 4px; padding: 2px 7px; cursor: pointer; white-space: nowrap; }
 .mdn-toolbar button:hover { background: var(--item-hover-bg-color, rgba(0,0,0,.06)); }
 .mdn-toolbar button.active { background: var(--active-file-bg-color, rgba(74,123,208,.15)); }
+.mdn-table-more { position: absolute; top: 100%; right: 0; min-width: 180px; z-index: 21; }
+.mdn-table-more[hidden] { display: none; }
+#mdn-table-tools { position: absolute; }
 /* find / replace */
 .mdn-findbar { position: fixed; top: 8px; right: 18px; z-index: 40; padding: 6px; border-radius: 8px; font-size: 13px;
   background: var(--bg-color); color: var(--text-color); border: 1px solid rgba(127,127,127,.3); box-shadow: 0 4px 18px rgba(0,0,0,.15); }

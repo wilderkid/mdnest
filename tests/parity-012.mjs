@@ -26,7 +26,11 @@ const ok = (c, name, info = "") => {
 let browser;
 try {
   browser = await chromium.launch();
-  const page = await browser.newPage({ viewport: { width: 1280, height: 860 } });
+  const context = await browser.newContext({
+    viewport: { width: 1280, height: 860 },
+    permissions: ["clipboard-read", "clipboard-write"],
+  });
+  const page = await context.newPage();
   page.setDefaultTimeout(8000);
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
@@ -195,6 +199,110 @@ try {
   ok(/Maximize|Restore|Zoom/.test(note), "A3 Maximize runs in the browser host", note);
   const minAccel = await page.evaluate(() => window.mdnest.commands.find((c) => c.id === "window.minimize")?.key);
   ok(minAccel === "CmdOrCtrl+M", "A3 Minimize is Ctrl+M", String(minAccel));
+
+  // ---------- A4: table commands ----------
+  await setMd("| A | B |\n|---|---|\n| 1 | 2 |\n| 3 | 4 |\n");
+  const cell = (row, col) => page.evaluate(({ row, col }) => {
+    const table = document.querySelector("#write table");
+    const rows = [...table.querySelectorAll("tr")];
+    const td = rows[row].cells[col];
+    const v = window.mdnest.editor.view;
+    const pos = v.posAtDOM(td, 0);
+    const $p = v.state.doc.resolve(pos);
+    v.dispatch(v.state.tr.setSelection(v.state.selection.constructor.near($p)));
+    v.focus();
+  }, { row, col });
+  const colCount = (text) => text.split("\n")[0].replace(/^\|/, "").replace(/\|$/, "").split("|").length;
+  await cell(1, 0);
+  await page.waitForTimeout(60);
+  const tableMd = async () => (await md()).replace(/\s+$/, "");
+  await run("paragraph.table.addRowBelow");
+  await page.waitForTimeout(80);
+  ok(((await tableMd()).match(/^\|/gm) || []).length >= 5, "A4 Add Row Below", await tableMd());
+  await run("paragraph.table.addRowAbove");
+  await page.waitForTimeout(80);
+  ok(((await tableMd()).match(/^\|/gm) || []).length >= 6, "A4 Add Row Above", await tableMd());
+  await cell(1, 0);
+  await run("paragraph.table.addColAfter");
+  await page.waitForTimeout(80);
+  ok(colCount(await tableMd()) >= 3, "A4 Add Column After", await tableMd());
+  await cell(1, 0);
+  await run("paragraph.table.addColBefore");
+  await page.waitForTimeout(80);
+  ok(colCount(await tableMd()) >= 4, "A4 Add Column Before", await tableMd());
+  // Fresh 3-column table so each alignment lands on a known column.
+  await setMd("| L | C | R |\n|---|---|---|\n| 1 | 2 | 3 |\n");
+  await cell(1, 1);
+  await run("paragraph.table.alignCenter");
+  await page.waitForTimeout(60);
+  await cell(1, 0);
+  await run("paragraph.table.alignLeft");
+  await page.waitForTimeout(60);
+  await cell(1, 2);
+  await run("paragraph.table.alignRight");
+  await page.waitForTimeout(60);
+  const aligned = await tableMd();
+  ok(/\|:---\|:---:\|---:\|/.test(aligned.replace(/\s/g, "")), "A4 Align Left/Center/Right write the GFM delimiter", aligned);
+  // Round-trip: set markdown back through the parser and serialize again.
+  const beforeRt = await tableMd();
+  await setMd(beforeRt + "\n");
+  const afterRt = await tableMd();
+  ok(/\|:---\|:---:\|---:\|/.test(afterRt.replace(/\s/g, "")), "A4 alignment round-trips", afterRt);
+  await cell(1, 0);
+  const beforeMove = await tableMd();
+  await run("paragraph.table.moveColRight");
+  await page.waitForTimeout(80);
+  ok((await tableMd()) !== beforeMove, "A4 Move Column Right changes the table", await tableMd());
+  await setMd("| L | C | R |\n|:---|:---:|---:|\n| 1 | 2 | 3 |\n| 4 | 5 | 6 |\n");
+  await cell(1, 0);
+  await run("paragraph.table.moveColLeft");
+  await page.waitForTimeout(60);
+  const stayed = await tableMd();
+  ok(stayed.startsWith("| L |"), "A4 Move Column Left at the edge is a no-op", stayed);
+  await cell(2, 0);
+  const beforeRow = await tableMd();
+  await run("paragraph.table.moveRowUp");
+  await page.waitForTimeout(80);
+  ok((await tableMd()) !== beforeRow, "A4 Move Row Up changes the table", await tableMd());
+  await cell(1, 0);
+  await run("paragraph.table.moveRowDown");
+  await page.waitForTimeout(60);
+  await cell(1, 0);
+  await run("paragraph.table.deleteColumn");
+  await page.waitForTimeout(60);
+  await run("paragraph.table.deleteRow");
+  await page.waitForTimeout(60);
+  const shrunk = await tableMd();
+  ok(shrunk.includes("|") && shrunk.split("\n").filter((l) => l.startsWith("|")).length >= 2, "A4 Delete Row and Column leave a table", shrunk);
+  await page.evaluate(() => navigator.clipboard.writeText(""));
+  await cell(1, 0);
+  await run("paragraph.table.copy");
+  await page.waitForTimeout(80);
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  ok(copied.startsWith("|") && copied.includes("---"), "A4 Copy Table is Markdown", copied);
+  await page.screenshot({ path: path.join(OUT, "table-toolbar.png") });
+  await page.locator("#write table").click({ button: "right" });
+  await page.waitForSelector(".context-menu button[data-id='table']");
+  await page.locator(".context-menu button[data-id='table']").hover();
+  await page.waitForTimeout(80);
+  ok(await page.locator(".context-menu button[data-id='paragraph.table.copy']").count() === 1, "A4 table context menu lists Copy Table");
+  await page.screenshot({ path: path.join(OUT, "table-menu.png") });
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+  await cell(1, 0);
+  await run("paragraph.table.deleteTable");
+  await page.waitForTimeout(80);
+  ok(!(await md()).includes("|---"), "A4 Delete Table removes the table", await md());
+  // Toolbar "…" menu has the same command.
+  await setMd("| A | B |\n|---|---|\n| 1 | 2 |\n");
+  await cell(1, 0);
+  await page.waitForSelector("#mdn-table-tools");
+  ok(await page.locator("#mdn-table-tools > button[data-cmd='align-left']").count() === 1, "A4 toolbar has align buttons");
+  await page.locator("#mdn-table-tools button[data-cmd='more']").click();
+  await page.waitForTimeout(60);
+  ok(await page.locator("#mdn-table-tools .mdn-table-more button[data-cmd='copy']").isVisible(), "A4 toolbar … menu has Copy Table");
+  ok(await page.locator("#mdn-table-tools .mdn-table-more button[data-cmd='row-up']").count() === 1, "A4 toolbar … menu has Move Row Up");
+  await page.locator("#mdn-table-tools button[data-cmd='more']").click();
 
   ok(errors.length === 0, "no page errors", errors.join(" | "));
 } catch (e) {
