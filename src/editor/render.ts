@@ -7,11 +7,13 @@ export function loadMathJax(): Promise<any> {
       tex: { inlineMath: [["$", "$"]], displayMath: [["$$", "$$"]], tags: "ams", packages: { "[+]": ["ams"] } },
       svg: { fontCache: "local" },
       startup: { typeset: false, ready: () => { (window as any).MathJax.startup.defaultReady(); resolve((window as any).MathJax); } },
-      loader: { paths: { "mathjax-newcm": "./vendor/mathjax-newcm-font" } },
-      options: { enableMenu: false },
+      loader: { load: ["input/tex", "output/svg"], paths: { mathjax: new URL("./vendor/mathjax", location.href).href, "mathjax-newcm": new URL("./vendor/mathjax-newcm-font", location.href).href } },
+      output: { font: "mathjax-newcm" },
+      // no context menu / speech / braille / enrichment: avoids loading SRE (~4.6 MB) and its worker
+      options: { enableMenu: false, enableSpeech: false, enableBraille: false, enableEnrichment: false, enableExplorer: false },
     };
     const s = document.createElement("script");
-    s.src = "./vendor/mathjax/tex-svg.js"; s.async = true; s.id = "MathJax-script";
+    s.src = "./vendor/mathjax/startup.js"; s.async = true; s.id = "MathJax-script";
     s.onerror = () => reject(new Error("MathJax failed to load"));
     document.head.appendChild(s);
   });

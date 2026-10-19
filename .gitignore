@@ -7,3 +7,8 @@ dev-data/workspace/.tmp*
 public/vendor/
 dev-data/themes/
 src-tauri/resources/themes/
+# Phase 2 test artifacts
+dev-data/workspace/p2*.md
+dev-data/workspace/assets/
+dev-data/workspace/p2.assets/
+dev-data/workspace/*.html

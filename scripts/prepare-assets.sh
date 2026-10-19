@@ -3,12 +3,22 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 NM=node_modules
-# 1) MathJax 4 (Apache-2.0) + New Computer Modern SVG font (OFL) → public/vendor
-mkdir -p public/vendor
-rm -rf public/vendor/mathjax public/vendor/mathjax-newcm-font && mkdir -p public/vendor/mathjax-newcm-font
-cp -a "$NM/mathjax" public/vendor/mathjax && rm -f public/vendor/mathjax/*.cjs public/vendor/mathjax/node-main* public/vendor/mathjax/*.md
-cp -a "$NM/@mathjax/mathjax-newcm-font/svg" public/vendor/mathjax-newcm-font/svg
-cp "$NM/@mathjax/mathjax-newcm-font/svg.js" public/vendor/mathjax-newcm-font/ 2>/dev/null || true
+# 1) MathJax 4 (Apache-2.0) + New Computer Modern SVG font (OFL) → public/vendor, trimmed (Phase 2):
+#    only the tex-svg combined component, TeX extensions (autoloaded) and the math-relevant dynamic
+#    font ranges. Dropped: SRE speech (4.6 MB), CHTML output, other combined bundles, menu/a11y,
+#    and non-math script ranges (Greek/Cyrillic/Hebrew text, Braille, …) — see README "MathJax".
+rm -rf public/vendor/mathjax public/vendor/mathjax-newcm-font
+mkdir -p public/vendor/mathjax/input/tex public/vendor/mathjax-newcm-font/svg/dynamic
+# modular components instead of the combined tex-svg.js bundle (which hard-wires a11y + SRE)
+cp "$NM/mathjax/startup.js" "$NM/mathjax/core.js" "$NM/mathjax/LICENSE" public/vendor/mathjax/
+mkdir -p public/vendor/mathjax/output public/vendor/mathjax/input
+cp "$NM/mathjax/input/tex.js" public/vendor/mathjax/input/
+cp "$NM/mathjax/output/svg.js" public/vendor/mathjax/output/
+cp -a "$NM/mathjax/input/tex/extensions" public/vendor/mathjax/input/tex/
+cp "$NM/@mathjax/mathjax-newcm-font/svg.js" public/vendor/mathjax-newcm-font/
+FONT_RANGES="calligraphic double-struck fraktur script monospace sans-serif sans-serif-b sans-serif-i sans-serif-bi latin latin-b arrows marrows math symbols shapes mshapes accents"
+for r in $FONT_RANGES; do cp "$NM/@mathjax/mathjax-newcm-font/svg/dynamic/$r.js" public/vendor/mathjax-newcm-font/svg/dynamic/; done
+cp "$NM/@mathjax/mathjax-newcm-font/LICENSE" public/vendor/mathjax-newcm-font/ 2>/dev/null || true
 # 2) themes/github: Open Sans (OFL, @fontsource) under the file names Typora-style themes reference
 mkdir -p themes/github
 F=$NM/@fontsource/open-sans/files
