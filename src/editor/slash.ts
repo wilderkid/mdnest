@@ -76,6 +76,7 @@ export function slashPlugin() {
     props: {
       handleTextInput(view, from, to, text) {
         if (view.composing) return false;
+        if (view.editable === false || (typeof view.editable === "function" && !view.editable(view.state))) return false;
         const at = slashOpenAt(view.state, from, to, text);
         if (at == null) return false;
         const tr = view.state.tr.insertText("/", from, to);

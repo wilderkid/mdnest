@@ -80,7 +80,28 @@ export class CodeView implements NodeView {
       const inp = document.createElement("input");
       inp.className = "ty-cm-lang-input"; inp.placeholder = "language"; inp.value = node.attrs.params;
       inp.addEventListener("change", () => { const p = this.getPos(); if (p != null) view.dispatch(view.state.tr.setNodeMarkup(p, undefined, { params: inp.value.trim() })); });
-      tip.appendChild(inp); this.dom.appendChild(tip); this.langInput = inp;
+      const copy = document.createElement("button");
+      copy.type = "button";
+      copy.className = "mdn-code-copy";
+      copy.textContent = "Copy";
+      copy.title = "Copy code content";
+      copy.addEventListener("mousedown", (e) => e.preventDefault());
+      copy.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const text = this.cm.getValue();
+        const done = () => {
+          copy.textContent = "Copied";
+          window.dispatchEvent(new CustomEvent("mdn-notify", { detail: "Copied" }));
+          setTimeout(() => { if (copy.isConnected) copy.textContent = "Copy"; }, 1200);
+        };
+        if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(done, () => done());
+        else done();
+      });
+      tip.appendChild(inp);
+      tip.appendChild(copy);
+      this.dom.appendChild(tip);
+      this.langInput = inp;
     }
     if (kind === "math" || this.isDiagram()) this.ensurePreview();
     this.applyMode();

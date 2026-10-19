@@ -100,7 +100,7 @@ Counted by `python3 scripts/parity-count.py` (163 rows; an empty After cell inhe
 | Select word | Ctrl+D | missing | done | Ctrl+D |
 | Jump to top / bottom | Ctrl+Home / Ctrl+End | done | done | Ctrl+Home / Ctrl+End commands |
 | Find… | Ctrl+F | done | done | menu + shortcut |
-| Find Next / Previous | F3 / Shift+F3 | partial | partial | menu items; find-bar behaviour unchanged |
+| Find Next / Previous | F3 / Shift+F3 | partial | done | with the bar closed, searches the last query or the selection, wraps, and notifies "Not found" |
 | Replace | Ctrl+H | done | done | menu + shortcut |
 | Find in files (sidebar search) | Ctrl+Shift+F | partial | done | #file-library-search-input; content hits open at the line |
 | Smart punctuation / substitutions |  | missing | missing | not built |
@@ -108,7 +108,7 @@ Counted by `python3 scripts/parity-count.py` (163 rows; an empty After cell inhe
 | Emoji & symbols / :emoji: autocomplete |  | missing | missing | not built |
 | Auto-pair brackets and quotes |  | missing | done | on by default; Edit ▸ Auto Pair and Settings |
 | Auto-pair Markdown syntax (`*`, `` ` ``, `~~`) |  | missing | done | off by default; Edit ▸ Auto Pair and Settings |
-| Code tools: copy code content |  | missing | missing | no code-block toolbar action |
+| Code tools: copy code content |  | missing | done | Copy button in .code-tooltip; Edit ▸ Code Tools ▸ Copy Code Content; not exported |
 | Math tools: refresh math |  | n/a | n/a | always live |
 
 ## Paragraph
@@ -127,14 +127,14 @@ Counted by `python3 scripts/parity-count.py` (163 rows; an empty After cell inhe
 | Ordered list | Ctrl+Shift+[ | partial | done | menu + shortcut |
 | Unordered list | Ctrl+Shift+] | partial | done | menu + shortcut |
 | Task list | Ctrl+Shift+X | missing | done | Ctrl+Shift+X and [ ] + space at paragraph start |
-| Toggle task status |  | partial | partial | click the checkbox; no menu command |
+| Toggle task status |  | partial | done | Paragraph ▸ Task Status ▸ Toggle (Ctrl+Alt+X), Mark as Complete, Mark as Incomplete; acts on every task in the selection |
 | Indent / Outdent list item | Ctrl+] / Ctrl+[, Tab / Shift+Tab | done | done | menu + Ctrl+] / Ctrl+[ |
 | Link reference |  | missing | done | Paragraph menu inserts a reference definition |
 | Footnote |  | missing | done | inserts [^n] and a definition |
 | Horizontal line |  | partial | done | Paragraph menu and --- + Enter |
 | Table of contents |  | partial | done | Paragraph menu and [TOC] + Enter |
 | YAML front matter |  | partial | done | Paragraph menu; --- + Enter on the first line |
-| HTML block |  | partial | partial | parsed and round-tripped; no insert command |
+| HTML block |  | partial | done | Paragraph ▸ HTML Block and a slash item insert a div template with the caret inside its editor |
 | Alert / callout blocks (NOTE/TIP/…) |  | missing | done | Paragraph ▸ Alert; GitHub > [!NOTE] |
 | Mermaid / diagram insert |  | partial | done | Paragraph menu inserts a mermaid fence |
 | Delete block |  | missing | done | Paragraph menu |
@@ -154,9 +154,9 @@ Counted by `python3 scripts/parity-count.py` (163 rows; an empty After cell inhe
 | Comment `<!-- -->` |  | missing | done | inline comment mark; a comment-only line stays an HTML block |
 | Hyperlink | Ctrl+K | missing | done | Ctrl+K always prompts for a URL; AI Rewrite is Ctrl+J (configurable) |
 | Image (insert from file) | Ctrl+Shift+I | missing | done | Ctrl+Shift+I file dialog, then image settings |
-| Image zoom / align |  | missing | partial | zoom 50/100/200% as an img style; no align |
+| Image zoom / align |  | missing | done | zoom and align share an inline img style (center is display:block;margin:0 auto) and round-trip together |
 | Clear format | Ctrl+\ | missing | done | Ctrl+\ |
-| Open link / copy link address | Ctrl+click | partial | partial | Ctrl+click opens; context menu copies the address |
+| Open link / copy link address | Ctrl+click | partial | done | Format ▸ Hyperlink Actions, the link context menu, and Ctrl+click; a relative .md link opens in MD Nest |
 
 ## View
 
@@ -166,7 +166,7 @@ Counted by `python3 scripts/parity-count.py` (163 rows; an empty After cell inhe
 | Focus mode | F8 | missing | done | F8; body.on-focus-mode |
 | Typewriter mode | F9 | missing | done | F9; body.ty-on-typewriter-mode |
 | Toggle sidebar | Ctrl+Shift+L | partial | done | menu + shortcut + footer |
-| Outline | Ctrl+Shift+1 | partial | done | menu shows the outline tab |
+| Outline | Ctrl+Shift+1 | partial | done | menu shows the outline tab; expander triangles collapse sections (View ▸ Outline ▸ Expand/Collapse All) |
 | Articles (file list view) | Ctrl+Shift+2 | missing | done | #file-library-list excerpt, time, parent |
 | File tree | Ctrl+Shift+3 | partial | done | tree + footer toolbar |
 | Status bar toggle |  | missing | done | View ▸ Status Bar; persisted |
@@ -175,7 +175,7 @@ Counted by `python3 scripts/parity-count.py` (163 rows; an empty After cell inhe
 | Always on top |  | missing | done | View item; Tauri setAlwaysOnTop |
 | Zoom in / out / actual size | Ctrl+Shift+= / Ctrl+Shift+- / Ctrl+Shift+0 | missing | done | Ctrl+Shift+= / - / 0; persisted CSS zoom |
 | Formatting toolbar |  | missing | done | #mdn-format-toolbar; View toggle, off by default, active states |
-| Readonly mode |  | missing | missing | not built |
+| Readonly mode |  | missing | done | View ▸ Readonly Mode; ty-readonly, footer indicator, source readOnly, slash/paste/drop blocked, edit items disabled |
 | Toggle DevTools |  | n/a | n/a | release builds |
 | Command palette | Ctrl+Shift+P | done | done | View menu + shortcut |
 
@@ -267,16 +267,16 @@ Still missing or only partial after 0.1.1. Each note says why.
 - **Export to Word / pandoc** (missing). No pandoc integration. Export is PDF, HTML, and HTML without styles.
 - **Line endings and encodings** (missing). Files are read and written as UTF-8. There is no CRLF/LF or encoding picker.
 - **Smart punctuation, spell check, emoji autocomplete** (missing). Not built. The editor keeps `spellcheck` off.
-- **Copy code content** (missing). Code fences have no copy-content action.
+- **Copy code content** (done). Each code fence has a Copy button in `.code-tooltip`. Edit ▸ Code Tools ▸ Copy Code Content copies the fence at the caret. The button is not exported.
 - **Table align and move** (done). Paragraph ▸ Table and the table context menu add, delete, and move rows and columns, align a column (written to the GFM delimiter row), copy the table as Markdown, and delete the table. The floating toolbar has the same commands under "…".
-- **Toggle task status** (partial). Clicking the checkbox toggles it. There is no menu command.
-- **HTML block insert** (partial). HTML blocks parse and round-trip. There is no insert command.
-- **Image align** (partial). Zoom 50/100/200% sets an `<img>` width style. There is no align control.
-- **Open link** (partial). Ctrl+click opens a link. The editor context menu copies the address. There is no separate "open link" command beyond that click.
-- **Readonly mode** (missing). Not built.
-- **Outline collapse** (missing). The outline lists headings and highlights the one at the caret. It does not collapse sections.
+- **Toggle task status** (done). Paragraph ▸ Task Status ▸ Toggle Task Status (Ctrl+Alt+X), Mark as Complete, and Mark as Incomplete act on every task in the selection. Clicking the checkbox still toggles one item.
+- **HTML block insert** (done). Paragraph ▸ HTML Block and a slash item insert a `<div>` template and place the caret inside its editor.
+- **Image align** (done). Format ▸ Image ▸ Align Left / Center / Right / Default writes an inline `<img>` style and round-trips with zoom.
+- **Open link** (done). Format ▸ Hyperlink Actions ▸ Open Link / Copy Link Address, the link context menu, and Ctrl+click. A relative `.md` link opens in MD Nest. Other URLs go through `open_external` (http(s), mailto, local files).
+- **Readonly mode** (done). View ▸ Readonly Mode sets `editable` false, adds `ty-readonly` and a footer indicator, and blocks source edits, slash, paste, and drop.
+- **Outline collapse** (done). Headings with children have an `.outline-expander`. Expand All / Collapse All live in the outline context menu and in View ▸ Outline ▸. Collapse state stays while the document is open.
 - **Live file refresh** (partial). The tree refreshes on window focus and after our own create/rename/trash. It does not watch the disk.
-- **Find next / previous** (partial). Menu items and F3 / Shift+F3 step the existing find bar. The find-bar behaviour itself is unchanged.
+- **Find next / previous** (done). F3 / Shift+F3 with the bar closed search the last query or the selection, wrap, and notify "Not found".
 - **Comment-only lines** (partial). An inline `<!-- note -->` is a mark and round-trips. A line that is only a comment parses as an HTML block, which is how markdown-it treats it.
 - **In-editor text drag on Windows** (partial). WebView2 HTML5 drops carry no paths, so folder and file drops use Tauri's drag-drop event. That turns off in-editor text drag-move on Windows.
 - **Hyperlink vs AI Rewrite** (done). Ctrl+K is always Hyperlink. AI Rewrite defaults to Ctrl+J and is configurable in AI settings ("Rewrite shortcut", a prosemirror-keymap name; empty disables it).

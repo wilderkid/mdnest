@@ -17,8 +17,10 @@ export class SourceMode {
       this.cm.on("change", (_cm, ch) => { if (ch.origin !== "setValue") this.onEdit(); }); }
     else this.cm.setValue(text);
     document.body.classList.add("typora-sourceview-on");
+    if (document.body.classList.contains("ty-readonly")) this.cm!.setOption("readOnly", "nocursor");
     setTimeout(() => { this.cm!.refresh(); this.cm!.focus(); }, 0);
   }
   hide(): string { document.body.classList.remove("typora-sourceview-on"); return this.cm?.getValue() ?? ""; }
   value() { return this.cm?.getValue() ?? ""; }
+  setReadOnly(on: boolean) { this.cm?.setOption("readOnly", on ? "nocursor" : false); }
 }

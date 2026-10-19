@@ -595,20 +595,63 @@ export class Sidebar {
     node?.classList.add("active");
   }
 
+  /** Collapsed heading positions for the document that is open. Cleared when another file opens. */
+  private outlineCollapsed = new Set<number>();
+  private outlineFor = "";
+
+  private outlineKey(): string {
+    return (window as any).mdnest?.state?.path || "";
+  }
+
   updateOutline(view: EditorView) {
-    const items: { level: number; text: string; pos: number }[] = [];
+    const key = this.outlineKey();
+    if (key !== this.outlineFor) { this.outlineCollapsed.clear(); this.outlineFor = key; }
+    const items: { level: number; text: string; pos: number; children: boolean }[] = [];
     view.state.doc.descendants((n, pos) => {
-      if (n.type.name === "heading") items.push({ level: n.attrs.level, text: n.textContent, pos });
+      if (n.type.name === "heading") items.push({ level: n.attrs.level, text: n.textContent, pos, children: false });
       return n.type.name !== "heading" && !n.isTextblock;
     });
-    this.outline.innerHTML = items.map((h, i) =>
-      `<div class="outline-item outline-h${h.level}" data-i="${i}" data-pos="${h.pos}"><span class="outline-label">${escapeHtml(h.text) || "&nbsp;"}</span></div>`).join("")
-      || `<div class="outline-item" style="opacity:.6">No headings</div>`;
+    for (let i = 0; i < items.length; i++) {
+      items[i].children = items.slice(i + 1).some((h) => h.level > items[i].level) && (i + 1 >= items.length || items[i + 1].level > items[i].level);
+    }
+    const hidden = new Set<number>();
+    for (let i = 0; i < items.length; i++) {
+      if (!this.outlineCollapsed.has(items[i].pos)) continue;
+      for (let j = i + 1; j < items.length && items[j].level > items[i].level; j++) hidden.add(j);
+    }
+    this.outline.innerHTML = items.map((h, i) => {
+      if (hidden.has(i)) return "";
+      const open = this.outlineCollapsed.has(h.pos) ? "outline-item-closed" : "outline-item-open";
+      const exp = h.children ? `<span class="outline-expander" data-pos="${h.pos}"></span>` : `<span class="outline-expander outline-expander-empty"></span>`;
+      return `<div class="outline-item outline-h${h.level} ${h.children ? open : ""}" data-i="${i}" data-pos="${h.pos}">${exp}<span class="outline-label">${escapeHtml(h.text) || "&nbsp;"}</span></div>`;
+    }).join("") || `<div class="outline-item" style="opacity:.6">No headings</div>`;
+    this.outline.querySelectorAll<HTMLElement>(".outline-expander:not(.outline-expander-empty)").forEach((el) => el.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const pos = +(el.dataset.pos || 0);
+      if (this.outlineCollapsed.has(pos)) this.outlineCollapsed.delete(pos);
+      else this.outlineCollapsed.add(pos);
+      this.updateOutline(view);
+    }));
     this.outline.querySelectorAll<HTMLElement>(".outline-item[data-i]").forEach((el) => el.onclick = () => {
       const hs = view.dom.querySelectorAll("h1,h2,h3,h4,h5,h6");
       (hs[+el.dataset.i!] as HTMLElement)?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
     this.highlightOutline(view);
+  }
+
+  expandOutline() {
+    this.outlineCollapsed.clear();
+    const view = (window as any).mdnest?.editor?.view as EditorView | undefined;
+    if (view) this.updateOutline(view);
+  }
+  collapseOutline() {
+    const view = (window as any).mdnest?.editor?.view as EditorView | undefined;
+    if (!view) return;
+    view.state.doc.descendants((n, pos) => {
+      if (n.type.name === "heading") this.outlineCollapsed.add(pos);
+      return n.type.name !== "heading" && !n.isTextblock;
+    });
+    this.updateOutline(view);
   }
 
   /** Highlight the heading that contains the caret. */
@@ -656,10 +699,23 @@ export class Sidebar {
     return this.root || "";
   }
 
+  private outlineContext(e: MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    openContextMenu(e.clientX, e.clientY, [
+      { id: "expand", label: "Expand All" },
+      { id: "collapse", label: "Collapse All" },
+    ], (id) => {
+      if (id === "expand") this.expandOutline();
+      else this.collapseOutline();
+    });
+  }
+
   private onContext(e: MouseEvent) {
     const t = e.target as HTMLElement;
     if (!this.el.contains(t)) return;
-    if (t.closest("#outline-content, .sidebar-tab, #sidebar-footer")) return;
+    if (t.closest("#outline-content")) { this.outlineContext(e); return; }
+    if (t.closest(".sidebar-tab, #sidebar-footer")) return;
     if (!t.closest("#file-library-tree, #file-library-list, #file-library-search-result, .sidebar-folder-name, #sidebar-content")) return;
     e.preventDefault();
     e.stopPropagation();

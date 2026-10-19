@@ -100,6 +100,7 @@ export class EditorSearch {
     this.view.dispatch(tr); return { ...this.info(), replaced: matches.length };
   }
   clear() { this.view.dispatch(this.view.state.tr.setMeta(searchKey, { query: null })); }
+  currentRange() { return this.st.matches[this.st.current] ?? null; }
   selectCurrent() {
     const m = this.st.matches[this.st.current]; if (!m) return;
     this.view.dispatch(this.view.state.tr.setSelection(TextSelection.create(this.view.state.doc, m.from, m.to)).scrollIntoView());

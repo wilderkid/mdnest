@@ -9,6 +9,7 @@ interface Searcher {
   replaceAll(r: string): { count: number; current: number; replaced?: number };
   clear(): void;
   selectCurrent?(): void;
+  currentRange(): { from: number; to: number } | null;
 }
 
 /** source mode (CodeMirror 5) searcher */
@@ -46,6 +47,11 @@ export class SourceSearch implements Searcher {
     this.run(); return { ...this.info(), replaced: n };
   }
   clear() { this.q = null; this.run(); }
+  currentRange() { return this.ranges[this.cur] ?? null; }
+  selectCurrent() {
+    const cm = this.cm(); const r = this.ranges[this.cur];
+    if (cm && r) cm.setSelection(cm.posFromIndex(r.from), cm.posFromIndex(r.to));
+  }
 }
 
 export class FindBar {
@@ -75,6 +81,7 @@ export class FindBar {
     });
   }
   get visible() { return this.el.style.display !== "none"; }
+  queryText() { return this.find.value; }
   open(replace: boolean, seed?: string) {
     this.el.style.display = "block"; this.el.classList.toggle("with-replace", replace);
     if (seed && !seed.includes("\n")) this.find.value = seed;

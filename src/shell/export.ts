@@ -61,6 +61,7 @@ export async function renderExportBody(doc: PMNode, opts: { keepRelativeImages: 
   const frag = DOMSerializer.fromSchema(schema).serializeFragment(doc.content);
   setImageBase(prevBase);
   const root = document.createElement("div"); root.appendChild(frag);
+  root.querySelectorAll(".mdn-code-copy, .code-tooltip").forEach((el) => el.remove());
   // headings ids + toc
   const used = new Map<string, number>(); const heads: { level: number; text: string; id: string }[] = [];
   root.querySelectorAll<HTMLElement>("h1,h2,h3,h4,h5,h6").forEach((h) => {
