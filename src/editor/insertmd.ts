@@ -8,7 +8,14 @@ import { collapseAll } from "./markers";
 
 /** Serialize [from, to] the way the document serializer does: collapse raw markers, then cut a doc. */
 export function selectionMarkdown(state: EditorState, from = state.selection.from, to = state.selection.to): string {
+  ({ from, to } = normalizeRange(state, from, to));
   if (from === to) return "";
+  if (sameTextblock(state, from, to)) {
+    // Whole or partial single block: send only its inline content, keep "#", "- " etc. outside.
+    const inner = collapseAll(state.doc).slice(from, to).content;
+    try { return serializeMarkdown(schema.node("doc", null, [schema.node("paragraph", null, inner)])).replace(/\n+$/, ""); }
+    catch { /* fall through */ }
+  }
   const collapsed = collapseAll(state.doc);
   const lo = Math.max(0, Math.min(from, collapsed.content.size));
   const hi = Math.max(lo, Math.min(to, collapsed.content.size));
@@ -30,7 +37,32 @@ function docFromSlice(slice: Slice): PMNode {
   return schema.node("doc", null, [schema.node("paragraph", null, text ? [schema.text(text)] : [])]);
 }
 
-function sameTextblock(state: EditorState, from: number, to: number) {
+/**
+ * A selection that ends at the very start of the next textblock (triple-click, shift+down) is
+ * pulled back to the end of the previous one, so a whole-heading selection stays inside it.
+ */
+export function normalizeRange(state: EditorState, from: number, to: number): { from: number; to: number } {
+  if (to <= from) return { from, to };
+  try {
+    const $to = state.doc.resolve(to);
+    if ($to.parent.isTextblock && $to.parentOffset === 0) {
+      let p = to - 1;
+      while (p > from) {
+        const $p = state.doc.resolve(p);
+        if ($p.parent.isTextblock) return { from, to: p };
+        p--;
+      }
+    }
+  } catch { /* keep */ }
+  return { from, to };
+}
+
+/** Plain text of [from, to] with atoms (math) as their source. */
+export function plainBetween(state: EditorState, from: number, to: number): string {
+  return from < to ? state.doc.textBetween(from, to, "\n", (n) => n.attrs?.tex ?? n.textContent ?? "") : "";
+}
+
+export function sameTextblock(state: EditorState, from: number, to: number) {
   try {
     const $a = state.doc.resolve(from), $b = state.doc.resolve(to);
     return $a.parent === $b.parent && $a.parent.isTextblock && !$a.parent.type.spec.code;
@@ -43,8 +75,10 @@ function sameTextblock(state: EditorState, from: number, to: number) {
  */
 export function sliceForInsert(md: string, state: EditorState, from: number, to: number): Slice {
   const parsed = parseMarkdown(md.replace(/\r\n/g, "\n"));
-  const onlyPara = parsed.childCount === 1 && parsed.firstChild!.type === schema.nodes.paragraph;
-  if (onlyPara && sameTextblock(state, from, to)) {
+  // One parsed textblock (paragraph, or a heading the model echoed back) into a textblock target:
+  // insert its inline content so the target keeps its own block type ("#", list item, …).
+  const onlyBlock = parsed.childCount === 1 && parsed.firstChild!.isTextblock && !parsed.firstChild!.type.spec.code;
+  if (onlyBlock && sameTextblock(state, from, to)) {
     return new Slice(parsed.firstChild!.content, 0, 0);
   }
   return new Slice(parsed.content, 0, 0);

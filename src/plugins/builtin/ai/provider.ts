@@ -1,3 +1,4 @@
+import { parseUsage, type Usage } from "./usage";
 // OpenAI-compatible chat provider. Talks only through the plugin net/secrets API.
 // The API key is named by secretRef and never appears in a request body or an error string.
 import type { PluginContext } from "../../api";
@@ -43,6 +44,8 @@ export interface AiProvider {
   chatStream(messages: ChatMessage[], opts?: ChatOpts): AsyncIterable<string>;
   complete(messages: ChatMessage[], opts?: ChatOpts): Promise<string>;
   info(): ProviderInfo;
+  /** "Today: N requests · M tokens (limit …)" */
+  usageSummary(): string;
 }
 
 export function presetOf(raw: unknown): PresetId {
@@ -148,6 +151,8 @@ export interface ProviderDeps {
   temperature: () => number;
   maxTokens: () => number;
   localOnly: () => boolean;
+  /** usage counters / daily limits (optional so tests can omit it) */
+  usage?: import("./usage").UsageTracker;
   /** secretRef passed to ctx.net. Omitted when there is no stored key and the preset is ollama. */
   secretKey: string;
 }
@@ -182,7 +187,14 @@ export function createProvider(deps: ProviderDeps): AiProvider {
           temperature: opts.temperature ?? deps.temperature(),
           max_tokens: opts.maxTokens ?? deps.maxTokens(),
           stream: true,
+          stream_options: { include_usage: true },
         });
+        deps.usage?.check();
+        const promptChars = messages.reduce((n, m) => n + String(m.content ?? "").length, 0);
+        let outChars = 0;
+        let usage: Usage | null = null;
+        let recorded = false;
+        const record = () => { if (!recorded) { recorded = true; deps.usage?.record(usage, promptChars, outChars); } };
         const req: Parameters<StreamFn>[0] = {
           url,
           method: "POST",
@@ -205,7 +217,8 @@ export function createProvider(deps: ProviderDeps): AiProvider {
           if (signal?.aborted) return;
           if (ev.type === "data") {
             const text = parseDelta(ev.data);
-            if (text) { queue.push(text); kick(); }
+            if (text) { outChars += text.length; queue.push(text); kick(); }
+            usage = parseUsage(ev.data) ?? usage;
             return;
           }
           if (ev.type === "error") {
@@ -239,6 +252,7 @@ export function createProvider(deps: ProviderDeps): AiProvider {
             await new Promise<void>((resolve) => { wake = resolve; });
           }
         } finally {
+          record();
           signal?.removeEventListener("abort", onAbort);
           // The iterator always ends here, including a normal finish. Cancelling then
           // aborts the host request and makes a completed call look like a client cancel.
@@ -255,6 +269,7 @@ export function createProvider(deps: ProviderDeps): AiProvider {
       for await (const part of chatStream(messages, opts)) out += part;
       return out;
     },
+    usageSummary: () => deps.usage?.summary() ?? "",
     info() {
       return {
         preset: deps.preset(),

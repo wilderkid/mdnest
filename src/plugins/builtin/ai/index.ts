@@ -1,3 +1,4 @@
+import { createUsage, type UsageLog } from "./usage";
 // AI assistant. Heavy UI and prompts stay in a separate chunk until the user turns AI on.
 import type { EditorPlugin, PluginContext, SettingSpec } from "../../api";
 import {
@@ -25,6 +26,8 @@ function settingSpecs(): SettingSpec[] {
     { key: "maxTokens", title: "Max tokens", type: "number", default: 1024 },
     { key: "translateTo", title: "Translate into", type: "string", default: "English" },
     { key: "localOnly", title: "Local only (localhost or private LAN)", type: "boolean", default: false },
+    { key: "dailyRequestLimit", title: "Daily request limit (0 = none)", type: "number", default: 0 },
+    { key: "dailyTokenLimit", title: "Daily token limit (0 = none)", type: "number", default: 0 },
     { key: "exclude", title: "Excluded folders (one prefix per line)", type: "text", default: "" },
     { key: "privacy", title: "Privacy", type: "note", text: PRIVACY_NOTE },
   ];
@@ -59,6 +62,12 @@ const plugin: EditorPlugin = {
     let heavy: Promise<typeof import("./runtime")> | null = null;
     const load = () => (heavy ??= import("./runtime"));
 
+    const usage = createUsage({
+      load: () => ctx.settings.get("usage") as UsageLog | undefined,
+      save: (log) => ctx.settings.set("usage", log),
+      requestLimit: () => num(ctx.settings.get("dailyRequestLimit"), 0),
+      tokenLimit: () => num(ctx.settings.get("dailyTokenLimit"), 0),
+    });
     const provider: AiProvider = createProvider({
       stream: (req, onEvent) => ctx.net.stream(req, onEvent),
       hasSecret: () => ctx.secrets.has("apiKey"),
@@ -70,6 +79,7 @@ const plugin: EditorPlugin = {
       maxTokens: () => num(ctx.settings.get("maxTokens"), 1024),
       localOnly: () => ctx.settings.get("localOnly") === true,
       secretKey: "apiKey",
+      usage,
     });
     ctx.services.provide("ai.provider@1", provider);
 

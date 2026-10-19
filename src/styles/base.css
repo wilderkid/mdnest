@@ -179,6 +179,14 @@ body.typora-sourceview-on content { visibility: hidden; }
 #write .md-sug-diff { font: inherit; }
 #write .md-sug-ins { background: color-mix(in srgb, var(--primary-color) 22%, transparent); border-radius: 2px; }
 #write .md-sug-old { text-decoration: line-through; opacity: .55; }
+#write .md-sug-hide { display: none; }
+#write .md-sug-card { display: block; margin: 6px 0; padding: 6px 10px; border-left: 3px solid var(--primary-color); border-radius: 4px;
+  background: color-mix(in srgb, var(--primary-color) 6%, transparent); white-space: normal; }
+#write .md-sug-card .md-sug-diff > div > :first-child { margin-top: 0; }
+#write .md-sug-card .md-sug-diff > div > :last-child { margin-bottom: 0; }
+#write .md-sug-card .md-sug-bar { margin: 4px 0 0; }
+#write .md-sug-rewrite { position: relative; }
+#write .md-sug-v-block .md-sug-status::after { content: " · full rewrite"; }
 #write .md-sug-caret { display: inline-block; width: 1px; height: 1em; background: var(--primary-color); vertical-align: text-bottom; margin-left: 1px; animation: mdn-sug-blink 1s steps(1) infinite; }
 @keyframes mdn-sug-blink { 50% { opacity: 0; } }
 #write .md-sug-bar { display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; padding: 1px 4px; border-radius: 6px; font-size: 12px; vertical-align: middle;

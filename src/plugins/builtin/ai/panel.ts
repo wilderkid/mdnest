@@ -42,7 +42,9 @@ export function mountChat(el: HTMLElement, ctx: PluginContext, provider: AiProvi
   const clear = button("Clear", () => { history.length = 0; paint(); });
   row.append(send, stop, clear);
 
-  root.append(status, list, include, ta, row);
+  const usageEl = document.createElement("div");
+  usageEl.className = "mdn-ai-usage";
+  root.append(status, usageEl, list, include, ta, row);
   el.appendChild(root);
 
   const paintStatus = () => {
@@ -50,6 +52,7 @@ export function mountChat(el: HTMLElement, ctx: PluginContext, provider: AiProvi
     status.textContent = info.enabled
       ? `${info.preset} · ${info.model || "no model"}`
       : "AI is off";
+    usageEl.textContent = info.enabled ? provider.usageSummary() : "";
   };
 
   const paint = () => {

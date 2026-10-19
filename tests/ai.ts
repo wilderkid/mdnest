@@ -6,6 +6,7 @@ import {
 import { isExcluded, parseExclude } from "../src/plugins/builtin/ai/exclude";
 import { INJECTION_GUARD, stripFence, systemPrompt, userPrompt } from "../src/plugins/builtin/ai/prompts";
 import type { StreamEvent, StreamRequest } from "../src/host/types";
+import { createUsage, parseUsage, type UsageLog } from "../src/plugins/builtin/ai/usage";
 
 let fail = 0;
 const ok = (c: boolean, msg: string) => { console.log((c ? "PASS " : "FAIL ") + msg); if (!c) fail++; };
@@ -275,5 +276,43 @@ async function collect(provider: AiProvider, messages = [{ role: "user" as const
   const empty = applyPresetChange("ollama", "custom", "", "");
   ok(empty.baseUrl === PRESETS.ollama.baseUrl && empty.model === PRESETS.ollama.model, "empty fields take the new preset defaults");
 }
+
+// --- usage counters and daily limits ---
+await (async () => {
+  let log: UsageLog | undefined;
+  let rl = 0, tl = 0;
+  const usage = createUsage({ load: () => log, save: (l) => { log = l; }, requestLimit: () => rl, tokenLimit: () => tl, now: () => new Date(2026, 9, 19, 12) });
+  ok(parseUsage('{"choices":[],"usage":{"prompt_tokens":12,"completion_tokens":5}}')?.prompt_tokens === 12, "usage parsed from final chunk");
+  ok(parseUsage('{"choices":[{"delta":{"content":"x"}}]}') === null && parseUsage("[DONE]") === null, "no usage in normal chunks");
+  const withUsage = mockStream(eventsOf([
+    JSON.stringify({ choices: [{ delta: { content: "Hi" } }] }),
+    JSON.stringify({ choices: [], usage: { prompt_tokens: 12, completion_tokens: 5, total_tokens: 17 } }),
+    "[DONE]",
+  ]));
+  const mkP = (stream: any) => createProvider({
+    stream, hasSecret: async () => true, enabled: () => true, preset: () => "openai",
+    baseUrl: () => "https://api.openai.com/v1", model: () => "m", temperature: () => 0.7, maxTokens: () => 64,
+    localOnly: () => false, secretKey: "apiKey", usage,
+  });
+  await collect(mkP(withUsage.stream));
+  ok(JSON.parse(withUsage.calls[0].body!).stream_options?.include_usage === true, "request asks for usage");
+  ok(log!["2026-10-19"].requests === 1 && log!["2026-10-19"].prompt === 12 && log!["2026-10-19"].completion === 5 && !log!["2026-10-19"].estimated, "provider usage recorded → " + JSON.stringify(log));
+  const noUsage = mockStream(eventsOf([JSON.stringify({ choices: [{ delta: { content: "x".repeat(40) } }] }), "[DONE]"]));
+  await collect(mkP(noUsage.stream), [{ role: "user", content: "y".repeat(80) }]);
+  const d = log!["2026-10-19"];
+  ok(d.requests === 2 && d.prompt === 12 + 20 && d.completion === 5 + 10 && d.estimated, "missing usage is estimated (~4 chars/token) → " + JSON.stringify(d));
+  ok(usage.summary() === "Today: 2 requests · ≈47 tokens", "summary → " + usage.summary());
+  rl = 2;
+  const blocked = mockStream(eventsOf(["[DONE]"]));
+  let err = "";
+  try { await collect(mkP(blocked.stream)); } catch (e: any) { err = String(e.message); }
+  ok(/Daily AI limit reached \(2 requests\)/.test(err) && blocked.calls.length === 0, "request limit blocks before any network call → " + err);
+  rl = 0; tl = 40;
+  err = "";
+  try { await collect(mkP(blocked.stream)); } catch (e: any) { err = String(e.message); }
+  ok(/40 tokens/.test(err), "token limit blocks → " + err);
+  ok(usage.summary().includes("(limit 40 tok)"), "summary shows limit");
+  tl = 0;
+})();
 
 setTimeout(() => process.exit(fail ? 1 : 0), 30);

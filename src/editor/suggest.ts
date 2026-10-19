@@ -3,8 +3,8 @@
 import { Plugin, PluginKey, EditorState, Transaction } from "prosemirror-state";
 import { Decoration, DecorationSet, EditorView } from "prosemirror-view";
 import { undo, closeHistory } from "prosemirror-history";
-import { wordDiff } from "./diff";
-import { selectionMarkdown, sliceForInsert } from "./insertmd";
+import { selectionMarkdown, sliceForInsert, normalizeRange, sameTextblock, plainBetween } from "./insertmd";
+import { chooseView, parseProposal, plainOf, renderProposal } from "./sugview";
 
 export type SugResult = "accepted" | "rejected" | "invalidated";
 export type SugPhase = "running" | "ready" | "error";
@@ -22,6 +22,10 @@ export interface SugRecord {
   onRetry?: () => void;
   /** Markdown of the original range, captured when the suggestion starts. */
   originalMd: string;
+  /** Plain text of the original range (diffs are shown over rendered text, not Markdown). */
+  originalText: string;
+  /** The range is inside one textblock: inline content only, block syntax stays outside. */
+  inline: boolean;
   settled: ((r: SugResult) => void)[];
 }
 
@@ -93,10 +97,17 @@ export function suggestPlugin() {
         if (!st || (!st.items.length && !st.notice)) return null;
         const decos: Decoration[] = [];
         for (const it of st.items) {
+          const view = it.text ? viewOf(it) : null;
           if (it.mode === "replace" && it.to > it.from && it.text) {
-            decos.push(Decoration.inline(it.from, it.to, { class: "md-sug-del" }));
+            // Short edits show one in-place word diff, so the original is hidden instead of struck.
+            decos.push(Decoration.inline(it.from, it.to, { class: view === "words" ? "md-sug-hide" : "md-sug-del" }));
           }
-          const at = Math.max(0, Math.min(it.to, state.doc.content.size));
+          let at = Math.max(0, Math.min(it.to, state.doc.content.size));
+          if (!it.inline && it.mode === "replace") {
+            // Multi-block rewrite: the card goes after the last covered top-level block.
+            const $t = state.doc.resolve(at);
+            if ($t.depth >= 1) at = $t.after(1);
+          }
           // The key must change when the pending text or phase changes. ProseMirror reuses a
 // widget DOM node while the key stays the same, which left "generating…" on screen
 // after the stream had already finished.
@@ -129,6 +140,10 @@ decos.push(Decoration.widget(at, (view) => widget(view, it), { side: 1, ignoreSe
   });
 }
 
+function viewOf(it: SugRecord) {
+  return chooseView(it.mode, it.inline, it.originalText, plainOf(parseProposal(it.text, it.inline).frag));
+}
+
 function widgetKey(it: SugRecord): string {
   let h = 0;
   for (let i = 0; i < it.text.length; i++) h = (Math.imul(h, 33) + it.text.charCodeAt(i)) >>> 0;
@@ -144,10 +159,10 @@ function widget(view: EditorView, it: SugRecord) {
   if (it.phase === "error" && !it.text) {
     diff.appendChild(span("md-sug-err", it.error || "failed"));
   } else {
-    for (const op of wordDiff(it.originalMd, it.text)) {
-      if (op.op === "eq") diff.appendChild(document.createTextNode(op.text));
-      else diff.appendChild(span(op.op === "ins" ? "md-sug-ins" : "md-sug-old", op.text));
-    }
+    const v = viewOf(it);
+    el.classList.add("md-sug-v-" + v);
+    if (v !== "words") el.classList.add("md-sug-card");
+    diff.appendChild(renderProposal(v, it.text, it.originalText, it.inline));
     if (it.phase === "running") diff.appendChild(span("md-sug-caret", ""));
   }
   el.appendChild(diff);
@@ -239,7 +254,7 @@ export function suggestionItems(state: EditorState): SugRecord[] {
 export function beginRecord(state: EditorState, spec: {
   id?: string; owner: string; from: number; to: number; mode: "replace" | "insert"; label?: string; onRetry?: () => void;
 }): SugRecord {
-  const from = spec.from, to = spec.to;
+  const { from, to } = spec.mode === "replace" ? normalizeRange(state, spec.from, spec.to) : { from: spec.from, to: spec.to };
   return {
     id: spec.id ?? nextSugId(),
     owner: spec.owner,
@@ -250,6 +265,8 @@ export function beginRecord(state: EditorState, spec: {
     label: spec.label,
     onRetry: spec.onRetry,
     originalMd: spec.mode === "replace" ? selectionMarkdown(state, from, to) : "",
+    originalText: spec.mode === "replace" ? plainBetween(state, from, to) : "",
+    inline: sameTextblock(state, from, to),
     settled: [],
   };
 }

@@ -68,6 +68,9 @@ export function replyFor(user, model) {
     return { kind: "slow", text: "Slow… done." };
   }
   if (String(model) === "missing") return { kind: "missing", text: "" };
+  // Screenshot/test hook: "REPLY: <text>" in the instruction returns <text> ("\\n" = newline).
+  const rm = instruction.match(/REPLY:\s*([\s\S]*)$/);
+  if (rm) return { kind: "reply", text: rm[1].trim().replace(/\\n/g, "\n") };
   // Match the instruction, not the document. A selection may itself contain "polish".
   if (/\bpolish\b/i.test(instruction) || instruction.toLowerCase().startsWith("polish ")) {
     const words = firstWords(doc, 3);
@@ -204,6 +207,11 @@ export function start(port = DEFAULT_PORT) {
       write(chunk({ content: piece }));
     }
     if (!closed) {
+      if (body.stream_options?.include_usage) {
+        // OpenAI style: a final chunk with empty choices and the usage object.
+        const promptChars = (body.messages ?? []).reduce((n, m) => n + String(m.content ?? "").length, 0);
+        write(`data: ${JSON.stringify({ choices: [], usage: { prompt_tokens: Math.ceil(promptChars / 4), completion_tokens: piecesOf(reply.text).length, total_tokens: 0 } })}\n\n`);
+      }
       write("data: [DONE]\n\n");
       closed = true;
       res.end();
