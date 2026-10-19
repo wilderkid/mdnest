@@ -15,4 +15,5 @@ export const tauriHost: Host = {
   themeUrl: (file) => scheme("mdtheme") + encodeURIComponent(file).replace(/%2F/g, "/"),
   fileUrl: (abs) => scheme("mdfile") + encodeURI(abs.replace(/^\//, "")),
   defaultWorkspace: () => invoke<string | null>("default_workspace"),
+  cliFile: () => invoke<string | null>("cli_file"),
 };

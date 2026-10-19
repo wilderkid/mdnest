@@ -147,9 +147,10 @@ window.addEventListener("beforeunload", (e) => { if (state.dirty && host.kind ==
 (async () => {
   await initThemes();
   const q = new URLSearchParams(location.search);
-  const ws = q.get("folder") ?? localStorage.getItem("mdnest.lastFolder") ?? (await host.defaultWorkspace());
+  const cli = await host.cliFile().catch(() => null);
+  const ws = q.get("folder") ?? (cli ? cli.replace(/[\\/][^\\/]*$/, "") : null) ?? localStorage.getItem("mdnest.lastFolder") ?? (await host.defaultWorkspace());
   if (ws) await sidebar.openFolder(ws).catch(() => {});
-  const f = q.get("file") ?? localStorage.getItem("mdnest.lastFile") ?? (ws ? ws + "/sample.md" : null);
+  const f = cli ?? q.get("file") ?? localStorage.getItem("mdnest.lastFile") ?? (ws && host.kind === "browser" ? ws + "/sample.md" : null);
   if (f) await openFile(f); else afterLoad();
   if (q.get("sidebar") === "0") document.body.classList.remove("pin-outline");
   document.body.classList.add("mdn-ready");

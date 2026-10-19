@@ -13,4 +13,5 @@ export interface Host {
   themeUrl(file: string): string;          // e.g. "drake.css", "base.user.css"
   fileUrl(absPath: string): string;        // for images relative to the open document
   defaultWorkspace(): Promise<string | null>;
+  cliFile(): Promise<string | null>;        // file passed on the command line, if any
 }

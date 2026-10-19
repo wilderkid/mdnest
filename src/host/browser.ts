@@ -11,5 +11,6 @@ export const browserHost: Host = {
   async listThemes() { return (await j(await fetch("/api/themes"))).themes; },
   themeUrl(file) { return "/themes/" + file; },
   fileUrl(abs) { return "/fs" + abs; },
+  async cliFile() { return null; },
   async defaultWorkspace() { return (await j(await fetch("/api/workspace"))).path; },
 };
