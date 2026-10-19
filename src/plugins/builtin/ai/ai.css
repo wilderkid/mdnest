@@ -81,4 +81,9 @@
   color: var(--primary-color, #4183c4); cursor: pointer; vertical-align: super; line-height: 1; }
 .mdn-ai button.mdn-ai-cite:hover, .mdn-ai button.mdn-ai-source:hover { text-decoration: underline; }
 .mdn-ai-sources { margin: 4px 0 2px; padding-left: 20px; font-size: 11px; }
-.mdn-ai button.mdn-ai-source { font: inherit; border: 0; background: transparent; color: var(--primary-color, #4183c4); cursor: pointer; padding: 0; text-align: left; }
+.mdn-ai-sources li { min-width: 0; }
+/* one line per source: label truncated with an ellipsis, the line number always visible */
+.mdn-ai button.mdn-ai-source { font: inherit; border: 0; background: transparent; color: var(--primary-color, #4183c4); cursor: pointer; padding: 0; text-align: left;
+  display: flex; max-width: 100%; min-width: 0; white-space: nowrap; vertical-align: top; }
+.mdn-ai-source-label { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.mdn-ai-source-line { flex: none; opacity: .75; margin-left: .3em; }

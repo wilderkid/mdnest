@@ -105,7 +105,7 @@ try {
   ok(!!chatReq && chatReq.user.includes("<sources>") && /\[1\] cats\.md › Cats › Sleep/.test(chatReq.user), "chat request carries numbered sources", chatReq?.user?.slice(0, 300));
   ok(!chatReq.user.includes("@library") && !/diary|homework/i.test(chatReq.user), "mention stripped; excluded note absent");
   const srcList = await page.locator(".mdn-ai-sources li").allInnerTexts();
-  ok(srcList.length >= 1 && /cats\.md › Cats › Sleep · line \d+/.test(srcList[0]), "sources listed under the answer", JSON.stringify(srcList));
+  ok(srcList.length >= 1 && /cats\.md › Cats › Sleep\s+· line \d+/.test(srcList[0]), "sources listed under the answer", JSON.stringify(srcList));
   await page.evaluate(() => window.mdnest.editor.setMarkdown("# scratch\n"));
   await page.evaluate(() => { window.mdnest.state.path = null; });
   await page.locator(".mdn-ai-cite").first().click();

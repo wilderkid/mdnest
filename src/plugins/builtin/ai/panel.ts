@@ -93,7 +93,11 @@ export function mountChat(el: HTMLElement, ctx: PluginContext, provider: AiProvi
         for (const s of srcs) {
           const li = document.createElement("li");
           const a = document.createElement("button");
-          a.type = "button"; a.className = "mdn-ai-source"; a.textContent = `${s.label} · line ${s.line}`;
+          // one line: the label is cut with an ellipsis, "· line N" never wraps; full text on hover
+          a.type = "button"; a.className = "mdn-ai-source"; a.title = `${s.label} · line ${s.line}`;
+          const lab = document.createElement("span"); lab.className = "mdn-ai-source-label"; lab.textContent = s.label;
+          const ln = document.createElement("span"); ln.className = "mdn-ai-source-line"; ln.textContent = `· line ${s.line}`;
+          a.append(lab, ln);
           a.onclick = () => { void ctx.workspace.openAt(s.path, s.line); };
           li.appendChild(a); ol.appendChild(li);
         }
