@@ -2,6 +2,7 @@
 // (semantic tags + cid/mdtype attributes + span[md-inline] wrappers) so gallery themes apply.
 import { Schema, NodeSpec, MarkSpec } from "prosemirror-model";
 import { tableNodes } from "prosemirror-tables";
+import { imageAlignFromStyle, imageStyle, imageZoomFromStyle } from "./imagestyle";
 
 let cidCounter = 0;
 export const nextCid = () => "n" + ++cidCounter;
@@ -87,16 +88,16 @@ const nodes: Record<string, NodeSpec> = {
   image: {
     inline: true, attrs: {
       src: {}, alt: { default: null }, title: { default: null }, refType: { default: null }, ref: { default: null },
-      zoom: { default: null },
+      zoom: { default: null }, align: { default: null },
     }, group: "inline", draggable: true,
     parseDOM: [{ tag: "img[src]", getAttrs: (d: any) => {
       const style = d.getAttribute("style") || "";
-      const zoom = (/width:\s*(\d+)%/.exec(style) || /zoom:\s*(\d+)%/.exec(style) || [])[1] || null;
-      return { src: d.getAttribute("src"), title: d.getAttribute("title"), alt: d.getAttribute("alt"), zoom };
+      return { src: d.getAttribute("src"), title: d.getAttribute("title"), alt: d.getAttribute("alt"), zoom: imageZoomFromStyle(style), align: imageAlignFromStyle(style) };
     } }],
     toDOM: (n) => {
       const img: Record<string, string> = { src: resolveImageSrc(n.attrs.src), alt: n.attrs.alt, title: n.attrs.title };
-      if (n.attrs.zoom) img.style = `width:${n.attrs.zoom}%;zoom:${n.attrs.zoom}%`;
+      const style = imageStyle(n.attrs.zoom, n.attrs.align);
+      if (style) img.style = style;
       return ["span", { "md-inline": "image", class: "md-image" }, ["img", img]];
     },
   },

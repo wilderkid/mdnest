@@ -35,6 +35,10 @@ export interface MenuState {
   pairBrackets?: boolean;
   pairMarkdown?: boolean;
   maximized?: boolean;
+  readonly?: boolean;
+  inCode?: boolean;
+  onLink?: boolean;
+  onImage?: boolean;
   /** Open MD Nest windows. The current one is checked. */
   windows?: { label: string; title: string; current?: boolean }[];
 }
@@ -109,6 +113,10 @@ export function menuTemplate(mac: boolean): MenuNode[] {
       item("edit.findPrevious", "Find Previous", "Shift+F3"),
       item("edit.replace", "Replace…", "CmdOrCtrl+H"),
       sep(),
+      { id: "edit.codeTools", label: "Code Tools", submenu: [
+        item("edit.copyCode", "Copy Code Content"),
+      ] },
+      sep(),
       { id: "edit.autoPair", label: "Auto Pair", submenu: [
         item("edit.autoPair.brackets", "Brackets and Quotes"),
         item("edit.autoPair.markdown", "Markdown Syntax"),
@@ -151,6 +159,12 @@ export function menuTemplate(mac: boolean): MenuNode[] {
       item("paragraph.orderedList", "Ordered List", "CmdOrCtrl+Shift+["),
       item("paragraph.unorderedList", "Unordered List", "CmdOrCtrl+Shift+]"),
       item("paragraph.taskList", "Task List", "CmdOrCtrl+Shift+X"),
+      { id: "paragraph.taskStatus", label: "Task Status", submenu: [
+        item("paragraph.taskStatus.toggle", "Toggle Task Status", "CmdOrCtrl+Alt+X"),
+        item("paragraph.taskStatus.complete", "Mark as Complete"),
+        item("paragraph.taskStatus.incomplete", "Mark as Incomplete"),
+      ] },
+      item("paragraph.htmlBlock", "HTML Block"),
       item("paragraph.indent", "Indent", "CmdOrCtrl+]"),
       item("paragraph.outdent", "Outdent", "CmdOrCtrl+["),
       sep(),
@@ -190,6 +204,14 @@ export function menuTemplate(mac: boolean): MenuNode[] {
         item("format.image.zoom50", "Zoom 50%"),
         item("format.image.zoom100", "Zoom 100%"),
         item("format.image.zoom200", "Zoom 200%"),
+        item("format.image.alignLeft", "Align Left"),
+        item("format.image.alignCenter", "Align Center"),
+        item("format.image.alignRight", "Align Right"),
+        item("format.image.alignDefault", "Default"),
+      ] },
+      { id: "format.linkActions", label: "Hyperlink Actions", submenu: [
+        item("format.link.open", "Open Link"),
+        item("format.link.copy", "Copy Link Address"),
       ] },
       item("format.clear", "Clear Format", "CmdOrCtrl+\\"),
     ],
@@ -201,7 +223,11 @@ export function menuTemplate(mac: boolean): MenuNode[] {
       item("view.typewriter", "Typewriter Mode", "F9"),
       sep(),
       item("view.sidebar", "Toggle Sidebar", "CmdOrCtrl+Shift+L"),
-      item("view.outline", "Outline", "CmdOrCtrl+Shift+1"),
+      { id: "view.outlineMenu", label: "Outline", submenu: [
+        item("view.outline", "Show Outline", "CmdOrCtrl+Shift+1"),
+        item("view.outline.expandAll", "Expand All"),
+        item("view.outline.collapseAll", "Collapse All"),
+      ] },
       item("view.articles", "Articles", "CmdOrCtrl+Shift+2"),
       item("view.fileTree", "File Tree", "CmdOrCtrl+Shift+3"),
       item("view.searchFolder", "Search in Folder", "CmdOrCtrl+Shift+F"),
@@ -209,6 +235,7 @@ export function menuTemplate(mac: boolean): MenuNode[] {
       item("view.toolbar", "Formatting Toolbar"),
       item("view.statusBar", "Status Bar"),
       item("view.wordCount", "Word Count"),
+      item("view.readonly", "Readonly Mode"),
       sep(),
       item("view.fullScreen", "Full Screen", "F11"),
       // Alias kept so older tests and the command palette still find it. The Window menu owns the item.
@@ -251,6 +278,24 @@ const TABLE_IDS = new Set([
   "paragraph.table.copy", "paragraph.table.deleteTable",
 ]);
 const PATH_IDS = new Set(["file.openLocation", "file.revealSidebar", "file.moveTo", "file.rename", "file.duplicate", "file.reload"]);
+/** Commands that change the document. Disabled while Readonly Mode is on. */
+const EDITING_IDS = new Set([
+  "edit.undo", "edit.redo", "edit.pastePlain", "edit.delete",
+  "paragraph.heading.1", "paragraph.heading.2", "paragraph.heading.3", "paragraph.heading.4",
+  "paragraph.heading.5", "paragraph.heading.6", "paragraph.paragraph",
+  "paragraph.increaseHeading", "paragraph.decreaseHeading",
+  "paragraph.tableDialog", "paragraph.codeFence", "paragraph.mathBlock", "paragraph.quote",
+  "paragraph.orderedList", "paragraph.unorderedList", "paragraph.taskList",
+  "paragraph.taskStatus.toggle", "paragraph.taskStatus.complete", "paragraph.taskStatus.incomplete",
+  "paragraph.htmlBlock", "paragraph.indent", "paragraph.outdent",
+  ...TABLE_IDS,
+  "paragraph.insertBefore", "paragraph.insertAfter", "paragraph.linkRef", "paragraph.footnote",
+  "paragraph.hr", "paragraph.toc", "paragraph.frontMatter", "paragraph.mermaid", "paragraph.deleteBlock",
+  "paragraph.alert.note", "paragraph.alert.tip", "paragraph.alert.important", "paragraph.alert.warning", "paragraph.alert.caution",
+  "format.strong", "format.emphasis", "format.underline", "format.code", "format.strike", "format.highlight",
+  "format.inlineMath", "format.superscript", "format.subscript", "format.comment", "format.link",
+  "format.image", "format.clear",
+]);
 
 function fileName(p: string): string {
   return p.split(/[\\/]/).pop() || p;
@@ -289,6 +334,11 @@ function applyState(node: MenuNode, state: MenuState, commands: Command[], occup
   if (cmd) enabled = commandEnabled(cmd);
   if (node.id && TABLE_IDS.has(node.id)) enabled = enabled && state.inTable;
   if (node.id && PATH_IDS.has(node.id)) enabled = enabled && state.hasPath;
+  if (node.id === "edit.copyCode") enabled = enabled && !!state.inCode;
+  if (node.id === "format.link.open" || node.id === "format.link.copy") enabled = enabled && !!state.onLink;
+  if (node.id && node.id.startsWith("format.image.align")) enabled = enabled && !!state.onImage;
+  if (node.id && node.id.startsWith("format.image.zoom")) enabled = enabled && !!state.onImage;
+  if (state.readonly && EDITING_IDS.has(node.id || "")) enabled = false;
   if (node.id === "view.source") return { ...node, enabled, checked: state.sourceMode, accel: accelFor(node, occupied) };
   if (node.id === "view.sidebar") return { ...node, enabled, checked: state.sidebar, accel: accelFor(node, occupied) };
   if (node.id === "view.outline") return { ...node, enabled, checked: state.outline, accel: accelFor(node, occupied) };
@@ -304,6 +354,7 @@ function applyState(node: MenuNode, state: MenuState, commands: Command[], occup
   }
   if (node.id === "edit.autoPair.brackets") return { ...node, enabled, checked: state.pairBrackets !== false };
   if (node.id === "edit.autoPair.markdown") return { ...node, enabled, checked: !!state.pairMarkdown };
+  if (node.id === "view.readonly") return { ...node, enabled, checked: !!state.readonly };
   let accel = node.accel;
   if (node.id && occupied.has(normalizeKey(node.accel))) accel = undefined;
   else accel = accelFor(node, occupied);

@@ -363,6 +363,110 @@ fn platform_trash(path: &Path) -> Result<(), String> {
     Err("trash unsupported".into())
 }
 
+/// Open a URL or a local file in the system handler. Spawned and not waited on.
+/// Allows http(s), mailto, and local files only.
+pub fn open_external(url: &str) -> Result<(), String> {
+    let url = url.trim();
+    if url.is_empty() || url.len() > 8192 {
+        return Err("empty or oversized url".into());
+    }
+    let lower = url.to_ascii_lowercase();
+    let file = if lower.starts_with("file://") {
+        Some(file_url_path(url)?)
+    } else if !lower.contains("://") && !lower.starts_with("mailto:") {
+        Some(std::path::PathBuf::from(url))
+    } else {
+        None
+    };
+    if let Some(path) = file {
+        return spawn_open_path(&path);
+    }
+    if lower.starts_with("http://") || lower.starts_with("https://") || lower.starts_with("mailto:") {
+        if url.chars().any(|c| c.is_control() || c == '"' || c == '\'') {
+            return Err("url contains a disallowed character".into());
+        }
+        return spawn_open_url(url);
+    }
+    Err("only http(s), mailto, and local files can be opened".into())
+}
+
+fn file_url_path(url: &str) -> Result<std::path::PathBuf, String> {
+    let rest = url.split_once("://").map(|(_, r)| r).unwrap_or(url);
+    let path = rest.split(['?', '#']).next().unwrap_or(rest);
+    let decoded = percent_encoding::percent_decode_str(path).decode_utf8_lossy();
+    #[cfg(windows)]
+    {
+        let s = decoded.trim_start_matches('/');
+        if s.len() >= 3 && s.as_bytes()[1] == b':' {
+            return Ok(std::path::PathBuf::from(s.replace('/', "\\")));
+        }
+        return Ok(std::path::PathBuf::from(decoded.as_ref()));
+    }
+    #[cfg(not(windows))]
+    {
+        Ok(std::path::PathBuf::from(decoded.as_ref()))
+    }
+}
+
+fn spawn_open_path(path: &std::path::Path) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        return spawn_shell_execute(&path.to_string_lossy());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open").arg(path).spawn().map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open").arg(path).spawn().map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+    #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+    {
+        let _ = path;
+        Err("open unsupported".into())
+    }
+}
+
+fn spawn_open_url(url: &str) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        return spawn_shell_execute(url);
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open").arg(url).spawn().map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open").arg(url).spawn().map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+    #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+    {
+        let _ = url;
+        Err("open unsupported".into())
+    }
+}
+
+#[cfg(windows)]
+fn spawn_shell_execute(target: &str) -> Result<(), String> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows::core::PCWSTR;
+    use windows::Win32::UI::Shell::ShellExecuteW;
+    use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+    let wide: Vec<u16> = std::ffi::OsStr::new(target).encode_wide().chain(std::iter::once(0)).collect();
+    let op: Vec<u16> = std::ffi::OsStr::new("open").encode_wide().chain(std::iter::once(0)).collect();
+    let rc = unsafe { ShellExecuteW(None, PCWSTR(op.as_ptr()), PCWSTR(wide.as_ptr()), None, None, SW_SHOWNORMAL) };
+    if (rc.0 as isize) <= 32 {
+        return Err(format!("ShellExecuteW failed ({})", rc.0 as isize));
+    }
+    Ok(())
+}
+
 /// Reveal in the file manager. Linux tries FileManager1.ShowItems, then `xdg-open` of the parent.
 pub fn reveal_path(path: &Path) -> Result<(), String> {
     let target = if path.exists() { path.to_path_buf() } else { path.to_path_buf() };

@@ -28,6 +28,11 @@ export const browserHost: Host = {
   async duplicatePath(path) { return (await j(await fetch("/api/duplicate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path }) }))).path; },
   async trashPath(path) { await j(await fetch("/api/trash", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path }) })); },
   async revealPath(path) { await j(await fetch("/api/reveal?path=" + encodeURIComponent(path))); },
+  async openExternal(url) {
+    const u = url.trim();
+    if (/^(https?:|mailto:)/i.test(u)) { window.open(u, "_blank", "noopener"); return; }
+    throw new Error("browser host opens http(s) and mailto only");
+  },
   async listFiles(root, max = 5000): Promise<ListedFile[]> { return (await j(await fetch("/api/list-files?root=" + encodeURIComponent(root) + "&max=" + max))).files; },
   async fileExcerpt(path) { return (await j(await fetch("/api/excerpt?path=" + encodeURIComponent(path)))).excerpt; },
   async pathKind(path) { return (await j(await fetch("/api/kind?path=" + encodeURIComponent(path)))).kind; },

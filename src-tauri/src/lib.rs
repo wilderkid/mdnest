@@ -129,6 +129,7 @@ pub fn run() {
             commands::duplicate_path,
             commands::trash_path,
             commands::reveal_path,
+            commands::open_external,
             commands::list_files,
             commands::file_excerpt,
             commands::path_kind,

@@ -356,6 +356,13 @@ pub async fn trash_path(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub async fn open_external(url: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || crate::files::open_external(&url))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 pub async fn reveal_path(path: String) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || crate::files::reveal_path(Path::new(&path)))
         .await

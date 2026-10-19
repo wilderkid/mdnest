@@ -7,6 +7,7 @@ import { wrapInList } from "prosemirror-schema-list";
 import { schema } from "./schema";
 import { registerSlashItem } from "./slash";
 import { insertTable } from "./tabletools";
+import { htmlBlockTemplate } from "./views";
 
 export interface SlashHost {
   insertImage: () => void;
@@ -75,6 +76,28 @@ export function insertAlert(view: EditorView, kind: string) {
   replaceTop(view, quote);
 }
 
+/** Insert an HTML block and put the caret inside its editor. */
+export function insertHtmlBlock(view: EditorView) {
+  const node = schema.nodes.html_block.create({ html: htmlBlockTemplate() });
+  const para = schema.nodes.paragraph.create();
+  const { $from } = view.state.selection;
+  const at = $from.depth ? $from.before(1) : 0;
+  const end = $from.depth ? $from.after(1) : 0;
+  const empty = $from.parent.type === schema.nodes.paragraph && $from.parent.content.size === 0;
+  let tr = view.state.tr;
+  if (empty && at < end) tr = tr.replaceWith(at, end, [node, para]);
+  else tr = tr.insert(end || view.state.doc.content.size, [node, para]);
+  const pos = empty ? at : end;
+  view.dispatch(tr.setSelection(TextSelection.create(tr.doc, Math.min(pos + 1, tr.doc.content.size))).scrollIntoView());
+  view.focus();
+  // The node view mounts on the next frame; focus its editor then.
+  requestAnimationFrame(() => {
+    const dom = view.nodeDOM(pos) as HTMLElement | null;
+    const cm = dom?.querySelector<HTMLElement>(".CodeMirror");
+    (cm as any)?.CodeMirror?.focus();
+  });
+}
+
 export function insertHr(view: EditorView) {
   replaceTop(view, [schema.nodes.horizontal_rule.create(), schema.nodes.paragraph.create()]);
 }
@@ -101,6 +124,7 @@ export function registerCoreSlash(view: EditorView, host: SlashHost) {
     { id: "code", title: "Code Block", hint: "code fence", run: (from) => replaceBlock(view, from, setBlockType(schema.nodes.code_block)) },
     { id: "math", title: "Math Block", hint: "math latex $$", run: (from) => replaceBlock(view, from, setBlockType(schema.nodes.math_block)) },
     { id: "mermaid", title: "Mermaid Diagram", hint: "mermaid diagram", run: () => insertMermaid(view) },
+    { id: "html", title: "HTML Block", hint: "html raw div", run: () => insertHtmlBlock(view) },
     { id: "hr", title: "Horizontal Line", hint: "hr rule line", run: () => insertHr(view) },
     { id: "toc", title: "Table of Contents", hint: "toc contents", run: () => insertToc(view) },
     { id: "footnote", title: "Footnote", hint: "footnote note", run: () => insertFootnote(view) },

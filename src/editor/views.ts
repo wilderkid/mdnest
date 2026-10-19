@@ -1,8 +1,9 @@
 import { Node as PMNode } from "prosemirror-model";
 import { EditorView, NodeView } from "prosemirror-view";
-import { TextSelection } from "prosemirror-state";
+import { NodeSelection, TextSelection } from "prosemirror-state";
+import CodeMirror from "codemirror";
 import { renderTex, escapeHtml } from "./render";
-import { CodeView } from "./codeview";
+import { CodeView, loadMode } from "./codeview";
 
 class InlineMathView implements NodeView {
   dom: HTMLElement;
@@ -96,19 +97,90 @@ export class TocView implements NodeView {
   stopEvent() { return true; }
 }
 
+/** Raw HTML block. A CodeMirror editor holds the source; a sandboxed preview shows the rendered HTML. */
 class HtmlBlockView implements NodeView {
   dom: HTMLElement;
-  constructor(node: PMNode) {
+  private cm: CodeMirror.Editor;
+  private node: PMNode;
+  private updating = false;
+  constructor(node: PMNode, private view: EditorView, private getPos: () => number | undefined) {
+    this.node = node;
     this.dom = document.createElement("div");
-    this.dom.className = "md-htmlblock md-rawblock"; this.dom.setAttribute("mdtype", "html_block"); this.dom.contentEditable = "false";
-    const c = document.createElement("div"); c.className = "md-htmlblock-container";
-    // Sandboxed display: strip scripts/handlers. (Phase 2: proper sanitizer + inline raw edit)
-    const tpl = document.createElement("template"); tpl.innerHTML = node.attrs.html;
+    this.dom.className = "md-htmlblock md-rawblock md-end-block";
+    this.dom.setAttribute("mdtype", "html_block");
+    this.dom.contentEditable = "false";
+    const editor = document.createElement("div");
+    editor.className = "md-htmlblock-editor";
+    this.dom.appendChild(editor);
+    this.cm = CodeMirror(editor, {
+      value: node.attrs.html || "",
+      mode: "htmlmixed",
+      theme: "inner",
+      lineWrapping: true,
+      viewportMargin: Infinity,
+    });
+    this.cm.on("changes", () => { if (!this.updating) this.commit(); });
+    this.cm.on("focus", () => this.placeCaret());
+    const preview = document.createElement("div");
+    preview.className = "md-htmlblock-container";
+    preview.contentEditable = "false";
+    this.dom.appendChild(preview);
+    this.paint(preview, node.attrs.html || "");
+    void loadMode("html").then(() => this.cm.setOption("mode", "htmlmixed"));
+    setTimeout(() => this.cm.refresh(), 0);
+  }
+  /** Put the ProseMirror caret inside this atom so menus know which block is active. */
+  private placeCaret() {
+    const p = this.getPos();
+    if (p == null) return;
+    const sel = NodeSelection.create(this.view.state.doc, p);
+    if (!sel.eq(this.view.state.selection)) this.view.dispatch(this.view.state.tr.setSelection(sel));
+  }
+  private commit() {
+    const p = this.getPos();
+    if (p == null) return;
+    const html = this.cm.getValue();
+    if (html === this.node.attrs.html) return;
+    this.view.dispatch(this.view.state.tr.setNodeMarkup(p, undefined, { ...this.node.attrs, html }));
+  }
+  private paint(preview: HTMLElement, html: string) {
+    const tpl = document.createElement("template");
+    tpl.innerHTML = html;
     tpl.content.querySelectorAll("script,iframe,object,embed").forEach((e) => e.remove());
-    tpl.content.querySelectorAll("*").forEach((e) => [...e.attributes].forEach((a) => a.name.startsWith("on") && e.removeAttribute(a.name)));
-    c.appendChild(tpl.content); this.dom.appendChild(c);
+    tpl.content.querySelectorAll("*").forEach((e) => [...e.attributes].forEach((a) => { if (a.name.startsWith("on")) e.removeAttribute(a.name); }));
+    preview.replaceChildren(tpl.content);
+  }
+  /** Move the CodeMirror caret between the template tags (`<div>\\n|\\n</div>`). */
+  focusInside() {
+    const text = this.cm.getValue();
+    const nl = text.indexOf("\n");
+    const line = nl < 0 ? 0 : this.cm.posFromIndex(nl + 1);
+    this.cm.focus();
+    this.cm.setCursor(line);
+    this.placeCaret();
+  }
+  update(node: PMNode) {
+    if (node.type !== this.node.type) return false;
+    this.node = node;
+    if (!this.cm.hasFocus() && this.cm.getValue() !== node.attrs.html) {
+      this.updating = true;
+      this.cm.setValue(node.attrs.html || "");
+      this.updating = false;
+    }
+    const preview = this.dom.querySelector<HTMLElement>(".md-htmlblock-container");
+    if (preview) this.paint(preview, node.attrs.html || "");
+    return true;
+  }
+  stopEvent(e: Event) {
+    return this.dom.contains(e.target as Node);
   }
   ignoreMutation() { return true; }
+  selectNode() { this.dom.classList.add("ProseMirror-selectednode"); this.focusInside(); }
+  deselectNode() { this.dom.classList.remove("ProseMirror-selectednode"); }
+}
+
+export function htmlBlockTemplate(): string {
+  return "<div>\n\n</div>";
 }
 
 export function nodeViews() {
@@ -119,7 +191,7 @@ export function nodeViews() {
     inline_math: (n: PMNode, v: EditorView, g: any) => new InlineMathView(n, v, g),
     footnote_ref: (n: PMNode, v: EditorView, g: any) => new FootnoteRefView(n, v, g),
     toc: (_n: PMNode, v: EditorView) => { const t = new TocView(v); tocViews.add(t); return t; },
-    html_block: (n: PMNode) => new HtmlBlockView(n),
+    html_block: (n: PMNode, v: EditorView, g: () => number | undefined) => new HtmlBlockView(n, v, g),
   };
 }
 export const tocViews = new Set<TocView>();

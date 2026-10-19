@@ -79,7 +79,9 @@ export function createEditor(mount: HTMLElement, markdown: string, hooks: Editor
     },
     handleClickOn(view, _pos, node, nodePos, event) {
       const t = event.target as HTMLElement;
+      if (typeof view.editable === "function" && !view.editable(view.state) && event.button === 0 && t.tagName !== "A") return true;
       if (node.type.name === "list_item" && t.tagName === "INPUT" && node.attrs.checked !== null) {
+        if (!view.editable) return true;
         view.dispatch(view.state.tr.setNodeMarkup(nodePos, undefined, { checked: !node.attrs.checked }));
         return true;
       }
@@ -87,6 +89,7 @@ export function createEditor(mount: HTMLElement, markdown: string, hooks: Editor
       return false;
     },
     handlePaste(view, event, slice) {
+      if (typeof view.editable === "function" && !view.editable(view.state)) { event.preventDefault(); return true; }
       // WebKitGTK: the paste event carries no clipboardData, so ProseMirror captures the native paste in
       // a hidden element and hands us a slice holding <img src="blob:…">. Import those bytes instead.
       // a file copied in a file manager (text/uri-list / gnome-copied-files) can likewise reach us only as
@@ -126,6 +129,7 @@ export function createEditor(mount: HTMLElement, markdown: string, hooks: Editor
       return false;
     },
     handleDrop(view, event) {
+      if (typeof view.editable === "function" && !view.editable(view.state)) { event.preventDefault(); return true; }
       const files = collectImages((event as DragEvent).dataTransfer);
       if (!files.length || !hooks.onImageFiles) return false;
       const p = view.posAtCoords({ left: (event as DragEvent).clientX, top: (event as DragEvent).clientY });
@@ -135,7 +139,12 @@ export function createEditor(mount: HTMLElement, markdown: string, hooks: Editor
     handleDOMEvents: {
       click(_v, e) {
         const a = (e.target as HTMLElement).closest("a[href]") as HTMLAnchorElement | null;
-        if (a && (e.ctrlKey || e.metaKey)) { window.open(a.href, "_blank"); e.preventDefault(); return true; }
+        if (a && (e.ctrlKey || e.metaKey)) {
+          e.preventDefault();
+          const href = a.getAttribute("href") || a.href;
+          window.dispatchEvent(new CustomEvent("mdn-open-link", { detail: href }));
+          return true;
+        }
         return false;
       },
     },

@@ -34,6 +34,8 @@ export interface Host {
   trashPath(path: string): Promise<void>;
   /** Show the path in the system file manager. */
   revealPath(path: string): Promise<void>;
+  /** Open an http(s)/mailto URL or a local file in the system handler. */
+  openExternal(url: string): Promise<void>;
   /** Recursive Markdown/txt walk. */
   listFiles(root: string, max?: number): Promise<ListedFile[]>;
   /** First ~240 characters, front matter stripped. */

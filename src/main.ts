@@ -30,11 +30,11 @@ import { setBlockType, toggleMark, wrapIn } from "prosemirror-commands";
 import { wrapInList, liftListItem, sinkListItem } from "prosemirror-schema-list";
 import { undo, redo } from "prosemirror-history";
 import { schema } from "./editor/schema";
-import { registerCoreSlash, insertAlert, insertFootnote, insertFrontMatter, insertHr, insertLinkRef, insertMermaid, insertTask, insertToc } from "./editor/slash-core";
+import { registerCoreSlash, insertAlert, insertFootnote, insertFrontMatter, insertHr, insertHtmlBlock, insertLinkRef, insertMermaid, insertTask, insertToc } from "./editor/slash-core";
 import {
   clearFormat, copyMarkdownText, copyPlainText, decreaseHeading, deleteBlock, deleteImage, deleteSelection,
   imageSelection, increaseHeading, insertParagraphAfter, insertParagraphBefore, jumpBottom, jumpTop,
-  linkAt, selectLine, selectStyledScope, selectWord, selectionHtml, setImageZoom, toggleTaskList,
+  linkAt, selectLine, selectStyledScope, selectWord, selectionHtml, setImageAlign, setImageZoom, setTaskStatus, toggleTaskList,
 } from "./editor/editops";
 import { pairBracketsOn, pairMarkdownOn, PAIR_BRACKETS_KEY, PAIR_MARKDOWN_KEY } from "./editor/autopair";
 import { openContextMenu, type ContextItem } from "./shell/sidebar";
@@ -67,7 +67,7 @@ const writeEl = document.createElement("div"); content.appendChild(writeEl);
 const source = new SourceMode(document.body, () => { setDirty(true); scheduleAutosave(); });
 const footer = document.createElement("footer"); footer.className = "ty-footer";
 footer.innerHTML = `<button id="sidebar-toggle" title="Toggle sidebar">☰</button><span id="file-title">Untitled</span><span class="footer-spacer"></span>
-  <span id="footer-word-count"></span><select id="theme-select" title="Theme"></select><button id="source-toggle" title="Source mode (Ctrl+/)">&lt;/&gt;</button>`;
+  <span id="footer-readonly" hidden>Read-only</span><span id="footer-word-count"></span><select id="theme-select" title="Theme"></select><button id="source-toggle" title="Source mode (Ctrl+/)">&lt;/&gt;</button>`;
 document.body.appendChild(footer);
 const toast = document.createElement("div"); toast.id = "mdn-toast"; document.body.appendChild(toast);
 let toastTimer: any;
@@ -690,7 +690,6 @@ sidebar.setActions({
 function pmRun(fn: (state: any, dispatch?: any, view?: any) => boolean) {
   const v = editor.view;
   fn(v.state, v.dispatch, v);
-  v.focus();
 }
 function inTableNow() {
   try { return isInTable(editor.view.state); } catch { return false; }
@@ -722,10 +721,76 @@ async function pastePlain() {
   v.dispatch(v.state.tr.insertText(text).scrollIntoView());
   v.focus();
 }
+function selectedQuery(): string {
+  if (source.active && source.cm) {
+    const sel = source.cm.getSelection();
+    return sel && !sel.includes("\n") ? sel : "";
+  }
+  const { from, to, empty } = editor.view.state.selection;
+  if (empty || to - from > 200) return "";
+  const text = editor.view.state.doc.textBetween(from, to, "\n");
+  return text.includes("\n") ? "" : text;
+}
+function inCodeNow(): boolean {
+  try {
+    const $f = editor.view.state.selection.$from;
+    for (let d = $f.depth; d > 0; d--) if ($f.node(d).type.name === "code_block") return true;
+  } catch { /* boot */ }
+  return false;
+}
+function copyCodeNow() {
+  let text = "";
+  const $f = editor.view.state.selection.$from;
+  for (let d = $f.depth; d > 0; d--) {
+    const n = $f.node(d);
+    if (n.type.name === "code_block") { text = n.textContent; break; }
+  }
+  if (!text) { notify("Not in a code block"); return; }
+  void navigator.clipboard.writeText(text).then(() => notify("Copied"), () => notify("Copied"));
+}
+function isMdPath(href: string): boolean {
+  const path = href.split(/[?#]/)[0];
+  return /\.(md|markdown|mdown|mkd)$/i.test(path);
+}
+async function openLinkHref(href: string) {
+  const raw = href.trim();
+  if (!raw) return;
+  if (/^(https?:|mailto:)/i.test(raw)) {
+    try { await host.openExternal(raw); } catch (e: any) { notify(String(e?.message ?? e)); }
+    return;
+  }
+  const dir = docDir() || "";
+  const abs = !dir || /^(?:[a-z]:[\\/]|\/)/i.test(raw) ? raw : dir.replace(/[\\/]$/, "") + "/" + raw.replace(/^\.\//, "");
+  if (isMdPath(abs)) { await openFile(abs); return; }
+  try { await host.openExternal(abs); }
+  catch { window.open(raw, "_blank", "noopener"); }
+}
+let readonly = false;
+function toggleReadonly() {
+  readonly = !readonly;
+  editor.view.setProps({ editable: () => !readonly });
+  document.body.classList.toggle("ty-readonly", readonly);
+  source.cm?.setOption("readOnly", readonly ? "nocursor" : false);
+  const badge = document.getElementById("footer-readonly");
+  if (badge) badge.hidden = !readonly;
+  notify(readonly ? "Readonly" : "Editable");
+  scheduleMenu();
+}
 function findStep(dir: 1 | -1) {
-  if (!findBar.visible) openFind(false);
   const searcher = source.active ? sourceSearch : editorSearch;
-  searcher.go(dir);
+  if (findBar.visible) { searcher.go(dir); return; }
+  const last = findBar.queryText();
+  const seed = last || selectedQuery();
+  if (!seed) { notify("Not found"); return; }
+  const info = searcher.set({ text: seed, caseSensitive: false, regex: false });
+  if (!info.count) { searcher.clear(); notify("Not found"); return; }
+  // set() already lands on the first hit at or after the caret. Step once more when the
+  // caret is already inside that hit so Find Next moves forward.
+  const here = source.active ? source.cm!.indexFromPos(source.cm!.getCursor()) : editor.view.state.selection.from;
+  const hit = searcher.currentRange?.();
+  if (hit && here >= hit.from && here <= hit.to) searcher.go(dir);
+  else if (dir < 0) searcher.go(-1);
+  searcher.selectCurrent?.();
 }
 function insertInlineMath() {
   const v = editor.view;
@@ -994,6 +1059,10 @@ const markCmd = (name: string) => () => pmRun(toggleMark(schema.marks[name]));
   { id: "paragraph.table.copy", title: "Table: Copy Table", when: () => inTableNow(), run: () => copyTableNow() },
   { id: "paragraph.mathBlock", title: "Paragraph: Math Block", key: "CmdOrCtrl+Shift+M", run: () => pmRun(setBlockType(schema.nodes.math_block)) },
   { id: "paragraph.taskList", title: "Paragraph: Task List", key: "CmdOrCtrl+Shift+X", run: () => pmRun(toggleTaskList()) },
+  { id: "paragraph.taskStatus.toggle", title: "Paragraph: Toggle Task Status", key: "CmdOrCtrl+Alt+X", run: () => pmRun(setTaskStatus("toggle")) },
+  { id: "paragraph.taskStatus.complete", title: "Paragraph: Mark as Complete", run: () => pmRun(setTaskStatus("complete")) },
+  { id: "paragraph.taskStatus.incomplete", title: "Paragraph: Mark as Incomplete", run: () => pmRun(setTaskStatus("incomplete")) },
+  { id: "paragraph.htmlBlock", title: "Paragraph: HTML Block", run: () => insertHtmlBlock(editor.view) },
   { id: "paragraph.indent", title: "Paragraph: Indent", key: "CmdOrCtrl+]", run: () => pmRun(sinkListItem(schema.nodes.list_item)) },
   { id: "paragraph.outdent", title: "Paragraph: Outdent", key: "CmdOrCtrl+[", run: () => pmRun(liftListItem(schema.nodes.list_item)) },
   { id: "paragraph.insertBefore", title: "Paragraph: Insert Paragraph Before", run: () => pmRun(insertParagraphBefore()) },
@@ -1021,12 +1090,22 @@ const markCmd = (name: string) => () => pmRun(toggleMark(schema.marks[name]));
   { id: "format.image.zoom50", title: "Image: Zoom 50%", when: () => !!imageSelection(editor.view.state), run: () => pmRun(setImageZoom(50)) },
   { id: "format.image.zoom100", title: "Image: Zoom 100%", when: () => !!imageSelection(editor.view.state), run: () => pmRun(setImageZoom(100)) },
   { id: "format.image.zoom200", title: "Image: Zoom 200%", when: () => !!imageSelection(editor.view.state), run: () => pmRun(setImageZoom(200)) },
+  { id: "format.image.alignLeft", title: "Image: Align Left", when: () => !!imageSelection(editor.view.state), run: () => pmRun(setImageAlign("left")) },
+  { id: "format.image.alignCenter", title: "Image: Align Center", when: () => !!imageSelection(editor.view.state), run: () => pmRun(setImageAlign("center")) },
+  { id: "format.image.alignRight", title: "Image: Align Right", when: () => !!imageSelection(editor.view.state), run: () => pmRun(setImageAlign("right")) },
+  { id: "format.image.alignDefault", title: "Image: Default", when: () => !!imageSelection(editor.view.state), run: () => pmRun(setImageAlign(null)) },
+  { id: "format.link.open", title: "Format: Open Link", when: () => !!linkAt(editor.view.state), run: () => { const l = linkAt(editor.view.state); if (l) void openLinkHref(l.href); } },
+  { id: "format.link.copy", title: "Format: Copy Link Address", when: () => !!linkAt(editor.view.state), run: () => { const l = linkAt(editor.view.state); if (l) void navigator.clipboard.writeText(l.href).then(() => notify("Copied link")); } },
+  { id: "edit.copyCode", title: "Edit: Copy Code Content", when: () => inCodeNow(), run: () => copyCodeNow() },
   { id: "format.clear", title: "Format: Clear Format", key: "CmdOrCtrl+\\", run: () => pmRun(clearFormat()) },
   { id: "view.focus", title: "View: Focus Mode", key: "F8", run: () => toggleBodyClass("on-focus-mode") },
   { id: "view.typewriter", title: "View: Typewriter Mode", key: "F9", run: () => toggleBodyClass("ty-on-typewriter-mode") },
   { id: "view.toolbar", title: "View: Formatting Toolbar", run: () => toggleToolbar() },
   { id: "view.statusBar", title: "View: Status Bar", run: () => toggleStatusBar() },
   { id: "view.wordCount", title: "View: Word Count", run: () => toggleWordPopover() },
+  { id: "view.readonly", title: "View: Readonly Mode", run: () => toggleReadonly() },
+  { id: "view.outline.expandAll", title: "View: Expand Outline", run: () => sidebar.expandOutline() },
+  { id: "view.outline.collapseAll", title: "View: Collapse Outline", run: () => sidebar.collapseOutline() },
   { id: "view.fullScreen", title: "View: Full Screen", key: "F11", run: () => toggleFullScreen() },
   { id: "view.alwaysOnTop", title: "View: Always on Top", run: () => toggleAlwaysOnTop() },
   { id: "window.alwaysOnTop", title: "Window: Always on Top", run: () => toggleAlwaysOnTop() },
@@ -1087,6 +1166,10 @@ function menuState(windows = openWindows): MenuState {
     windows,
     pairBrackets: pairBracketsOn(),
     pairMarkdown: pairMarkdownOn(),
+    readonly,
+    inCode: inCodeNow(),
+    onLink: !!linkAt(editor.view.state),
+    onImage: !!imageSelection(editor.view.state),
   };
 }
 
@@ -1255,6 +1338,11 @@ function rows(pairs: [string, string][]): ContextItem[] {
 function editorContextMenu(e: MouseEvent) {
   const t = e.target as HTMLElement;
   if (!t.closest("#write")) return;
+  const hit = editor.view.posAtCoords({ left: e.clientX, top: e.clientY });
+  if (hit) {
+    const sel = TextSelection.create(editor.view.state.doc, hit.pos);
+    if (!sel.eq(editor.view.state.selection)) editor.view.dispatch(editor.view.state.tr.setSelection(sel));
+  }
   const st = editor.view.state;
   const link = linkAt(st);
   const img = imageSelection(st);
@@ -1268,6 +1356,7 @@ function editorContextMenu(e: MouseEvent) {
       ["paragraph.heading.1", "Heading 1"], ["paragraph.heading.2", "Heading 2"], ["paragraph.heading.3", "Heading 3"],
       ["paragraph.paragraph", "Paragraph"],
       ["paragraph.quote", "Quote"], ["paragraph.taskList", "Task List"],
+      ["paragraph.htmlBlock", "HTML Block"],
       ["paragraph.orderedList", "Ordered List"], ["paragraph.unorderedList", "Unordered List"],
       ["paragraph.insertBefore", "Insert Paragraph Before"], ["paragraph.insertAfter", "Insert Paragraph After"],
       ["paragraph.deleteBlock", "Delete Block"],
@@ -1293,27 +1382,42 @@ function editorContextMenu(e: MouseEvent) {
     ["paragraph.table.copy", "Copy Table"],
     ["paragraph.table.deleteTable", "Delete Table"],
   ]) });
+  items.push({ id: "task-status", label: "Task Status", submenu: rows([
+    ["paragraph.taskStatus.toggle", "Toggle Task Status"],
+    ["paragraph.taskStatus.complete", "Mark as Complete"],
+    ["paragraph.taskStatus.incomplete", "Mark as Incomplete"],
+  ]) });
   if (link) {
-    items.push({ id: "link.open", label: "Open Link" });
-    items.push({ id: "link.copy", label: "Copy Link Address" });
+    items.push({ id: "link-actions", label: "Hyperlink Actions", submenu: rows([
+      ["format.link.open", "Open Link"],
+      ["format.link.copy", "Copy Link Address"],
+    ]) });
   }
   if (img) {
-    items.push({ id: "image.open", label: "Open Image Location" });
-    items.push({ id: "image.delete", label: "Delete Image" });
+    items.push({ id: "image-align", label: "Image", submenu: rows([
+      ["format.image.alignLeft", "Align Left"],
+      ["format.image.alignCenter", "Align Center"],
+      ["format.image.alignRight", "Align Right"],
+      ["format.image.alignDefault", "Default"],
+      ["image.open", "Open Image Location"],
+      ["image.delete", "Delete Image"],
+    ]) });
   }
   items.push({ id: "edit.selectAll", label: "Select All" });
   openContextMenu(e.clientX, e.clientY, items, (id) => {
     if (id === "cut") document.execCommand("cut");
     else if (id === "copy") document.execCommand("copy");
     else if (id === "paste") document.execCommand("paste");
-    else if (id === "link.open" && link) window.open(link.href, "_blank");
-    else if (id === "link.copy" && link) void navigator.clipboard.writeText(link.href);
+    else if (id === "format.link.open" && link) void openLinkHref(link.href);
+    else if (id === "format.link.copy" && link) void navigator.clipboard.writeText(link.href).then(() => notify("Copied link"));
     else if (id === "image.open" && img) window.open(img.src, "_blank");
     else if (id === "image.delete") pmRun(deleteImage());
     else runCommand(id);
   });
 }
 editor.view.dom.addEventListener("contextmenu", (e) => editorContextMenu(e));
+window.addEventListener("mdn-open-link", (e) => { void openLinkHref(String((e as CustomEvent).detail || "")); });
+window.addEventListener("mdn-notify", (e) => notify(String((e as CustomEvent).detail || "")));
 document.getElementById("footer-word-count")!.addEventListener("click", () => toggleWordPopover());
 document.addEventListener("mousedown", (e) => {
   if (!wordPop.hidden && !wordPop.contains(e.target as Node) && (e.target as HTMLElement).id !== "footer-word-count") wordPop.hidden = true;

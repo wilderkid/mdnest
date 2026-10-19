@@ -8,6 +8,7 @@ import markPlugin from "markdown-it-mark";
 import { MarkdownParser, MarkdownSerializer, MarkdownSerializerState, defaultMarkdownSerializer } from "prosemirror-markdown";
 import { Node as PMNode } from "prosemirror-model";
 import { schema } from "./schema";
+import { imageAlignFromStyle, imageStyle, imageZoomFromStyle } from "./imagestyle";
 
 function mathPlugin(md: any) {
   // block: $$ ... $$ on their own lines
@@ -115,6 +116,26 @@ function typoraMarks(md: any) {
     state.pos = i + 1;
     return true;
   });
+  // A styled <img> is an image node (zoom and alignment), not literal HTML text.
+  md.inline.ruler.before("html_inline", "img_html", (state: any, silent: boolean) => {
+    const m = /^<img\s+([^>]*?)\/?>/i.exec(state.src.slice(state.pos));
+    if (!m || state.pos + m[0].length > state.posMax) return false;
+    const attrs = m[1];
+    const src = /src="([^"]*)"/i.exec(attrs)?.[1] ?? "";
+    if (!src) return false;
+    if (!silent) {
+      const t = state.push("image", "img", 0);
+      t.attrSet("src", src);
+      t.attrSet("alt", /alt="([^"]*)"/i.exec(attrs)?.[1] ?? "");
+      const title = /title="([^"]*)"/i.exec(attrs)?.[1];
+      if (title) t.attrSet("title", title);
+      const style = /style="([^"]*)"/i.exec(attrs)?.[1];
+      if (style) t.attrSet("style", style);
+      t.children = [{ type: "text", content: /alt="([^"]*)"/i.exec(attrs)?.[1] ?? "" }];
+    }
+    state.pos += m[0].length;
+    return true;
+  });
   const html = md.inline.ruler.__rules__.find((r: any) => r.name === "html_inline");
   if (html) {
     const orig = html.fn;
@@ -152,6 +173,29 @@ function typoraExtras(md: any) {
           inl.content = inl.content.slice(m[0].length);
           const first = inl.children?.[0];
           if (first && first.type === "text") first.content = first.content.replace(/^\[([ xX])\][ \t]/, "");
+        }
+      }
+      // A styled <img> on its own line is an HTML block. Turn it into an image node so zoom and
+      // alignment round-trip (markdown-it would otherwise keep the tag as raw HTML).
+      if (t[i].type === "html_block") {
+        const m = /^<img\s+([^>]*?)\/?>\s*$/i.exec(t[i].content.trim());
+        const src = m && /src="([^"]*)"/i.exec(m[1])?.[1];
+        if (m && src) {
+          const open = new state.Token("paragraph_open", "p", 1);
+          const inl = new state.Token("inline", "", 0);
+          inl.content = t[i].content.trim();
+          const img = new state.Token("image", "img", 0);
+          img.attrSet("src", src);
+          img.attrSet("alt", /alt="([^"]*)"/i.exec(m[1])?.[1] ?? "");
+          const title = /title="([^"]*)"/i.exec(m[1])?.[1];
+          if (title) img.attrSet("title", title);
+          const style = /style="([^"]*)"/i.exec(m[1])?.[1];
+          if (style) img.attrSet("style", style);
+          img.children = [{ type: "text", content: img.attrGet("alt") || "" }] as any;
+          inl.children = [img];
+          const close = new state.Token("paragraph_close", "p", -1);
+          t.splice(i, 1, open, inl, close);
+          continue;
         }
       }
       // inline html -> literal text (kept verbatim on save)
@@ -282,8 +326,11 @@ export const parser = new MarkdownParser(schema, md, {
   hr: { node: "horizontal_rule" },
   image: { node: "image", getAttrs: (tok) => {
     const style = tok.attrGet("style") || "";
-    const zoom = (/width:\s*(\d+)%/.exec(style) || /zoom:\s*(\d+)%/.exec(style) || [])[1] || null;
-    return { src: tok.attrGet("src"), title: tok.attrGet("title") || null, alt: tok.children?.[0]?.content || null, refType: tok.meta?.refType ?? null, ref: tok.meta?.ref ?? null, zoom };
+    return {
+      src: tok.attrGet("src"), title: tok.attrGet("title") || null, alt: tok.children?.[0]?.content || null,
+      refType: tok.meta?.refType ?? null, ref: tok.meta?.ref ?? null,
+      zoom: imageZoomFromStyle(style), align: imageAlignFromStyle(style),
+    };
   } },
   html_comment: { mark: "comment", noCloseToken: true },
   sup: { mark: "superscript" },
@@ -380,11 +427,12 @@ export const serializer = new MarkdownSerializer({
   link_def(state, node) { state.text(node.textContent, false); state.closeBlock(node); },
   image(state, node, parent, index) {
     const a = node.attrs;
-    if (a.zoom && !a.refType) {
+    const style = imageStyle(a.zoom, a.align);
+    if (style && !a.refType) {
       const alt = state.esc(a.alt || "");
       const src = a.src || "";
-      const title = a.title ? ` "${String(a.title).replace(/"/g, '\\"')}"` : "";
-      state.write(`<img src="${src}" alt="${alt}"${title ? ` title="${String(a.title).replace(/"/g, "&quot;")}"` : ""} style="width:${a.zoom}%;zoom:${a.zoom}%">`);
+      const title = a.title ? ` title="${String(a.title).replace(/"/g, "&quot;")}"` : "";
+      state.write(`<img src="${src}" alt="${alt}"${title} style="${style}">`);
       return;
     }
     if (!a.refType) return (d.nodes.image as any)(state, node, parent, index);

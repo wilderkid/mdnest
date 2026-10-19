@@ -62,6 +62,44 @@ export function toggleTaskList(): Cmd {
   };
 }
 
+/** Task list items whose range overlaps the selection. */
+export function taskItemsInSelection(state: EditorState): { pos: number; checked: boolean }[] {
+  const { from, to } = state.selection;
+  const out: { pos: number; checked: boolean }[] = [];
+  state.doc.nodesBetween(from, to, (node, pos) => {
+    if (node.type === schema.nodes.list_item && node.attrs.checked !== null) {
+      // A selection that only touches the following boundary does not include this item.
+      if (pos >= to || pos + node.nodeSize <= from) return false;
+      out.push({ pos, checked: !!node.attrs.checked });
+      return false;
+    }
+    return true;
+  });
+  return out;
+}
+
+/** Set every task item in the selection. `toggle` flips each one. */
+export function setTaskStatus(mode: "toggle" | "complete" | "incomplete"): Cmd {
+  return (state, dispatch) => {
+    const items = taskItemsInSelection(state);
+    if (!items.length) return false;
+    if (!dispatch) return true;
+    const { from, to } = state.selection;
+    let tr = state.tr;
+    for (const it of [...items].reverse()) {
+      const node = tr.doc.nodeAt(it.pos);
+      if (!node || node.attrs.checked === null) continue;
+      const checked = mode === "toggle" ? !node.attrs.checked : mode === "complete";
+      tr = tr.setNodeMarkup(it.pos, undefined, { ...node.attrs, checked });
+    }
+    // setNodeMarkup drops a selection that only touched the item boundary. Put it back so a
+    // second status command still covers the same items.
+    try { tr = tr.setSelection(TextSelection.create(tr.doc, from, to)); } catch { /* boundary */ }
+    dispatch(tr);
+    return true;
+  };
+}
+
 export function clearFormat(): Cmd {
   return (state, dispatch) => {
     const { from, to, empty, $from } = state.selection;
@@ -266,6 +304,11 @@ export function imageSelection(state: EditorState): { pos: number; src: string }
   if (sel instanceof NodeSelection && sel.node.type === schema.nodes.image) {
     return { pos: sel.from, src: sel.node.attrs.src };
   }
+  const { $from } = sel;
+  const before = $from.nodeBefore;
+  if (before?.type === schema.nodes.image) return { pos: $from.pos - before.nodeSize, src: before.attrs.src };
+  const after = $from.nodeAfter;
+  if (after?.type === schema.nodes.image) return { pos: $from.pos, src: after.attrs.src };
   return null;
 }
 
@@ -276,6 +319,19 @@ export function setImageZoom(percent: number): Cmd {
     if (dispatch) {
       const node = state.doc.nodeAt(img.pos)!;
       dispatch(state.tr.setNodeMarkup(img.pos, undefined, { ...node.attrs, zoom: String(percent) }));
+    }
+    return true;
+  };
+}
+
+/** `null` clears alignment (Default). Stored as an inline style on the HTML `<img>`. */
+export function setImageAlign(align: "left" | "center" | "right" | null): Cmd {
+  return (state, dispatch) => {
+    const img = imageSelection(state);
+    if (!img) return false;
+    if (dispatch) {
+      const node = state.doc.nodeAt(img.pos)!;
+      dispatch(state.tr.setNodeMarkup(img.pos, undefined, { ...node.attrs, align }));
     }
     return true;
   };

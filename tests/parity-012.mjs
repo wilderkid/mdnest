@@ -304,6 +304,224 @@ try {
   ok(await page.locator("#mdn-table-tools .mdn-table-more button[data-cmd='row-up']").count() === 1, "A4 toolbar … menu has Move Row Up");
   await page.locator("#mdn-table-tools button[data-cmd='more']").click();
 
+  // ---------- A5: task status acts on every task in the selection ----------
+  await setMd("- [ ] one\n- [x] two\n- [ ] three\n");
+  await page.evaluate(() => {
+    const v = window.mdnest.editor.view;
+    const Sel = v.state.selection.constructor;
+    v.dispatch(v.state.tr.setSelection(Sel.create(v.state.doc, 1, v.state.doc.content.size - 1)));
+  });
+  await run("paragraph.taskStatus.complete");
+  await page.waitForTimeout(80);
+  const doneTasks = await md();
+  ok((doneTasks.match(/\[x\]/g) || []).length === 3, "A5 Mark as Complete checks every task in the selection", doneTasks);
+  await run("paragraph.taskStatus.incomplete");
+  await page.waitForTimeout(60);
+  ok(!(await md()).includes("[x]"), "A5 Mark as Incomplete clears every task", await md());
+  await run("paragraph.taskStatus.toggle");
+  await page.waitForTimeout(60);
+  ok((await md()).includes("[x]") && (await md()).includes("[ ]") === false, "A5 Toggle Task Status flips every selected task", await md());
+  const taskKey = await page.evaluate(() => window.mdnest.commands.find((c) => c.id === "paragraph.taskStatus.toggle")?.key);
+  ok(taskKey === "CmdOrCtrl+Alt+X", "A5 Toggle Task Status is CmdOrCtrl+Alt+X", String(taskKey));
+
+  // ---------- A6: HTML block insert puts the caret inside the template ----------
+  await setMd("before\n");
+  await page.locator("#write").click();
+  await run("paragraph.htmlBlock");
+  await page.waitForTimeout(200);
+  const htmlMd = await md();
+  ok(htmlMd.includes("<div>") && htmlMd.includes("</div>"), "A6 HTML Block inserts a div template", htmlMd);
+  const htmlFocus = await page.evaluate(() => {
+    const cm = document.querySelector(".md-htmlblock .CodeMirror");
+    return !!(cm && cm.CodeMirror && cm.CodeMirror.hasFocus());
+  });
+  ok(htmlFocus, "A6 caret is inside the HTML block editor");
+  await page.keyboard.type("hi");
+  await page.waitForTimeout(80);
+  ok((await md()).includes("hi"), "A6 typing lands inside the template", await md());
+  await setMd("slash\n");
+  await page.locator("#write").click();
+  await page.keyboard.press("Control+a");
+  await page.keyboard.press("Backspace");
+  await page.keyboard.type("/html");
+  await page.waitForTimeout(150);
+  const slashHit = await page.locator(".mdn-slash-item", { hasText: "HTML Block" }).count();
+  ok(slashHit >= 1, "A6 slash menu lists HTML Block", String(slashHit));
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(200);
+  ok((await md()).includes("<div>"), "A6 slash inserts the HTML block", await md());
+
+  // ---------- A7: image alignment round-trips with zoom ----------
+  await setMd("![pic](a.png)\n");
+  await page.locator("#write img[alt='pic']").click();
+  await run("format.image.alignCenter");
+  await page.waitForTimeout(60);
+  const centered = await md();
+  ok(/display:\s*block/.test(centered) && /margin:\s*0 auto/.test(centered), "A7 Align Center writes an inline style", centered);
+  await run("format.image.zoom50");
+  await page.waitForTimeout(60);
+  const both = await md();
+  ok(/width:50%/.test(both) && /margin:0 auto/.test(both), "A7 align and zoom share one style", both);
+  await setMd(both);
+  const rt = await md();
+  ok(/margin:0 auto/.test(rt) && /width:50%/.test(rt), "A7 alignment round-trips with zoom", rt);
+  await page.locator("#write img[alt='pic']").click({ button: "right" });
+  await page.waitForSelector(".context-menu button[data-id='image-align']");
+  await page.locator(".context-menu button[data-id='image-align']").hover();
+  await page.waitForTimeout(80);
+  ok(await page.locator(".context-menu button[data-id='format.image.alignLeft']").count() === 1, "A7 image context menu lists Align Left");
+  await page.screenshot({ path: path.join(OUT, "image-align-menu.png") });
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+  await run("format.image.alignLeft");
+  await page.waitForTimeout(40);
+  ok(/float:left/.test(await md()), "A7 Align Left uses float", await md());
+  await run("format.image.alignDefault");
+  await page.waitForTimeout(40);
+  ok(!/float:|margin:0 auto/.test(await md()), "A7 Default clears alignment and keeps zoom", await md());
+
+  // ---------- A8: open link / copy link address ----------
+  await setMd("[site](https://example.com/a8)\n\n[other](other.md)\n");
+  fs.writeFileSync(path.join(TMP, "other.md"), "# Other\n");
+  await page.evaluate(() => {
+    const v = window.mdnest.editor.view;
+    let pos = 1;
+    v.state.doc.descendants((n, p) => {
+      if (n.isText && n.marks.some((m) => m.type.name === "link")) { pos = p + 1; return false; }
+    });
+    v.dispatch(v.state.tr.setSelection(v.state.selection.constructor.create(v.state.doc, pos, pos)));
+    v.focus();
+  });
+  const linkBox = await page.locator("#write a[href*='example.com']").boundingBox();
+  await page.mouse.click(linkBox.x + linkBox.width / 2, linkBox.y + linkBox.height / 2, { button: "right" });
+  await page.waitForSelector(".context-menu button[data-id='link-actions']");
+  await page.locator(".context-menu button[data-id='link-actions']").hover();
+  await page.waitForTimeout(80);
+  ok(await page.locator(".context-menu button[data-id='format.link.copy']").count() === 1, "A8 link context menu lists Copy Link Address");
+  await page.screenshot({ path: path.join(OUT, "link-context.png") });
+  await page.locator(".context-menu button[data-id='format.link.copy']").click();
+  await page.waitForTimeout(80);
+  ok((await page.evaluate(() => navigator.clipboard.readText())) === "https://example.com/a8", "A8 Copy Link Address copies the href");
+  const opened = [];
+  page.on("popup", (p) => opened.push(p.url()));
+  await page.locator("#write a[href='https://example.com/a8']").click({ modifiers: ["Control"] });
+  await page.waitForTimeout(300);
+  ok(opened.some((u) => u.includes("example.com")), "A8 Ctrl+click opens the http link", opened.join(","));
+  await page.locator("#write a[href='other.md']").click({ modifiers: ["Control"] });
+  await page.waitForTimeout(400);
+  ok((await page.evaluate(() => window.mdnest.state.path || "")).endsWith("other.md"), "A8 a relative .md link opens in MD Nest", await page.evaluate(() => window.mdnest.state.path));
+  await page.evaluate((p) => window.mdnest.openAt ? window.mdnest.openFile : null, DOC);
+
+  // ---------- A9: Find Next without opening the bar ----------
+  await page.evaluate((file) => {
+    const u = new URL(location.href);
+    u.searchParams.set("file", file);
+    history.replaceState(null, "", u);
+  }, DOC);
+  await page.evaluate((file) => { window.mdnest.state.path = file; }, DOC);
+  await setMd("alpha beta alpha\n");
+  await page.locator("#write").click();
+  await page.keyboard.press("Control+Home");
+  await page.evaluate(() => {
+    const v = window.mdnest.editor.view;
+    const text = v.state.doc.textContent;
+    const at = text.indexOf("alpha");
+    v.dispatch(v.state.tr.setSelection(v.state.selection.constructor.near(v.state.doc.resolve(at + 1))));
+  });
+  // Select the word, then Find Next with the bar closed.
+  await page.keyboard.press("Control+d");
+  await page.keyboard.press("F3");
+  await page.waitForTimeout(120);
+  ok(await page.locator("#mdn-find").evaluate((el) => el.style.display === "none" || getComputedStyle(el).display === "none"), "A9 Find Next leaves the bar closed");
+  const selAfter = await page.evaluate(() => {
+    const v = window.mdnest.editor.view;
+    return v.state.doc.textBetween(v.state.selection.from, v.state.selection.to);
+  });
+  ok(selAfter === "alpha", "A9 Find Next selects the next hit", selAfter);
+  await page.keyboard.press("Shift+F3");
+  await page.waitForTimeout(80);
+  ok((await page.evaluate(() => window.mdnest.editor.view.state.doc.textBetween(window.mdnest.editor.view.state.selection.from, window.mdnest.editor.view.state.selection.to))) === "alpha", "A9 Find Previous wraps to a hit");
+  await setMd("nothing here\n");
+  await page.keyboard.press("F3");
+  await page.waitForTimeout(200);
+  ok((await page.locator("#mdn-toast").innerText()).includes("Not found"), "A9 missing query notifies Not found");
+
+  // ---------- A10: read-only mode ----------
+  await setMd("readonly body\n\n");
+  await run("view.readonly");
+  await page.waitForTimeout(80);
+  ok(await page.evaluate(() => document.body.classList.contains("ty-readonly")), "A10 Readonly adds ty-readonly");
+  ok(await page.locator("#footer-readonly").isVisible(), "A10 footer shows the read-only indicator");
+  await page.screenshot({ path: path.join(OUT, "readonly.png") });
+  const beforeRo = await md();
+  await page.locator("#write p").last().click();
+  await page.keyboard.type("/");
+  await page.waitForTimeout(80);
+  ok((await md()) === beforeRo, "A10 typing does not edit and slash stays closed", await md());
+  const slashOpen = await page.evaluate(() => {
+    const el = document.querySelector(".mdn-slash");
+    return !!el && getComputedStyle(el).display !== "none";
+  });
+  ok(!slashOpen, "A10 slash menu stays closed");
+  const headingEnabled = await page.evaluate(() => {
+    window.mdnest.refreshMenu();
+    const btn = document.querySelector('#mdn-menubar button[data-id="paragraph.heading.1"]');
+    return btn ? !btn.disabled && btn.getAttribute("aria-disabled") !== "true" : null;
+  });
+  // HTML menubar marks disabled items. Open the menu to read the attribute.
+  await page.locator('#mdn-menubar .mdn-menu[data-menu="paragraph"] > .mdn-menu-label').click();
+  const h1dis = await page.locator('#mdn-menubar button[data-id="paragraph.heading.1"]').getAttribute("disabled");
+  ok(h1dis !== null, "A10 edit menu items are disabled", String(h1dis) + " enabledFlag=" + headingEnabled);
+  await page.keyboard.press("Escape");
+  await run("view.readonly");
+  await page.waitForTimeout(40);
+  ok(!(await page.evaluate(() => document.body.classList.contains("ty-readonly"))), "A10 Readonly toggles off");
+
+  // ---------- A11: outline collapse ----------
+  await setMd("# One\n\npara\n\n## Two\n\nmore\n\n# Three\n");
+  await page.evaluate(() => { document.body.classList.add("pin-outline"); window.mdnest.sidebar.select("outline"); window.mdnest.sidebar.updateOutline(window.mdnest.editor.view); });
+  await page.waitForTimeout(100);
+  const exp = page.locator("#outline-content .outline-expander").first();
+  ok(await exp.count() === 1 || await page.locator("#outline-content .outline-expander").count() >= 1, "A11 headings with children have an expander");
+  ok(await page.locator("#outline-content .outline-item-open").count() >= 1, "A11 open items use outline-item-open");
+  await page.locator("#outline-content .outline-expander").first().click();
+  await page.waitForTimeout(80);
+  ok(await page.locator("#outline-content .outline-item-closed").count() >= 1, "A11 click closes the section");
+  ok(await page.locator("#outline-content .outline-item", { hasText: "Two" }).count() === 0, "A11 a closed section hides its child");
+  await page.screenshot({ path: path.join(OUT, "outline-collapse.png") });
+  await page.locator("#outline-content").click({ button: "right" });
+  await page.waitForSelector(".context-menu button[data-id='expand']");
+  await page.locator(".context-menu button[data-id='expand']").click();
+  await page.waitForTimeout(80);
+  ok(await page.locator("#outline-content .outline-item", { hasText: "Two" }).count() === 1, "A11 Expand All restores children");
+  await run("view.outline.collapseAll");
+  await page.waitForTimeout(80);
+  ok(await page.locator("#outline-content .outline-item", { hasText: "Two" }).count() === 0, "A11 Collapse All hides children");
+  // Persists while the document stays open (an edit does not reset it).
+  await page.locator("#write").click();
+  await page.keyboard.press("End");
+  await page.keyboard.type(" z");
+  await page.waitForTimeout(250);
+  ok(await page.locator("#outline-content .outline-item", { hasText: "Two" }).count() === 0, "A11 collapse persists across an edit");
+
+  // ---------- A12: copy code content ----------
+  await setMd("```js\nconst n = 1;\n```\n");
+  await page.waitForTimeout(200);
+  const copyBtn = page.locator(".md-fences .code-tooltip .mdn-code-copy");
+  ok(await copyBtn.count() === 1, "A12 each fence has a Copy button in .code-tooltip");
+  await page.screenshot({ path: path.join(OUT, "code-copy.png") });
+  await copyBtn.click();
+  await page.waitForTimeout(100);
+  ok((await page.evaluate(() => navigator.clipboard.readText())).includes("const n = 1"), "A12 Copy writes the code text");
+  ok((await page.locator("#mdn-toast").innerText()).includes("Copied"), "A12 Copy shows a Copied toast");
+  const exported = await page.evaluate(() => window.mdnest.exportHtmlString(false, false));
+  ok(!exported.includes("mdn-code-copy") && !exported.includes(">Copy<"), "A12 the Copy button is not in exported HTML");
+  await page.locator(".md-fences").click();
+  await page.waitForTimeout(80);
+  await run("edit.copyCode");
+  await page.waitForTimeout(80);
+  ok((await page.evaluate(() => navigator.clipboard.readText())).includes("const n = 1"), "A12 Edit ▸ Code Tools ▸ Copy Code Content copies the fence");
+
   ok(errors.length === 0, "no page errors", errors.join(" | "));
 } catch (e) {
   ok(false, "EXCEPTION", e?.message ?? e);
