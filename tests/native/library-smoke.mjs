@@ -57,8 +57,20 @@ try {
   ok(/work\/launch\.md/.test(q1) && /meaning/.test(q1), "semantic: 'when do we ship to customers?' → launch note", q1);
   const q2 = await searchTop("how long should bread rise");
   ok(/kitchen\/sourdough\.md/.test(q2), "semantic: 'how long should bread rise' → sourdough", q2);
+  // nomic-embed-text is English-centric: the English→Chinese match sits at cosine distance ≈0.49,
+  // beyond the calibrated default (0.40). A per-model cut-off line (Settings → Library) brings it back.
+  const setLib = (k, v) => n.exec((k, v) => { v == null ? localStorage.removeItem("mdnest.plugin.library." + k) : localStorage.setItem("mdnest.plugin.library." + k, JSON.stringify(v)); }, k, v);
+  await setLib("cutoffs", "nomic-embed-text = 0.5 0.15");
   const q3 = await searchTop("Japanese listening practice");
-  ok(/学习\.md/.test(q3), "cross-language: English query finds the Chinese note", q3);
+  ok(/学习\.md/.test(q3), "cross-language: English query finds the Chinese note (per-model cut-off 0.5)", q3);
+  await setLib("cutoffs", null);
+  const allHits = async (q) => {
+    await n.exec((q) => { const i = document.querySelector(".mdn-lib-q"); i.value = q; i.dispatchEvent(new Event("input", { bubbles: true })); }, q);
+    await new Promise((r) => setTimeout(r, 1500));
+    return n.exec(() => [...document.querySelectorAll(".mdn-lib-results:not(.mdn-lib-related) .mdn-lib-hit")].map((h) => h.innerText.replace(/\s+/g, " ")));
+  };
+  const q0 = await allHits("kubernetes ingress configuration");
+  ok(!q0.some((h) => /meaning/.test(h)), `default nomic cut-off: unrelated question gets no meaning matches (${q0.length} hits)`, JSON.stringify(q0));
   const q4 = await searchTop("taxes");
   ok(!/diary/.test(q4 ?? ""), "excluded folder never indexed", q4);
   await n.screenshot(path.join(OUT, "06-native-real-embeddings-search.png"));

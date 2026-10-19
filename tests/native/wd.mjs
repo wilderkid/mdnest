@@ -7,9 +7,11 @@ import path from "node:path";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export async function startNative({ app, display = ":78", port = 4444, env = {}, width = 1200, height = 800, args = [] } = {}) {
+export async function startNative({ app, display = ":78", port = 4444, env = {}, width = 1200, height = 800, args = [], profile: keep = null } = {}) {
   const procs = [];
-  const profile = fs.mkdtempSync(path.join(os.tmpdir(), "mdnest-native-"));
+  // `profile`: use (and keep) this folder as the XDG profile instead of a throwaway one
+  const profile = keep ?? fs.mkdtempSync(path.join(os.tmpdir(), "mdnest-native-"));
+  if (keep) fs.mkdirSync(keep, { recursive: true });
   const baseEnv = {
     ...process.env, DISPLAY: display,
     XDG_CONFIG_HOME: path.join(profile, "config"), XDG_DATA_HOME: path.join(profile, "data"),
@@ -68,7 +70,7 @@ export async function startNative({ app, display = ":78", port = 4444, env = {},
       try { await call("DELETE", S); } catch { /* gone */ }
       for (const p of procs.reverse()) { try { p.kill(); } catch { /* ignore */ } }
       if (ownX) await sleep(200);
-      fs.rmSync(profile, { recursive: true, force: true });
+      if (!keep) fs.rmSync(profile, { recursive: true, force: true });
     },
   };
 }

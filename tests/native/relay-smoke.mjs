@@ -3,6 +3,7 @@
 // app's secret API, and deleted afterwards. It is never printed or written to the repo.
 // Run: XAI_API_KEY=… node tests/native/relay-smoke.mjs [binary] [model]
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { startNative } from "./wd.mjs";
 
@@ -14,7 +15,12 @@ if (!key) { console.error("XAI_API_KEY not set"); process.exit(2); }
 const OUT = path.resolve("screenshots/ai-polish");
 const redact = (s) => String(s).split(key).join("<redacted>");
 
-const n = await startNative({ app });
+// Neutral throwaway workspace, so the file tree in the screenshot shows test notes only
+// (without a file argument the sidebar would list the user's home folder).
+const WS = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "mdnest-relay-")), "smoke-notes");
+const notes = { "smoke.md": "# Smoke test\n", "ideas.md": "# Ideas\n\n- one\n", "todo.md": "# To do\n\n- [ ] water the plants\n" };
+for (const [f, t] of Object.entries(notes)) { fs.mkdirSync(WS, { recursive: true }); fs.writeFileSync(path.join(WS, f), t); }
+const n = await startNative({ app, args: [path.join(WS, "smoke.md")] });
 let fail = 0;
 const ok = (c, m, info = "") => { console.log((c ? "PASS " : "FAIL ") + m + (info ? " — " + redact(info).slice(0, 300) : "")); if (!c) fail++; };
 try {
@@ -26,6 +32,8 @@ try {
   }, key, baseUrl, model);
   await n.exec(() => location.reload());
   await n.waitFor(() => window.mdnest?.editor?.view && document.querySelector('#typora-sidebar .sidebar-tab[data-id="p-ai"]'));
+  const tree = await n.exec(() => document.querySelector("#typora-sidebar")?.innerText ?? "");
+  ok(/smoke-notes/i.test(tree) && !/chrome-profile|cli-config|sand-data/.test(tree), "sidebar shows the neutral test workspace only", tree.replace(/\s+/g, " ").slice(0, 200));
   ok(await n.exec(() => window.mdnest.host.secrets.has("ai.apikey")), "key is in the native secret store (" + await n.exec(() => window.mdnest.host.secrets.backend()) + ")");
   await n.exec(() => {
     window.mdnest.editor.setMarkdown("# Smoke test\n\nthis sentence have a error and it are bad.\n");
@@ -75,5 +83,6 @@ try {
     ok(gone && !leaked, "key deleted from the secret store; no profile file contains it");
   } catch (e) { ok(false, "cleanup", e?.message ?? e); }
   await n.close();
+  fs.rmSync(path.dirname(WS), { recursive: true, force: true });
 }
 process.exit(fail ? 1 : 0);
