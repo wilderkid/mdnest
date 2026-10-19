@@ -30,10 +30,15 @@ for (const [name, src] of [
   ["soft line breaks kept", "line one\nline two\n"],
 ] as [string, string][]) ok(rt(src) === src, name + " → " + JSON.stringify(rt(src)));
 
-{ // undefined reference: stays literal text (brackets get escaped on save, stable afterwards)
-  const once = rt("a [nope][missing] b\n");
-  ok(once === rt(once) && !types(once).includes("link_def") && !JSON.stringify(parseMarkdown(once).toJSON()).includes('"link"'), "undefined ref stays literal → " + JSON.stringify(once));
-}
+for (const [name, src] of [
+  ["undefined ref stays byte-identical", "a [nope][missing] b\n"],
+  ["undefined shortcut/collapsed refs", "see [this] and [that][] here\n"],
+  ["literal brackets in heading", "# Title [draft]\n"],
+  ["escaped brackets that would form a ref stay escaped", "x \\[gh\\] y\n\n[gh]: https://g.h\n"],
+  ["escaped def-like line stays escaped", "\\[id\\]: https://x.y\n"],
+  ["brackets in table cell", "| a | b |\n|---|---|\n| [x] | [y][z] |\n"],
+  ["task-like text in paragraph", "plain [ ] box\n"],
+] as [string, string][]) ok(rt(src) === src, name + " → " + JSON.stringify(rt(src)));
 // DOM contract (theme classes)
 const { JSDOM } = await import("jsdom").catch(() => ({ JSDOM: null as any }));
 if (JSDOM) {

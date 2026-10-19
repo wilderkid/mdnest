@@ -235,10 +235,37 @@ export const parser = new MarkdownParser(schema, md, {
 // save; keep them as "\n" (rendered as a space in export, as a line break while editing).
 (parser as any).tokenHandlers.softbreak = (state: any) => state.addText("\n");
 const d = defaultMarkdownSerializer;
+// ---- minimal bracket escaping ----
+// prosemirror-markdown escapes every literal "[" / "]", so e.g. an undefined reference "[x][missing]"
+// would be saved as "\[x\]\[missing\]". For each textblock we also render a candidate without bracket
+// escapes and keep it when it re-parses (with the document's link definitions) to identical content.
+const MSS: any = MarkdownSerializerState;
+const origEsc = MSS.prototype.esc;
+MSS.prototype.esc = function (str: string, startOfLine = false) {
+  if (!this.noBracketEsc) return origEsc.call(this, str, startOfLine);
+  const parts = str.split(/([\[\]])/);
+  return parts.map((p, i) => (p === "[" || p === "]") ? p : origEsc.call(this, p, startOfLine && i === 0)).join("");
+};
+let serializeEnv: any = null; // markdown-it env of the document being serialized (null: always escape)
+function minimalInline(node: PMNode, options: any = {}): string | null {
+  if (!serializeEnv || !/[\[\]]/.test(node.textContent)) return null;
+  const sub = new MSS(serializer.nodes, serializer.marks, options); sub.noBracketEsc = true;
+  sub.renderInline(node);
+  const cand: string = sub.out;
+  try {
+    const d = (parser as any).parse(cand, { references: serializeEnv.references });
+    if (d.childCount === 1 && d.firstChild.type.name === "paragraph" && d.firstChild.content.eq(node.content)) return cand;
+  } catch { /* fall back */ }
+  return null;
+}
+function renderInlineMinimal(state: MarkdownSerializerState, node: PMNode) {
+  const cand = minimalInline(node, (state as any).options);
+  if (cand == null) state.renderInline(node); else state.text(cand, false);
+}
 function serializeCellInline(state: MarkdownSerializerState, cell: PMNode) {
-  const sub = new (MarkdownSerializerState as any)(serializer.nodes, serializer.marks, {});
-  sub.renderInline(cell);
-  return (sub as any).out.replace(/\|/g, "\\|").replace(/\n/g, " ").trim();
+  let out = minimalInline(cell);
+  if (out == null) { const sub = new MSS(serializer.nodes, serializer.marks, {}); sub.renderInline(cell); out = sub.out as string; }
+  return out.replace(/\|/g, "\\|").replace(/\n/g, " ").trim();
 }
 
 export const serializer = new MarkdownSerializer({
@@ -248,12 +275,14 @@ export const serializer = new MarkdownSerializer({
   toc(state, node) { state.write("[TOC]"); state.closeBlock(node); },
   html_block(state, node) { state.text(node.attrs.html.replace(/\n$/, ""), false); state.closeBlock(node); },
   inline_math(state, node) { state.write("$" + node.attrs.tex + "$"); },
+  paragraph(state, node) { renderInlineMinimal(state, node); state.closeBlock(node); },
+  heading(state, node) { state.write(state.repeat("#", node.attrs.level) + " "); renderInlineMinimal(state, node); state.closeBlock(node); },
   footnote_ref(state, node) { state.write("[^" + node.attrs.label + "]"); },
   footnote_def(state, node) {
     const st: any = state;
     if (st.closed && st.closed.type === node.type && st.closed.attrs.tight) st.flushClose(1);
     // continuation lines are indented 4 spaces (also accepted lazily when parsing)
-    state.wrapBlock("    ", "[^" + node.attrs.label + "]: ", node, () => state.renderInline(node));
+    state.wrapBlock("    ", "[^" + node.attrs.label + "]: ", node, () => renderInlineMinimal(state, node));
   },
   link_def(state, node) { state.text(node.textContent, false); state.closeBlock(node); },
   image(state, node, parent, index) {
@@ -304,5 +333,7 @@ export function parseMarkdown(src: string): PMNode {
   return doc ?? schema.node("doc", null, [schema.node("paragraph")]);
 }
 export function serializeMarkdown(doc: PMNode): string {
-  return serializer.serialize(doc, { tightLists: true }).replace(/\s*$/, "\n");
+  serializeEnv = refEnvFor(doc);
+  try { return serializer.serialize(doc, { tightLists: true }).replace(/\s*$/, "\n"); }
+  finally { serializeEnv = null; }
 }
