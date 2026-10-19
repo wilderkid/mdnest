@@ -57,7 +57,7 @@ Gallery themes used for testing are copied unmodified into `dev-data/themes` (gi
 - Autosave (Settings → Editor, 1.5 s after the last edit), recent files (sidebar → Recent), external-change detection (2 s mtime poll: silent reload if clean, toast if dirty), syntax-colour fallback for themes without CodeMirror colours (e.g. Vue, Purple).
 - **Footnotes**: `[^label]` renders as `sup.md-footnote` (hover shows the note; click to edit `[^label]`, Ctrl+click jumps to the definition). `[^label]: text` definitions stay where they are written (`.md-def-footnote > .md-def-name + .md-def-content`).
 - **Reference links/images**: `[text][id]`, `[text][]`, `[text]`, `![alt][id]` keep their form on save. `[id]: url "title"` definitions are kept verbatim as a `.md-def-link` block (hidden in export). Editing an id re-resolves against the document's definitions. Soft line breaks inside paragraphs are preserved.
-- CLI: `mdnest FILE [--theme NAME] [--export-html OUT] [--export-pdf OUT] [--quit] [--debug-log PATH]`.
+- CLI: `mdnest FILE [--theme NAME] [--export-html OUT] [--export-pdf OUT] [--quit] [--no-restore] [--debug-log PATH]` (exit code 1 when an export fails). Settings → Editor → "Reopen last file on startup" (default on).
 - Packaging: `mdnest_<ver>_amd64.deb` (package `mdnest`, `/usr/lib/mdnest`). The display name "MD Nest" comes from the window title and `src-tauri/deb/mdnest.desktop`.
 
 ### WebKitGTK paste/drop notes
@@ -65,13 +65,16 @@ Gallery themes used for testing are copied unmodified into `dev-data/themes` (gi
 - A file dragged from a file manager arrives as `<a>file:///…</a>` HTML, with `text/uri-list` unreadable and no `files`. MD Nest copies the file with the `copy_file` command.
 
 ### Memory
+Measured numbers and method: `docs/ram-notes.md`.
 Startup restores `mdnest.lastFile`, so a no-argument launch is only a "welcome screen" with a fresh profile. Compare builds with `scripts/measure-ram.sh`. It refuses to run while other WebKit processes are alive, because those share library pages and lower PSS.
 
 ### PDF platform notes
 | Platform | Path |
 |---|---|
 | Linux (WebKitGTK) | native: hidden webview → `webkit2gtk::PrintOperation` with GTK print settings "Print to File", A4, PDF output. No dialog. Verified headless (Xvfb) with the CLI. |
-| macOS / Windows | for now, falls back to the system print dialog (`window.print()` on the export HTML; the user picks "Save as PDF"). Planned: `WKWebView.createPDF` (macOS) and WebView2 `PrintToPdfAsync` (Windows) through the same `export_pdf` command. |
+| Windows (WebView2) | native: hidden webview → `ICoreWebView2_7::PrintToPdf` (A4, 15/14 mm margins, backgrounds on). **Compile-checked only** (`scripts/cross-check.sh`), never run. |
+| macOS (WKWebView) | native: `printOperationWithPrintInfo:` with an `NSPrintSaveJob` to the target URL, run modally on the hidden window, done when the file size is stable. **Compile-checked only**, never run. |
+| any failure | the frontend falls back to the system print dialog (interactive export); the CLI exits with code 1 |
 | Browser dev mode | print dialog fallback |
 
 ### MathJax packaging
