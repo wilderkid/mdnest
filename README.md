@@ -35,6 +35,7 @@ tests/native/image-paste-drop.py src-tauri/target/release/mdnest   # native app 
 scripts/measure-ram.sh LABEL BIN 30 3 [FILE]   # idle RAM: PSS over app + WebKit processes, fresh profile
 npx tsx tests/roundtrip.ts samples/sample.md   # markdown round-trip check
 CARGO_BUILD_JOBS=4 npx tauri build   # desktop binary + .deb
+scripts/build-windows.sh             # Windows x64 NSIS installer, cross-built from Linux (see below)
 ```
 
 ## Platform APIs for plugins
@@ -114,6 +115,14 @@ Gallery themes used for testing are copied unmodified into `dev-data/themes` (gi
 - **Plugin APIs**: `index` permission → `ctx.index.call(op, args)` (scan, pending, putVectors, search, related, stats, clear; the root is injected) and `ctx.index.watch(cb)`; `workspace` permission → `ctx.workspace.root()` and `openAt(path, line)`. `ai.provider@1` gained `embed(texts)`, `embedInfo()` and `registerMention()`. Cargo feature `library` (default on) gates the Rust index; `kb-cli` exposes the same JSON dispatch to the browser dev host.
 - **TLS**: reqwest uses native-tls (OpenSSL on Linux; the .deb depends on `libssl3 | libssl3t64`; schannel on Windows; Security.framework on macOS) instead of rustls/ring.
 - **Cross-check** (`scripts/cross-check.sh`): `cargo check --all-targets` for `x86_64-pc-windows-msvc` and `aarch64-apple-darwin`, with the library feature on and off. On Windows the bundled SQLite and sqlite-vec C is compiled with clang against the mingw-w64 headers (`apt install mingw-w64-x86-64-dev`). There is no macOS SDK on the build box, so `scripts/xcheck-stub-cc.sh` replaces the C compiler there: the Rust code is type-checked, and the C is only built on a Mac. The script fails if rustls, ring or OpenSSL show up on those targets.
+
+### Windows build (cross-compiled from Linux)
+`scripts/build-windows.sh` runs `npx tauri build --runner cargo-xwin --target x86_64-pc-windows-msvc --bundles nsis` and copies the installer to `/workspace/dist/MDNest_<ver>_x64-setup.exe`. One-time setup: `apt install nsis lld clang llvm`, `rustup target add x86_64-pc-windows-msvc`, `cargo install --locked cargo-xwin`. On first use cargo-xwin downloads the MSVC CRT and Windows SDK (Microsoft license) into `~/.cache/cargo-xwin`.
+- The features are the same as the Linux release: the default `library` feature, with SQLite, FTS5 and sqlite-vec statically linked. TLS is native (schannel). The CRT is static, so the exe imports only system DLLs and the UCRT `api-ms-win-crt-*`; there are no OpenSSL, VC runtime or WebView2Loader DLLs. The frontend is embedded in the exe. The themes folder is installed next to it.
+- `src-tauri/tauri.windows.conf.json` is merged only for Windows targets. It sets the product name "MD Nest", NSIS per-user install, and the WebView2 download bootstrapper (silent). That bootstrapper only runs if WebView2 is missing.
+- There is no MSI, since WiX does not run on Linux. The installer is unsigned, so Windows SmartScreen warns on first run ("More info → Run anyway").
+- Under wine 10 the exe loads, all imports resolve, and the "MD Nest" window is created. It then stops at "Could not find the WebView2 Runtime", which is expected because wine has no WebView2. It has not been run on real Windows.
+- Library on Windows: meaning search needs an OpenAI-compatible embeddings server, e.g. Ollama for Windows (`ollama pull nomic-embed-text`, default URL `http://localhost:11434/v1`) or llama.cpp's `llama-server.exe`. Keyword search works without one.
 
 ### WebKitGTK paste/drop notes
 - A clipboard image never reaches the `paste` event; ProseMirror captures the native paste and gets `<img src="blob:…">`, and MD Nest fetches those bytes.
