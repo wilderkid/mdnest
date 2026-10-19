@@ -20,7 +20,9 @@ export function increaseHeading(): Cmd {
       if (level === parent.attrs.level) return true;
       return setBlockType(schema.nodes.heading, { level })(state, dispatch);
     }
-    return setBlockType(schema.nodes.heading, { level: 1 })(state, dispatch);
+    // Typora: a paragraph steps up to the smallest heading first.
+    if (parent.type !== schema.nodes.paragraph) return false;
+    return setBlockType(schema.nodes.heading, { level: 6 })(state, dispatch);
   };
 }
 
@@ -28,8 +30,8 @@ export function decreaseHeading(): Cmd {
   return (state, dispatch) => {
     const parent = state.selection.$from.parent;
     if (parent.type !== schema.nodes.heading) return false;
-    // One step toward body text: h1 becomes a paragraph. Deeper headings step down one level.
-    if (parent.attrs.level <= 1) return setBlockType(schema.nodes.paragraph)(state, dispatch);
+    // One step toward body text: h1 → h2 … h6 → paragraph.
+    if (parent.attrs.level >= 6) return setBlockType(schema.nodes.paragraph)(state, dispatch);
     return setBlockType(schema.nodes.heading, { level: parent.attrs.level + 1 })(state, dispatch);
   };
 }

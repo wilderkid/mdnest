@@ -824,15 +824,17 @@ function zoomLevel() {
   const n = +(localStorage.getItem(ZOOM_KEY) || "1");
   return n > 0.4 && n < 3 ? n : 1;
 }
-function setZoom(n: number) {
+function setZoom(n: number, quiet = false) {
   const z = Math.round(Math.max(0.5, Math.min(2.5, n)) * 100) / 100;
   localStorage.setItem(ZOOM_KEY, String(z));
   document.documentElement.style.setProperty("--zoom", String(z));
-  content.style.zoom = String(z);
+  // Native: zoom the whole webview (sidebar and editor, like Typora). Browser host: CSS zoom on the
+  // content area. Never both, or the editor would be zoomed twice.
   if (host.kind === "tauri") {
-    void import("@tauri-apps/api/webview").then((m) => m.getCurrentWebview().setZoom(z)).catch(() => {});
-  }
-  notify(Math.round(z * 100) + "%");
+    content.style.zoom = "";
+    void import("@tauri-apps/api/webview").then((m) => m.getCurrentWebview().setZoom(z)).catch(() => { content.style.zoom = String(z); });
+  } else content.style.zoom = String(z);
+  if (!quiet) notify(Math.round(z * 100) + "%");
 }
 let fullScreen = false;
 let alwaysOnTop = false;
@@ -1019,7 +1021,7 @@ async function refreshMenu() {
   const json = JSON.stringify(spec);
   if (json === lastSpec) return;
   lastSpec = json;
-  if (menuEl) renderMenuBar(menuEl, spec, (id) => { dispatcher.note(id); void runCommand(id); });
+  if (menuEl) renderMenuBar(menuEl, spec, (id) => { void runCommand(id); });
   if (host.kind === "tauri") {
     try { const { invoke } = await import("@tauri-apps/api/core"); await invoke("set_app_menu", { spec }); }
     catch (e) { console.error("set_app_menu", e); }
@@ -1227,7 +1229,7 @@ document.addEventListener("mousedown", (e) => {
 });
 syncToolbar();
 syncStatusBar();
-setZoom(zoomLevel());
+setZoom(zoomLevel(), true);
 
 document.getElementById("sidebar-toggle")!.onclick = () => { document.body.classList.toggle("pin-outline"); scheduleMenu(); };
 document.getElementById("source-toggle")!.onclick = () => { toggleSource(); scheduleMenu(); };
@@ -1373,8 +1375,8 @@ window.addEventListener("beforeunload", (e) => { if (state.dirty && host.kind ==
       const { listen } = await import("@tauri-apps/api/event");
       await listen<string>("mdn-menu", (ev) => {
         const id = ev.payload;
-        if (!id || dispatcher.recent(id)) return;
-        dispatcher.note(id);
+        if (!id || dispatcher.recent(id, "menu")) return;
+        dispatcher.note(id, "menu");
         runCommand(id);
       });
       const { getCurrentWindow } = await import("@tauri-apps/api/window");

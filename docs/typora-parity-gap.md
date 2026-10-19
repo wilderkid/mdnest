@@ -117,7 +117,7 @@ Counted by `python3 scripts/parity-count.py` (163 rows; an empty After cell inhe
 |---|---|---|---|---|
 | Heading 1–6 | Ctrl+1…6 | partial | done | menu + shortcut |
 | Paragraph | Ctrl+0 | partial | done | menu + shortcut |
-| Increase / Decrease heading level | Ctrl+= / Ctrl+- | missing | done | Ctrl+= / Ctrl+-; h1 decrease returns to a paragraph |
+| Increase / Decrease heading level | Ctrl+= / Ctrl+- | missing | done | Ctrl+= / Ctrl+-; Typora order: paragraph → h6 → … → h1; h1 → … → h6 → paragraph |
 | Insert paragraph before / after |  | missing | done | Paragraph menu |
 | Table insert (rows × cols dialog) | Ctrl+T | partial | done | #table-insert-dialog |
 | Table submenu (add/delete row/col, align, move, delete table) |  | partial | partial | add/delete row and column, delete table; no align or move |
@@ -277,7 +277,6 @@ Still missing or only partial after 0.1.1. Each note says why.
 - **Outline collapse** (missing). The outline lists headings and highlights the one at the caret. It does not collapse sections.
 - **Live file refresh** (partial). The tree refreshes on window focus and after our own create/rename/trash. It does not watch the disk.
 - **Find next / previous** (partial). Menu items and F3 / Shift+F3 step the existing find bar. The find-bar behaviour itself is unchanged.
-- **Heading level 6 decrease** (partial). Decrease from h1 returns to a paragraph. Decrease from h6 asks for a level the schema does not have, so that one step does nothing useful.
 - **Comment-only lines** (partial). An inline `<!-- note -->` is a mark and round-trips. A line that is only a comment parses as an HTML block, which is how markdown-it treats it.
 - **In-editor text drag on Windows** (partial). WebView2 HTML5 drops carry no paths, so folder and file drops use Tauri's drag-drop event. That turns off in-editor text drag-move on Windows.
 - **Hyperlink vs AI Rewrite** (partial). Both want Ctrl+K. While AI Rewrite is enabled, the core hyperlink command drops its accelerator and the plugin keeps the key. Hyperlink stays in the menu.

@@ -203,13 +203,15 @@ export function runFocusAware(id: string, target: Element | null, fallback: () =
   fallback();
 }
 
+export type Source = "key" | "menu";
+
 export interface Dispatcher {
   /** Capture-phase listener. Tests call this with a synthetic KeyboardEvent. */
   onKeyDown(e: KeyboardEvent): void;
   /** Record that `id` just ran, so a following key/menu within 300 ms is dropped. */
-  note(id: string): void;
+  note(id: string, src?: Source): void;
   /** True when `id` ran (via key or menu) within the last 300 ms. */
-  recent(id: string): boolean;
+  recent(id: string, src?: Source): boolean;
   dispose(): void;
 }
 
@@ -224,11 +226,14 @@ export function installKeyboardDispatcher(
   run: (id: string) => void,
   only?: Set<string> | (() => Set<string>),
 ): Dispatcher {
-  const last = new Map<string, number>();
-  const note = (id: string) => last.set(id, Date.now());
-  const recent = (id: string) => {
-    const t = last.get(id);
-    return t != null && Date.now() - t < 300;
+  // Last run per id and where it came from. Only a run from the OTHER source within 300 ms is a
+  // duplicate (GTK/Win32 may deliver both the menu accelerator and the key). Two key presses
+  // (Ctrl+= twice, key repeat, F3 F3) are two real commands.
+  const last = new Map<string, { t: number; src: Source }>();
+  const note = (id: string, src: Source = "key") => { last.set(id, { t: Date.now(), src }); };
+  const recent = (id: string, src: Source = "menu") => {
+    const l = last.get(id);
+    return l != null && l.src !== src && Date.now() - l.t < 300;
   };
   const allowed = (id: string) => {
     if (!only) return true;
@@ -246,17 +251,17 @@ export function installKeyboardDispatcher(
     // Undo/redo/select-all inside the editor stay with ProseMirror history (one undo step).
     // Outside it (find bar, prompts, CodeMirror source) the dispatcher edits that field.
     if (TEXT_EDIT.has(cmd.id) && !focusOutsideEditor(target)) {
-      if (recent(cmd.id)) { e.preventDefault(); e.stopPropagation(); }
+      if (recent(cmd.id, "key")) { e.preventDefault(); e.stopPropagation(); }
       return;
     }
-    if (recent(cmd.id)) {
+    if (recent(cmd.id, "key")) {
       e.preventDefault();
       e.stopPropagation();
       return;
     }
     e.preventDefault();
     e.stopPropagation();
-    note(cmd.id);
+    note(cmd.id, "key");
     if (TEXT_EDIT.has(cmd.id)) runFocusAware(cmd.id, target, () => run(cmd.id));
     else run(cmd.id);
   };

@@ -93,7 +93,8 @@ ok(await page.evaluate(() => document.body.classList.contains("typora-sourceview
 await page.keyboard.press("Control+/");
 await page.waitForTimeout(200);
 
-// Dedupe: a simulated menu event within 300ms of the keydown runs once.
+// Dedupe: a native menu event within 300ms of the same keydown runs once (Windows/GTK can deliver
+// both); two key presses run twice (Ctrl+= twice, key repeat).
 const dedupe = await page.evaluate(() => {
   let n = 0;
   const id = "file.preferences";
@@ -101,16 +102,17 @@ const dedupe = await page.evaluate(() => {
   const prev = orig.run;
   orig.run = () => { n++; };
   const fire = () => document.dispatchEvent(new KeyboardEvent("keydown", { key: ",", code: "Comma", ctrlKey: true, bubbles: true, cancelable: true }));
+  const d = window.mdnest.dispatcher;
   fire();
-  // A menu activation within 300ms delivers the same key again (Windows) or calls runCommand.
-  // The dispatcher drops the second one. runCommand is what the menu listener calls after its own guard.
+  const dup = d.recent(id, "menu"); // what the native menu listener checks
+  if (!dup) window.mdnest.runCommand(id);
+  const afterMenu = n;
   fire();
-  const recent = window.mdnest.dispatcher?.recent?.(id);
-  if (!recent) window.mdnest.runCommand(id);
+  const twice = n;
   orig.run = prev;
-  return { n, recent: !!recent };
+  return { afterMenu, twice, dup };
 });
-ok(dedupe.n === 1 && dedupe.recent, "dedupe: same command within 300ms runs once", JSON.stringify(dedupe));
+ok(dedupe.afterMenu === 1 && dedupe.dup && dedupe.twice === 2, "dedupe: key+menu runs once, key+key runs twice", JSON.stringify(dedupe));
 
 
 // Ctrl+R / F5 prevented
