@@ -28,7 +28,6 @@ export interface SugRecord {
 interface SugState { items: SugRecord[]; notice: string | null }
 
 export const suggestKey = new PluginKey<SugState>("mdn-suggest");
-const closeHistoryKey = closeHistory;
 
 type SugMeta =
   | { type: "add"; item: SugRecord }
@@ -226,11 +225,11 @@ export function cancelAll(view: EditorView, result: SugResult = "rejected") {
 
 export function addSuggestion(view: EditorView, item: SugRecord) {
   // closeHistory so streaming patches do not join the next user edit (or split Accept from undo).
-  view.dispatch(view.state.tr.setMeta(suggestKey, { type: "add", item } satisfies SugMeta).setMeta("addToHistory", false).setMeta(closeHistoryKey, true));
+  view.dispatch(closeHistory(view.state.tr.setMeta(suggestKey, { type: "add", item } satisfies SugMeta).setMeta("addToHistory", false)));
 }
 
 export function patchSuggestion(view: EditorView, id: string, patch: Partial<SugRecord>) {
-  view.dispatch(view.state.tr.setMeta(suggestKey, { type: "patch", id, patch } satisfies SugMeta).setMeta("addToHistory", false).setMeta(closeHistoryKey, true));
+  view.dispatch(closeHistory(view.state.tr.setMeta(suggestKey, { type: "patch", id, patch } satisfies SugMeta).setMeta("addToHistory", false)));
 }
 
 export function suggestionItems(state: EditorState): SugRecord[] {
