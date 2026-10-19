@@ -4,6 +4,7 @@ import { EditorView } from "prosemirror-view";
 import { escapeHtml } from "../editor/render";
 import { osClass } from "./os";
 import { ICONS, iconButton } from "./icons";
+import { t } from "../i18n";
 
 const DOC = /\.(md|markdown|mdown|mkd|mdx|txt|text)$/i;
 const SORT_KEY = "mdnest.sidebarSort";
@@ -159,7 +160,7 @@ export function openContextMenu(x: number, y: number, items: ContextItem[], run:
       b.disabled = !!it.disabled;
       const text = document.createElement("span");
       text.className = "mdn-menu-text";
-      text.textContent = it.label;
+      text.textContent = t(it.label);
       b.appendChild(text);
       if (it.submenu?.length) {
         const caret = document.createElement("span");

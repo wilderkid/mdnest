@@ -1,5 +1,6 @@
 import type { Command } from "../plugins/api";
 import { accelLabel, prosemirrorToAccel } from "./menu";
+import { t, tTitle } from "../i18n";
 
 function keyLabel(key: string | undefined): string {
   if (!key) return "";
@@ -9,7 +10,7 @@ function keyLabel(key: string | undefined): string {
 export function openPalette(cmds: Command[]) {
   document.getElementById("mdn-palette")?.remove();
   const box = document.createElement("div"); box.id = "mdn-palette";
-  box.innerHTML = `<input placeholder="Type a command…" /><div class="pal-list"></div>`;
+  box.innerHTML = `<input placeholder="${t("Type a command…")}" /><div class="pal-list"></div>`;
   document.body.appendChild(box);
   const input = box.querySelector("input")!, list = box.querySelector(".pal-list")!;
   let sel = 0, shown: Command[] = [];
@@ -17,10 +18,10 @@ export function openPalette(cmds: Command[]) {
     const q = input.value.toLowerCase();
     shown = cmds.filter((c) => {
       if (c.when) { try { if (!c.when()) return false; } catch { return false; } }
-      return c.title.toLowerCase().includes(q) || c.id.includes(q);
+      return c.title.toLowerCase().includes(q) || tTitle(c.title).toLowerCase().includes(q) || c.id.includes(q);
     }).slice(0, 30);
     sel = Math.min(sel, Math.max(0, shown.length - 1));
-    list.innerHTML = shown.map((c, i) => `<div class="pal-item${i === sel ? " sel" : ""}" data-i="${i}">${c.title}${c.key ? `<small>${keyLabel(c.key)}</small>` : ""}</div>`).join("");
+    list.innerHTML = shown.map((c, i) => `<div class="pal-item${i === sel ? " sel" : ""}" data-i="${i}">${tTitle(c.title)}${c.key ? `<small>${keyLabel(c.key)}</small>` : ""}</div>`).join("");
   };
   const close = () => box.remove();
   const run = (i: number) => { const c = shown[i]; close(); c?.run(); };

@@ -2,6 +2,7 @@
 // browser host / Playwright. Built from the command registry and live app state.
 import type { Command } from "../plugins/api";
 import { commandEnabled, parseAccelerator } from "./commands";
+import { t } from "../i18n";
 
 export interface MenuNode {
   id?: string;
@@ -491,7 +492,15 @@ export function coreCommandIds(mac: boolean): Set<string> {
 export function buildMenuSpec(commands: Command[], state: MenuState, mac = MAC): MenuNode[] {
   const core = coreCommandIds(mac);
   const occupied = state.pluginKeyOwners.size ? state.pluginKeyOwners : occupiedAccels(commands, core);
-  return menuTemplate(mac).map((n) => applyState(n, state, commands, occupied, mac));
+  return menuTemplate(mac).map((n) => localize(applyState(n, state, commands, occupied, mac)));
+}
+
+/** Translate labels for the active UI language (native and HTML menus share the spec). */
+export function localize(n: MenuNode): MenuNode {
+  const out: MenuNode = { ...n };
+  if (out.label && !/^(file\.recent\.\d|theme\.|window\.focus\.)/.test(out.id || "")) out.label = t(out.label);
+  if (out.submenu) out.submenu = out.submenu.map(localize);
+  return out;
 }
 
 function esc(s: string): string {
