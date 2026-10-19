@@ -69,7 +69,7 @@ Tauri commands: `secret_set`, `secret_has`, `secret_delete`, `secret_backend`, `
 | `src/editor/rules.ts` | input rules (`#`, `>`, `-`, `1.`, `[ ]`, ```` ``` ````, `$$`, `---`, `**`, `*`, `` ` ``, `~~`, `==`, `$`) and keymaps |
 | `src/shell/*` | sidebar (file tree and outline in `#typora-sidebar`), source mode (`#typora-source`), theme manager, command palette |
 | `src/plugins/api.ts` | plugin API: manifest (`depends`, `provides`/`consumes`, permissions), commands (hotkey + `when`), sidebar, settings, editor read/write/suggest, slash items, `ctx.net` / `ctx.secrets` |
-| `src/plugins/builtin/*` | `word-stats` example and the `reading-goal` plugin that depends on it |
+| `src/plugins/builtin/*` | `word-stats` example, the `reading-goal` plugin that depends on it, and the `ai` assistant |
 | `src/host/*` | HostAPI: Tauri implementation plus a browser dev implementation. `host.secrets` and `host.net` are the plugin platform (see above) |
 | `src-tauri/` | Rust backend: commands, `mdtheme://` and `mdfile://` protocols, theme seeding, secrets (`secrets.rs`), streaming HTTP + SSE (`net.rs`, `sse.rs`) |
 | `themes/` | built-in themes (`mdnest`, `mdnest-night`) and `github/` fonts (Open Sans, OFL) |

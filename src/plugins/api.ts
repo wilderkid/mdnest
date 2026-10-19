@@ -86,6 +86,8 @@ export interface PluginContext {
     getSelection(): { from: number; to: number; empty: boolean };
     getSelectionMarkdown(): string;
     getDocMarkdown(): string;
+    /** Absolute path of the open document, or null when untitled. Requires editor "read". */
+    getFilePath(): string | null;
     getContext(opts: { before: number; after: number }): string;
     insertMarkdown(md: string, at?: "cursor" | { from: number; to: number }): void;
     beginSuggestion(spec: {
@@ -97,6 +99,11 @@ export interface PluginContext {
     registerSlashItem(item: SlashSpec): void;
   };
   events: { on(ev: AppEvent, fn: (...a: any[]) => void): void };
+  /**
+   * Reject a settings-panel write before it is stored. Return false to keep the previous value
+   * (the control reverts). Used for a confirmation on the first enable.
+   */
+  guardSetting(fn: (key: string, value: any) => boolean): void;
   /** exported API objects of plugins listed in manifest.depends */
   deps: Record<string, any>;
   services: { provide(name: string, impl: unknown): void; require(name: string): unknown };
@@ -119,10 +126,17 @@ export interface PluginHost {
   getMarkdown(): string;
   getState(): EditorState;
   getView(): EditorView;
+  /** Absolute path of the open document, or null when untitled. */
+  getFilePath(): string | null;
   refreshDecorations(): void;
   addSettings(owner: string, specs: SettingSpec[]): void;
   /** Current value of a plugin setting, or undefined when unset. */
   getSetting(owner: string, key: string): any;
+  /**
+   * Persist a setting and emit `settings-changed`. Returns false when a plugin listener rejected it
+   * (the control should revert). Used so a plugin can confirm before a toggle sticks.
+   */
+  commitSetting(owner: string, key: string, value: any): boolean;
   /** Specs registered so far for `owner` (used to allow user-configured url origins). */
   settingsFor(owner: string): SettingSpec[];
   host: Host;
@@ -189,12 +203,32 @@ export class PluginManager {
   private services = new Map<string, unknown>();
   /** url-type setting values, used as extra allowed origins for that plugin. */
   private urlSettings = new Map<string, Map<string, string>>();
+  /** Return false to reject a settings write (the caller reverts the control). */
+  private settingGuards = new Map<string, (key: string, value: any) => boolean>();
 
   constructor(private host: PluginHost) {}
 
   emit(ev: AppEvent, ...a: any[]) { this.listeners.get(ev)?.forEach((f) => { try { f(...a); } catch (e) { console.error(e); } }); }
 
   settingKey = (owner: string, key: string) => `mdnest.plugin.${owner}.${key}`;
+
+  /** A plugin may confirm or reject a settings-panel write before it is stored. */
+  guardSetting(owner: string, fn: (key: string, value: any) => boolean) {
+    this.settingGuards.set(owner, fn);
+  }
+
+  /**
+   * Store a setting unless the owner's guard returns false.
+   * Callers that paint a control should revert when this returns false.
+   */
+  commitSetting(owner: string, key: string, value: any): boolean {
+    const guard = this.settingGuards.get(owner);
+    if (guard && guard(key, value) === false) return false;
+    localStorage.setItem(this.settingKey(owner, key), JSON.stringify(value));
+    if (typeof value === "string") this.noteUrlSetting(owner, key, value);
+    this.emit("settings-changed", owner, key, value);
+    return true;
+  }
 
   /** Remember a url setting so ctx.net can allow that origin. */
   noteUrlSetting(owner: string, key: string, value: string) {
@@ -292,6 +326,7 @@ export class PluginManager {
         },
         getSelectionMarkdown: () => selectionMarkdown(readState()),
         getDocMarkdown: () => { this.requirePerm(p, "read"); return h.getMarkdown(); },
+        getFilePath: () => { this.requirePerm(p, "read"); return h.getFilePath(); },
         getContext: ({ before, after }) => contextMarkdown(readState(), readState().selection.from, before, after),
         insertMarkdown: (md, at) => {
           this.requirePerm(p, "write");
@@ -336,6 +371,7 @@ export class PluginManager {
         },
       },
       events: { on: (ev, fn) => { if (!this.listeners.has(ev)) this.listeners.set(ev, new Set()); this.listeners.get(ev)!.add(fn); } },
+      guardSetting: (fn) => this.guardSetting(id, fn),
       services: {
         provide: (name, impl) => {
           const declared = p.manifest.provides ?? [];

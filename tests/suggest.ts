@@ -140,8 +140,8 @@ function items(st: EditorState) {
   const host = {
     addCommand() {}, runCommand() {}, addSidebarPanel() {}, notify() {}, revealPanel() {},
     prompt: async () => null, addDecorations() {}, getMarkdown: () => "", getState: () => mk(""),
-    getView: () => { throw new Error("no view"); }, refreshDecorations() {}, addSettings() {},
-    getSetting: () => undefined, settingsFor: () => [], host: {} as any,
+    getView: () => { throw new Error("no view"); }, getFilePath: () => null, refreshDecorations() {}, addSettings() {},
+    getSetting: () => undefined, settingsFor: () => [], commitSetting: () => true, host: {} as any,
   } as PluginHost;
   const mgr = new PluginManager(host);
   const consumer: EditorPlugin = {

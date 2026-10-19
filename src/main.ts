@@ -15,6 +15,7 @@ import { openPrompt } from "./editor/prompt";
 import { countWords } from "./plugins/builtin/word-stats";
 import wordStats from "./plugins/builtin/word-stats";
 import readingGoal from "./plugins/builtin/reading-goal";
+import ai from "./plugins/builtin/ai";
 import { FindBar, SourceSearch } from "./shell/findbar";
 import { EditorSearch } from "./editor/search";
 import { insertImageFiles, IMAGE_FOLDER_KEY, imageFolderPattern } from "./shell/images";
@@ -202,6 +203,7 @@ const plugins = new PluginManager({
   getMarkdown: () => currentMarkdown(),
   getState: () => editor.view.state,
   getView: () => editor.view,
+  getFilePath: () => state.path,
   refreshDecorations: () => editor.refreshDecorations(),
   addSettings: (owner, specs) => settingSpecs.push({ owner, specs }),
   getSetting: (owner, key) => {
@@ -209,6 +211,7 @@ const plugins = new PluginManager({
     return raw == null ? undefined : JSON.parse(raw);
   },
   settingsFor: (owner) => settingSpecs.find((s) => s.owner === owner)?.specs ?? [],
+  commitSetting: (owner, key, value) => plugins.commitSetting(owner, key, value),
   host,
 });
 [
@@ -243,7 +246,7 @@ document.addEventListener("keydown", (e) => {
   else if (e.key.toLowerCase() === "t" && !e.shiftKey && !source.active) { e.preventDefault(); insertTable(3, 3)(editor.view.state, editor.view.dispatch); }
 }, true);
 
-plugins.activateAll([readingGoal, wordStats]); // order irrelevant: topo-sorted by depends
+plugins.activateAll([readingGoal, wordStats, ai]); // order irrelevant: topo-sorted by depends
 sidebar.addTab("settings", "⚙", undefined, {
   id: "settings", title: "Settings", render: (el) => {
     const folder = imageFolderPattern();
@@ -262,9 +265,13 @@ sidebar.addTab("settings", "⚙", undefined, {
     el.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>("[data-o]").forEach((inp) => inp.onchange = () => {
       const v = inp instanceof HTMLInputElement && inp.type === "checkbox" ? inp.checked
         : inp instanceof HTMLInputElement && inp.type === "number" ? +inp.value : inp.value;
-      localStorage.setItem(plugins.settingKey(inp.dataset.o!, inp.dataset.k!), JSON.stringify(v));
-      if (inp.dataset.type === "url" && typeof v === "string") plugins.noteUrlSetting(inp.dataset.o!, inp.dataset.k!, v);
-      plugins.emit("settings-changed", inp.dataset.o, inp.dataset.k, v); editor.refreshDecorations();
+      const ok = plugins.commitSetting(inp.dataset.o!, inp.dataset.k!, v);
+      if (!ok) {
+        if (inp instanceof HTMLInputElement && inp.type === "checkbox") inp.checked = !inp.checked;
+        else inp.value = String(JSON.parse(localStorage.getItem(plugins.settingKey(inp.dataset.o!, inp.dataset.k!)) ?? "null") ?? "");
+        return;
+      }
+      editor.refreshDecorations();
     });
     el.querySelectorAll<HTMLButtonElement>("button[data-secret]").forEach((btn) => btn.onclick = () => saveOrClearSecret(btn));
     el.querySelectorAll<HTMLElement>("[data-secret-status]").forEach((node) => refreshSecretStatus(node));

@@ -1,0 +1,72 @@
+/* AI sidebar. Theme variables only, so light and dark themes stay readable. */
+.mdn-ai {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: 100%;
+  min-height: 0;
+  padding: 8px 10px 12px;
+  box-sizing: border-box;
+  color: var(--text-color);
+  font-size: 13px;
+}
+.mdn-ai-off { gap: 10px; }
+.mdn-ai-off p { margin: 0; line-height: 1.45; }
+.mdn-ai button {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid rgba(127, 127, 127, .35);
+  border-radius: 4px;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+.mdn-ai button:hover:not(:disabled) { background: var(--item-hover-bg-color); }
+.mdn-ai button:disabled { opacity: .45; cursor: default; }
+.mdn-ai-status {
+  font-size: 12px;
+  opacity: .75;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mdn-ai-log {
+  flex: 1;
+  min-height: 80px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.mdn-ai-empty { margin: 0; opacity: .65; line-height: 1.4; }
+.mdn-ai-msg {
+  border: 1px solid rgba(127, 127, 127, .25);
+  border-radius: 6px;
+  padding: 6px 8px;
+  background: var(--bg-color);
+}
+.mdn-ai-user { background: var(--item-hover-bg-color, rgba(127, 127, 127, .08)); }
+.mdn-ai-who { font-size: 11px; opacity: .65; margin-bottom: 2px; }
+.mdn-ai-body {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: inherit;
+  font-family: inherit;
+}
+.mdn-ai-msg-actions { display: flex; gap: 4px; margin-top: 6px; }
+.mdn-ai-include { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.mdn-ai-input {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  min-height: 3.2em;
+  font: inherit;
+  color: inherit;
+  background: var(--bg-color);
+  border: 1px solid rgba(127, 127, 127, .35);
+  border-radius: 4px;
+  padding: 4px 6px;
+}
+.mdn-ai-input:focus { outline: none; border-color: var(--primary-color); }
+.mdn-ai-actions { display: flex; gap: 4px; }
