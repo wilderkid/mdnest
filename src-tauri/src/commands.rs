@@ -225,8 +225,8 @@ pub async fn quit_app(app: tauri::AppHandle, code: i32) { app.exit(code); }
 /// falls back to the system print dialog (window.print), see README "PDF export".
 #[tauri::command]
 pub async fn export_pdf(app: tauri::AppHandle, html: String, out: String) -> Result<(), String> {
-    #[cfg(target_os = "linux")]
-    { crate::pdf::export_pdf_linux(app, html, out).await }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(any(target_os = "linux", target_os = "macos", windows))]
+    { crate::pdf::export_pdf(app, html, out).await }
+    #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
     { let _ = (app, html, out); Err("unsupported".into()) }
 }

@@ -165,8 +165,11 @@ async function exportPdf(out?: string) {
     notify("Exporting PDF…");
     await host.exportPdf(html, p); notify("Exported " + p); return p;
   } catch (e: any) {
-    if (String(e?.message ?? e).includes("unsupported")) { printHtml(html); return; } // system print dialog → "Save as PDF"
-    notify("PDF export failed: " + (e?.message ?? e));
+    const msg = String(e?.message ?? e);
+    if (msg.includes("unsupported")) { printHtml(html); return; } // system print dialog → "Save as PDF"
+    notify("PDF export failed: " + msg + (out ? "" : " — opening the print dialog instead"));
+    if (!out) printHtml(html); // interactive: native path failed (e.g. untested macOS/Windows engines) → dialog
+    else throw e;
   }
 }
 
@@ -269,6 +272,7 @@ window.addEventListener("beforeunload", (e) => { if (state.dirty && host.kind ==
   if (f) await openFile(f); else afterLoad();
   if (q.get("sidebar") === "0") document.body.classList.remove("pin-outline");
   document.body.classList.add("mdn-ready");
+  let cliFailed = false;
   // CLI: mdnest doc.md [--theme name] [--export-html out.html] [--export-pdf out.pdf] [--quit] [--no-restore] [--debug-log path]
   const arg = (k: string) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : null; };
   if (arg("--theme")) { await themes.apply(arg("--theme")!); sel.value = themes.current; }
@@ -290,6 +294,6 @@ window.addEventListener("beforeunload", (e) => { if (state.dirty && host.kind ==
   try {
     if (arg("--export-html")) await exportHtml(arg("--export-html")!);
     if (arg("--export-pdf")) await exportPdf(arg("--export-pdf")!);
-  } catch (e) { console.error(e); }
-  if (args.includes("--quit")) host.quit(0);
+  } catch (e) { console.error(e); cliFailed = true; }
+  if (args.includes("--quit")) host.quit(cliFailed ? 1 : 0);
 })();
