@@ -138,7 +138,7 @@ function typoraExtras(md: any) {
     const t = state.tokens;
     for (let i = 0; i < t.length; i++) {
       // [TOC]
-      if (t[i].type === "paragraph_open" && t[i + 1]?.type === "inline" && t[i + 1].content.trim().toUpperCase() === "[TOC]") {
+      if (t[i].type === "paragraph_open" && t[i + 1]?.type === "inline" && t[i + 1].content.trim().toUpperCase().replace(/\\/g, "") === "[TOC]") {
         const toc = new state.Token("toc", "div", 0); toc.block = true;
         t.splice(i, 3, toc);
         continue;

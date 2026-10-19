@@ -28,7 +28,8 @@ export function decreaseHeading(): Cmd {
   return (state, dispatch) => {
     const parent = state.selection.$from.parent;
     if (parent.type !== schema.nodes.heading) return false;
-    if (parent.attrs.level >= 6) return setBlockType(schema.nodes.paragraph)(state, dispatch);
+    // One step toward body text: h1 becomes a paragraph. Deeper headings step down one level.
+    if (parent.attrs.level <= 1) return setBlockType(schema.nodes.paragraph)(state, dispatch);
     return setBlockType(schema.nodes.heading, { level: parent.attrs.level + 1 })(state, dispatch);
   };
 }
@@ -93,8 +94,12 @@ export function selectWord(): Cmd {
     const { $from } = state.selection;
     if (!$from.parent.isTextblock) return false;
     const text = $from.parent.textContent;
-    const off = $from.parentOffset;
+    let off = $from.parentOffset;
     const isWord = (ch: string) => /[\p{L}\p{N}_'-]/u.test(ch);
+    // A caret on a boundary belongs to the word on its left (end of "alpha| beta"),
+    // except at the very start of the block, which belongs to the first word.
+    if (off === 0 && text.length && isWord(text[0])) { /* keep */ }
+    else if (off > 0 && (off >= text.length || !isWord(text[off])) && isWord(text[off - 1])) off--;
     let a = off, b = off;
     while (a > 0 && isWord(text[a - 1])) a--;
     while (b < text.length && isWord(text[b])) b++;

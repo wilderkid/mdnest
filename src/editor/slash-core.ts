@@ -14,9 +14,7 @@ export interface SlashHost {
 }
 
 function replaceBlock(view: EditorView, from: number, fn: (state: any, dispatch?: any) => boolean) {
-  const $p = view.state.doc.resolve(Math.min(from, view.state.doc.content.size));
-  const pos = $p.parent.isTextblock ? $p.start() : from;
-  view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, Math.max(1, Math.min(pos, view.state.doc.content.size - 1)))));
+  view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, Math.max(1, Math.min(from, view.state.doc.content.size - 1)))));
   fn(view.state, view.dispatch);
   view.focus();
 }

@@ -99,7 +99,7 @@ const editor: Editor = createEditor(writeEl, EMPTY_DOC, {
     palette: () => { if (Date.now() < claimedUntil && claimedId === "view.palette") return; openPalette(commands); },
     claimed: (id: string) => Date.now() < claimedUntil && claimedId === id,
   },
-  onSelect: () => { sidebar.highlightOutline(editor.view); paintToolbar(); if (document.body.classList.contains("ty-on-typewriter-mode")) centerCaret(); },
+  onSelect: () => { sidebar.highlightOutline(editor.view); try { paintToolbar(); } catch { /* boot */ } if (document.body.classList.contains("ty-on-typewriter-mode")) centerCaret(); },
   commands: () => commands,
 });
 editor.view.dom.id = "write";
@@ -1096,7 +1096,11 @@ formatBar.addEventListener("mousedown", (e) => {
   const btn = (e.target as HTMLElement).closest("button");
   if (!btn) return;
   e.preventDefault();
+  const sel = editor.view.state.selection;
+  editor.view.focus();
+  editor.view.dispatch(editor.view.state.tr.setSelection(sel));
   runCommand(btn.dataset.cmd || "");
+  paintToolbar();
 });
 function syncToolbar() {
   const on = localStorage.getItem(TOOLBAR_KEY) === "1";
@@ -1104,13 +1108,20 @@ function syncToolbar() {
   document.body.classList.toggle("mdn-toolbar-on", on);
   paintToolbar();
 }
+function toolbarOn() { return localStorage.getItem(TOOLBAR_KEY) === "1"; }
 function paintToolbar() {
-  if (formatBar.hidden) return;
+  if (!toolbarOn()) return;
+  formatBar.hidden = false;
   let marks: string[] = [];
   let heading = 0;
   try {
     const sel = editor.view.state.selection;
-    marks = sel.$from.marks().map((m) => m.type.name);
+    if (sel.empty) {
+      marks = sel.$from.marks().map((m) => m.type.name);
+      // Inside an expanded marker the real mark is stored, not applied.
+      const stored = sel.$from.marks().find((m) => m.type.name === "md_src");
+      if (stored) marks.push(...(editor.view.state.storedMarks ?? []).map((m) => m.type.name));
+    } else sel.$from.doc.nodesBetween(sel.from, sel.to, (node) => { node.marks.forEach((m) => marks.push(m.type.name)); });
     if (sel.$from.parent.type.name === "heading") heading = sel.$from.parent.attrs.level;
   } catch { /* boot */ }
   formatBar.querySelectorAll<HTMLButtonElement>("button").forEach((b) => {

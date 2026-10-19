@@ -14,10 +14,10 @@ import { searchPlugin } from "./search";
 import { nodeViews, tocViews } from "./views";
 import { collectImages, imagesFromPastedHtml, pastedHtmlIsOnlyImages, type ImageItem } from "../shell/images";
 import { buildInputRules, buildKeymaps } from "./rules";
-import { autoPairPlugin } from "./autopair";
+import { autoPairPlugin, skipAutoCloser } from "./autopair";
 import type { Command, DecorationProvider } from "../plugins/api";
 import { suggestPlugin } from "./suggest";
-import { slashPlugin } from "./slash";
+import { slashPlugin, slashItems, registerSlashItem } from "./slash";
 import { liveCommandKeymap } from "./plugin-keys";
 
 export interface EditorHooks {
@@ -140,12 +140,19 @@ export function createEditor(mount: HTMLElement, markdown: string, hooks: Editor
       },
     },
   });
+  // Survives setMarkdown, which replaces EditorState and destroys plugin views.
+  view.dom.addEventListener("beforeinput", (ev) => skipAutoCloser(view, ev), true);
   // Typora-compatible wrapper: <content><div id="write">…
   return {
     view,
     getMarkdown: () => serializeMarkdown(collapseAll(view.state.doc)),
     getDoc: () => collapseAll(view.state.doc),
-    setMarkdown: (md: string) => { view.updateState(mkState(md)); tocViews.forEach((t) => t.dom.isConnected ? t.refresh(view.state.doc) : tocViews.delete(t)); },
+    setMarkdown: (md: string) => {
+      const kept = slashItems(view.state);
+      view.updateState(mkState(md));
+      for (const it of kept) registerSlashItem(view, it);
+      tocViews.forEach((t) => t.dom.isConnected ? t.refresh(view.state.doc) : tocViews.delete(t));
+    },
     refreshDecorations: () => view.dispatch(view.state.tr.setMeta("refresh", true)),
   };
 }

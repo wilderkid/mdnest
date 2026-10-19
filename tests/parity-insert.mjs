@@ -56,27 +56,29 @@ ok(filtered.length > 0 && filtered.every((t) => /head/i.test(t)), "slash filter 
 await page.keyboard.press("Escape");
 
 const slashCases = [
-  ["Heading 1", "# "],
-  ["Bullet List", "- "],
-  ["Numbered List", "1. "],
-  ["Task List", "- [ ]"],
-  ["Quote", "> "],
-  ["Code Block", "```"],
-  ["Math Block", "$$"],
-  ["Mermaid", "mermaid"],
-  ["Horizontal Line", "---"],
-  ["Table of Contents", "[TOC]"],
-  ["Footnote", "[^"],
-  ["Front Matter", "---\n"],
-  ["Callout", "[!NOTE]"],
+  ["Heading 1", "# ", "Title"],
+  ["Bullet List", "- ", "item"],
+  ["Numbered List", "1. ", "item"],
+  ["Task List", "- [ ]", ""],
+  ["Quote", "> ", "said"],
+  ["Code Block", "```", ""],
+  ["Math Block", "$$", ""],
+  ["Mermaid Diagram", "mermaid", ""],
+  ["Horizontal Line", "---", ""],
+  ["Table of Contents", "[TOC]", ""],
+  ["Footnote", "[^", ""],
+  ["Front Matter", "---\n", ""],
+  ["Callout/Alert", "[!NOTE]", ""],
 ];
-for (const [title, expect] of slashCases) {
+for (const [title, expect, typed] of slashCases) {
   await typeSlash("");
   await page.waitForSelector(".mdn-slash");
   const item = page.locator(".mdn-slash-item", { hasText: title }).first();
   if (await item.count()) await item.click();
   else { await page.keyboard.press("Escape"); ok(false, "slash " + title, "missing"); continue; }
-  await page.waitForTimeout(120);
+  await page.waitForTimeout(80);
+  if (typed) await page.keyboard.type(typed);
+  await page.waitForTimeout(80);
   const text = await md();
   ok(text.includes(expect), "slash " + title + " → markdown", text.slice(0, 80).replace(/\n/g, "\\n"));
 }
@@ -182,6 +184,8 @@ ok(!(await md()).includes("**"), "Ctrl+\\ clear format", await md());
 
 await setMd("alpha beta\n");
 await page.locator("#write").click();
+await page.keyboard.press("End");
+await page.keyboard.press("Control+Home");
 await page.keyboard.press("Control+D");
 await page.waitForTimeout(50);
 const word = await page.evaluate(() => {
@@ -251,15 +255,21 @@ await page.waitForTimeout(40);
 ok(!(await md()).includes("()"), "backspace removes empty pair", await md());
 
 // Toolbar
+await page.evaluate(() => localStorage.setItem("mdnest.formatToolbar", "0"));
 await run("view.toolbar");
-await page.waitForSelector("#mdn-format-toolbar");
+await page.waitForSelector("#mdn-format-toolbar:not([hidden])");
 await setMd("toolbar\n");
 await page.locator("#write").click();
 await page.keyboard.press("Control+A");
 await page.locator("#mdn-format-toolbar button[data-cmd='format.strong']").click();
 await page.waitForTimeout(80);
 ok((await md()).includes("**toolbar**"), "toolbar strong", await md());
-ok(await page.locator("#mdn-format-toolbar button[data-cmd='format.strong']").evaluate((b) => b.classList.contains("active")), "toolbar strong active");
+await page.locator("#write").click();
+await page.keyboard.press("Control+a");
+await page.waitForTimeout(80);
+await page.waitForTimeout(80);
+const active = await page.evaluate(() => document.querySelector("#mdn-format-toolbar button[data-cmd='format.strong']")?.classList.contains("active"));
+ok(active, "toolbar strong active");
 await page.screenshot({ path: path.join(OUT, "format-toolbar.png") });
 await run("view.toolbar");
 
