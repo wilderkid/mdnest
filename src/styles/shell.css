@@ -298,3 +298,50 @@ body.shell-b #typora-quick-open, body.shell-b #mdn-palette { background: var(--s
 body.shell-b .typora-quick-open-item.active, body.shell-b .typora-quick-open-item:hover { background: var(--sh-tint); }
 body.shell-b #mdn-toast { background: var(--sh-tip-bg); border-radius: 10px; box-shadow: var(--sh-shadow-pop); font-family: var(--sh-font); }
 body.shell-b #mdn-word-popover { background: var(--sh-card); color: var(--sh-fg); border: 1px solid var(--sh-line); border-radius: 12px; box-shadow: var(--sh-shadow-pop); }
+
+/* ---------- settings ---------- */
+.mdn-sb-v2 .mdn-settings { padding: 0 8px; font-size: 12.5px; }
+.mdn-settings .set-grp { margin-bottom: 6px; padding: 2px 0; }
+.mdn-settings .set-head { display: flex; align-items: center; gap: 7px; height: 34px; padding: 0 10px; font-size: 13px; cursor: pointer; user-select: none; outline: none; }
+.mdn-settings .set-head small { margin-left: auto; font-size: 11.5px; font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%; }
+.mdn-settings .set-caret { transition: transform .12s ease; flex: none; }
+.mdn-settings .set-grp.closed:not(.searching) .set-caret { transform: rotate(-90deg); }
+.mdn-settings .set-grp.closed:not(.searching) > .set-body { display: none; }
+.mdn-settings .set-body { padding-bottom: 4px; }
+.mdn-settings .set-row { display: flex; align-items: center; gap: 10px; padding: 6px 12px 6px 32px; margin: 0; cursor: default; }
+.mdn-settings label.set-row { cursor: pointer; }
+.mdn-settings .set-row.set-stack { flex-direction: column; align-items: stretch; gap: 5px; }
+.mdn-settings .set-row.set-sub { padding-top: 0; }
+.mdn-settings .set-txt { flex: 1; min-width: 0; display: block; }
+.mdn-settings .set-txt small { display: block; font-size: 11px; margin-top: 1px; line-height: 1.4; }
+.mdn-settings .set-hidden { display: none !important; }
+.mdn-settings .set-none { padding: 16px; text-align: center; font-size: 12.5px; }
+.mdn-settings .mdn-note { margin: 4px 12px 6px 32px; font-size: 11.5px; line-height: 1.55; }
+.mdn-settings input.switch { appearance: none; -webkit-appearance: none; width: 30px; height: 17px; border-radius: 999px; position: relative; flex: none; margin: 0; cursor: pointer; transition: background .15s ease; }
+.mdn-settings input.switch::before { content: ""; position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: left .15s ease; }
+.mdn-settings input.switch:checked::before { left: 15px; }
+.mdn-settings input.switch:focus-visible { outline: 2px solid var(--sh-accent); outline-offset: 2px; }
+.mdn-settings .set-select { max-width: 52%; font: inherit; font-size: 12px; padding: 3px 6px; border-radius: 8px; }
+.mdn-settings .set-input, .mdn-settings textarea { font: inherit; font-size: 12px; padding: 4px 8px; border-radius: 8px; box-sizing: border-box; width: 100%; }
+.mdn-settings .set-input.set-num { width: 84px; flex: none; }
+.mdn-settings .mdn-secret-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.mdn-settings .set-btn { font: inherit; font-size: 12px; padding: 3px 10px; border-radius: 7px; cursor: pointer; }
+.mdn-settings .mdn-secret-status { font-size: 11px; }
+.mdn-settings .set-error { font-size: 11.5px; }
+
+body.shell-b .mdn-settings .set-grp { background: color-mix(in srgb, var(--sh-fg) 3%, var(--sh-card)); border-radius: 12px; border: 1px solid transparent; }
+body.shell-b .mdn-settings .set-grp.closed:not(.searching) { background: transparent; border-color: var(--sh-line); }
+body.shell-b .mdn-settings .set-head { color: var(--sh-fg); font-weight: 600; }
+body.shell-b .mdn-settings .set-head > svg:nth-child(2) { color: var(--sh-accent); }
+body.shell-b .mdn-settings .set-caret, body.shell-b .mdn-settings .set-head small { color: var(--sh-faint); }
+body.shell-b .mdn-settings .set-row { color: var(--sh-fg); }
+body.shell-b .mdn-settings .set-txt small, body.shell-b .mdn-settings .mdn-note, body.shell-b .mdn-settings .mdn-secret-status, body.shell-b .mdn-settings .set-none { color: var(--sh-faint); }
+body.shell-b .mdn-settings input.switch { background: color-mix(in srgb, var(--sh-fg) 18%, var(--sh-card)); border: 0; }
+body.shell-b .mdn-settings input.switch:checked { background: var(--sh-accent); }
+body.shell-b .mdn-settings .set-select, body.shell-b .mdn-settings .set-input, body.shell-b .mdn-settings textarea {
+  border: 1px solid var(--sh-line); background: var(--sh-card); color: var(--sh-fg); outline: none; }
+body.shell-b .mdn-settings .set-select:focus, body.shell-b .mdn-settings .set-input:focus, body.shell-b .mdn-settings textarea:focus { border-color: color-mix(in srgb, var(--sh-accent) 55%, var(--sh-line)); box-shadow: 0 0 0 3px var(--sh-tint); }
+body.shell-b .mdn-settings .set-btn { border: 1px solid var(--sh-line); background: var(--sh-card); color: var(--sh-fg); }
+body.shell-b .mdn-settings .set-btn:hover { background: var(--sh-hover); }
+body.shell-b .mdn-settings .set-btn[data-secret="set"] { background: var(--sh-accent); color: var(--sh-on-accent); border-color: transparent; }
+body.shell-b .mdn-settings .set-error { color: var(--sh-danger); }

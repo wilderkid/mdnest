@@ -39,7 +39,7 @@ export class ThemeManager {
     const bg = getComputedStyle(document.body).backgroundColor.match(/\d+/g)?.map(Number) ?? [255, 255, 255];
     document.body.classList.toggle("mdn-dark", (bg[0] * 299 + bg[1] * 587 + bg[2] * 114) / 1000 < 128);
     document.body.classList.toggle("mdn-cm-fallback", !themeColorsCode());
-    applyShellColors();
+    applyShellColors(name !== "mdnest");
     resetMermaidTheme();
     this.onChange(name);
   }
@@ -68,7 +68,7 @@ const transparent = (c: string) => !c || c === "transparent" || /rgba\([^)]*,\s*
  * (falling back to body), the accent from the theme's --primary-color when it sets its own.
  * shell.css mixes every other shell token from these three.
  */
-export function applyShellColors() {
+export function applyShellColors(followAccent = true) {
   const root = document.documentElement;
   const write = document.getElementById("write");
   const pick = (els: (Element | null)[], prop: "backgroundColor" | "color") => {
@@ -84,7 +84,7 @@ export function applyShellColors() {
   root.style.setProperty("--mdn-tbg", bg);
   root.style.setProperty("--mdn-tfg", fg);
   const primary = getComputedStyle(root).getPropertyValue("--primary-color").trim();
-  if (primary && primary.toLowerCase() !== BASE_PRIMARY) root.style.setProperty("--mdn-taccent", primary);
+  if (followAccent && primary && primary.toLowerCase() !== BASE_PRIMARY) root.style.setProperty("--mdn-taccent", primary);
   else root.style.removeProperty("--mdn-taccent");
 }
 

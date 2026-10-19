@@ -1697,28 +1697,120 @@ registerCoreSlash(editor.view, {
   insertImage: () => { void insertLocalImage(); },
   promptLink: () => { void promptHyperlink(); },
 });
+const SETTINGS_GROUPS_KEY = "mdnest.settingsGroups";
+const OWNER_META: Record<string, { title: string; icon: string }> = {
+  ai: { title: "AI Assistant", icon: "ai" },
+  library: { title: "Library", icon: "library" },
+  "word-stats": { title: "Writing Stats", icon: "stats" },
+  "reading-goal": { title: "Writing Goal", icon: "target" },
+};
+function settingsGroupsOpen(): Record<string, boolean> {
+  try { return JSON.parse(localStorage.getItem(SETTINGS_GROUPS_KEY) || "{}") || {}; } catch { return {}; }
+}
+/** One switch row. The <input type=checkbox> stays real (ids and tests rely on it); CSS draws the switch. */
+function switchRow(id: string, label: string, on: boolean, hint = "", attrs = ""): string {
+  return `<label class="set-row set-switch"><span class="set-txt"><span class="set-label">${escapeHtml(t(label))}</span>${hint ? `<small>${escapeHtml(t(hint))}</small>` : ""}</span><input type="checkbox" class="switch"${id ? ` id="${id}"` : ""} ${attrs} ${on ? "checked" : ""}></label>`;
+}
+function selectRow(id: string, label: string, options: [string, string][], value: string, hint = ""): string {
+  return `<label class="set-row"><span class="set-txt"><span class="set-label">${escapeHtml(t(label))}</span>${hint ? `<small>${escapeHtml(t(hint))}</small>` : ""}</span><select id="${id}" class="set-select">${options.map(([v, l]) => `<option value="${escapeHtml(v)}" ${v === value ? "selected" : ""}>${escapeHtml(t(l))}</option>`).join("")}</select></label>`;
+}
+function settingsGroup(id: string, title: string, ic: string, rows: string, summary = "", openByDefault = false): string {
+  const open = settingsGroupsOpen()[id] ?? openByDefault;
+  return `<section class="set-grp${open ? "" : " closed"}" data-grp="${id}"><div class="set-head" role="button" tabindex="0">${icon("chevronDown", 12, 2, "set-caret")}${icon(ic, 15)}<span class="set-title">${escapeHtml(t(title))}</span><small>${escapeHtml(summary)}</small></div><div class="set-body">${rows}</div></section>`;
+}
+function filterSettings(root: HTMLElement, q: string) {
+  const needle = q.trim().toLowerCase();
+  let any = false;
+  root.querySelectorAll<HTMLElement>(".set-grp").forEach((g) => {
+    const title = (g.querySelector(".set-title")?.textContent || "").toLowerCase();
+    let hits = 0;
+    g.querySelectorAll<HTMLElement>(".set-body > *").forEach((row) => {
+      const show = !needle || title.includes(needle) || (row.textContent || "").toLowerCase().includes(needle)
+        || [...row.querySelectorAll("option")].some((o) => (o.textContent || "").toLowerCase().includes(needle));
+      row.classList.toggle("set-hidden", !show);
+      if (show) hits++;
+    });
+    g.classList.toggle("set-hidden", !!needle && !hits);
+    g.classList.toggle("searching", !!needle && hits > 0);
+    if (hits) any = true;
+  });
+  root.querySelector(".set-none")?.classList.toggle("set-hidden", !needle || any);
+}
+let settingsQuery = "";
 sidebar.addTab("settings", "Settings", undefined, {
-  id: "settings", title: "Settings", render: (el) => {
+  id: "settings", title: "Settings",
+  renderHead: (sub) => {
+    sub.innerHTML = `<label class="sb-search">${icon("search", 14)}<input id="settings-search" type="search" placeholder="${t("Search settings…")}" autocomplete="off" spellcheck="false"></label>`;
+    const input = sub.querySelector<HTMLInputElement>("#settings-search")!;
+    input.addEventListener("input", () => {
+      settingsQuery = input.value;
+      const root = document.querySelector<HTMLElement>(".mdn-settings");
+      if (root) filterSettings(root, settingsQuery);
+    });
+    input.addEventListener("keydown", (e) => { if (e.key === "Escape") { input.value = ""; input.dispatchEvent(new Event("input")); } });
+  },
+  render: (el) => {
     const folder = imageFolderPattern();
-    const core = `<h4>Editor</h4><label><input type="checkbox" id="set-autosave" ${localStorage.getItem(AUTOSAVE_KEY) === "1" ? "checked" : ""}> Autosave (1.5 s after edits)</label>
-      <label><input type="checkbox" id="set-reopen" ${localStorage.getItem(REOPEN_KEY) !== "0" ? "checked" : ""}> Reopen last file on startup</label>
-      <label><input type="checkbox" id="set-pair-brackets" ${pairBracketsOn() ? "checked" : ""}> Auto-pair brackets and quotes</label>
-      <label><input type="checkbox" id="set-pair-md" ${pairMarkdownOn() ? "checked" : ""}> Auto-pair Markdown syntax</label>
-      <label><input type="checkbox" id="set-smart" ${smartPunctOn() ? "checked" : ""}> Smart punctuation</label>
-      <label><input type="checkbox" id="set-spell" ${spellcheckOn() ? "checked" : ""}> Spell check</label>
-      <label><input type="checkbox" id="set-emoji" ${emojiOn() ? "checked" : ""}> Emoji autocomplete</label>
-      <label>Default line ending for new files<br><select id="set-eol">
-        <option value="LF" ${defaultEol() === "LF" ? "selected" : ""}>LF</option>
-        <option value="CRLF" ${defaultEol() === "CRLF" ? "selected" : ""}>CRLF</option>
-      </select></label>
-      <label>Fallback encoding<br><select id="set-fallback">
-        ${ENCODINGS.map((e) => `<option value="${e}" ${fallbackEncoding() === e ? "selected" : ""}>${e}</option>`).join("")}
-      </select></label>
-      <h4>Images</h4><label>When pasting / dropping images, copy them to<br><select id="set-imgfolder">
-      ${["./assets", "./${filename}.assets"].map((o) => `<option value="${o}" ${o === folder ? "selected" : ""}>${o}</option>`).join("")}
-      <option value="custom" ${["./assets", "./${filename}.assets"].includes(folder) ? "" : "selected"}>custom…</option></select>
-      <input id="set-imgfolder-custom" type="text" value="${folder}" style="margin-top:4px"></label>`;
-    el.innerHTML = `<div class="mdn-settings">` + core + settingSpecs.map(({ owner, specs }) => `<h4>${escapeHtml(owner)}</h4>` + specs.map((s) => renderSetting(owner, s)).join("")).join("") + (plugins.errors.length ? `<h4>Plugin errors</h4>` + plugins.errors.map((e) => `<div>${escapeHtml(e.id)}: ${escapeHtml(e.error)}</div>`).join("") : "") + `</div>`;
+    const folderOpts: [string, string][] = [["./assets", "./assets"], ["./${filename}.assets", "./${filename}.assets"], ["custom", "custom…"]];
+    const folderVal = ["./assets", "./${filename}.assets"].includes(folder) ? folder : "custom";
+    const ls = langSetting();
+    const appearance = settingsGroup("appearance", "Appearance", "palette",
+      selectRow("set-lang", "Language", [["auto", "Follow system"], ["zh-CN", "简体中文"], ["en", "English"]], ls)
+      + selectRow("set-shell", "Shell style", [["b", "青屿 (B)"], ["plain", "Plain (theme only)"]], shellStyle(), "Window chrome around the editor; colours follow the theme"),
+      ls === "auto" ? t("Follow system") : ls === "zh-CN" ? "简体中文" : "English", true);
+    const editorGrp = settingsGroup("editor", "Editor", "pencil",
+      switchRow("set-autosave", "Autosave", localStorage.getItem(AUTOSAVE_KEY) === "1", "1.5 s after edits stop")
+      + switchRow("set-reopen", "Reopen last file on startup", localStorage.getItem(REOPEN_KEY) !== "0")
+      + switchRow("set-pair-brackets", "Auto-pair brackets and quotes", pairBracketsOn())
+      + switchRow("set-pair-md", "Auto-pair Markdown syntax", pairMarkdownOn())
+      + switchRow("set-smart", "Smart Punctuation", smartPunctOn(), "Straight quotes, -- and ... become typographic")
+      + switchRow("set-spell", "Spell Check", spellcheckOn())
+      + switchRow("set-emoji", "Emoji Autocomplete", emojiOn(), "Type :smile: to pick"), "", true);
+    const filesGrp = settingsGroup("files", "Files & Encoding", "doc",
+      selectRow("set-eol", "Default line ending for new files", [["LF", "LF"], ["CRLF", "CRLF"]], defaultEol())
+      + selectRow("set-fallback", "Fallback encoding", ENCODINGS.map((e) => [e, e] as [string, string]), fallbackEncoding(), "Used when a file is not valid UTF-8"),
+      `${defaultEol()} · ${fallbackEncoding()}`);
+    const imagesGrp = settingsGroup("images", "Images", "image",
+      selectRow("set-imgfolder", "When pasting / dropping images, copy them to", folderOpts, folderVal)
+      + `<label class="set-row set-sub"><span class="set-txt"><small>${escapeHtml(t("Custom folder"))}</small></span><input id="set-imgfolder-custom" class="set-input" type="text" value="${escapeHtml(folder)}"></label>`,
+      folder);
+    const pluginGroups = settingSpecs.map(({ owner, specs }) => {
+      const meta = OWNER_META[owner] ?? { title: owner, icon: "settings" };
+      const enabledSpec = specs.find((x) => x.key === "enabled" && x.type === "boolean");
+      let summary = "";
+      if (enabledSpec) {
+        const raw = localStorage.getItem(plugins.settingKey(owner, "enabled"));
+        summary = t((raw == null ? enabledSpec.default : JSON.parse(raw)) ? "On" : "Off");
+      }
+      return settingsGroup("p-" + owner, meta.title, meta.icon, specs.map((x) => renderSetting(owner, x)).join(""), summary);
+    }).join("");
+    const errors = plugins.errors.length ? settingsGroup("errors", "Plugin errors", "x", plugins.errors.map((e) => `<div class="set-row set-error">${escapeHtml(e.id)}: ${escapeHtml(e.error)}</div>`).join(""), String(plugins.errors.length), true) : "";
+    el.innerHTML = `<div class="mdn-settings">${appearance}${editorGrp}${filesGrp}${imagesGrp}${pluginGroups}${errors}<div class="set-none set-hidden">${t("No settings match")}</div></div>`;
+    const root = el.querySelector<HTMLElement>(".mdn-settings")!;
+    root.querySelectorAll<HTMLElement>(".set-head").forEach((h) => {
+      const toggle = () => {
+        const g = h.parentElement!;
+        const closed = g.classList.toggle("closed");
+        const all = settingsGroupsOpen(); all[g.dataset.grp!] = !closed;
+        localStorage.setItem(SETTINGS_GROUPS_KEY, JSON.stringify(all));
+      };
+      h.onclick = toggle;
+      h.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } };
+    });
+    if (settingsQuery) filterSettings(root, settingsQuery);
+    (el.querySelector("#set-lang") as HTMLSelectElement).onchange = (e) => {
+      saveLangSetting((e.target as HTMLSelectElement).value as LangSetting);
+      refreshMenu();
+      setTitle(); updateCount();
+      sidebar.rerender("settings");
+      notify("Restart to apply everywhere");
+    };
+    (el.querySelector("#set-shell") as HTMLSelectElement).onchange = (e) => {
+      const v = (e.target as HTMLSelectElement).value === "plain" ? "plain" : "b";
+      localStorage.setItem(SHELL_KEY, v);
+      applyShellStyle(v);
+      applyShellColors(themes.current !== "mdnest");
+    };
     (el.querySelector("#set-autosave") as HTMLInputElement).onchange = (e) => localStorage.setItem(AUTOSAVE_KEY, (e.target as HTMLInputElement).checked ? "1" : "0");
     (el.querySelector("#set-reopen") as HTMLInputElement).onchange = (e) => localStorage.setItem(REOPEN_KEY, (e.target as HTMLInputElement).checked ? "1" : "0");
     (el.querySelector("#set-pair-brackets") as HTMLInputElement).onchange = (e) => { localStorage.setItem(PAIR_BRACKETS_KEY, (e.target as HTMLInputElement).checked ? "1" : "0"); scheduleMenu(); };
@@ -1757,23 +1849,25 @@ function renderSetting(owner: string, s: SettingSpec): string {
   if (s.when) { try { if (!s.when()) return ""; } catch { return ""; } }
   const raw = localStorage.getItem(plugins.settingKey(owner, s.key));
   const v = raw == null ? s.default : JSON.parse(raw);
-  const title = escapeHtml(s.title);
-  if (s.type === "note") return `<p class="mdn-note">${escapeHtml(s.text ?? s.title)}</p>`;
-  if (s.type === "boolean") return `<label><input type="checkbox" data-o="${owner}" data-k="${s.key}" ${v ? "checked" : ""}> ${title}</label>`;
+  const title = escapeHtml(t(s.title));
+  const txt = `<span class="set-txt"><span class="set-label">${title}</span></span>`;
+  if (s.type === "note") return `<p class="mdn-note">${escapeHtml(t(s.text ?? s.title))}</p>`;
+  if (s.type === "boolean") return `<label class="set-row set-switch">${txt}<input type="checkbox" class="switch" data-o="${owner}" data-k="${s.key}" ${v ? "checked" : ""}></label>`;
   if (s.type === "select") {
-    const opts = (s.options ?? []).map((o) => `<option value="${escapeHtml(o.value)}" ${String(v) === o.value ? "selected" : ""}>${escapeHtml(o.label)}</option>`).join("");
-    return `<label>${title}<br><select data-o="${owner}" data-k="${s.key}">${opts}</select></label>`;
+    const opts = (s.options ?? []).map((o) => `<option value="${escapeHtml(o.value)}" ${String(v) === o.value ? "selected" : ""}>${escapeHtml(t(o.label))}</option>`).join("");
+    return `<label class="set-row">${txt}<select class="set-select" data-o="${owner}" data-k="${s.key}">${opts}</select></label>`;
   }
-  if (s.type === "text") return `<label>${title}<br><textarea data-o="${owner}" data-k="${s.key}" rows="3">${escapeHtml(String(v ?? ""))}</textarea></label>`;
-  if (s.type === "url") return `<label>${title}<br><input type="url" data-o="${owner}" data-k="${s.key}" data-type="url" value="${escapeHtml(String(v ?? ""))}"></label>`;
+  if (s.type === "text") return `<label class="set-row set-stack">${txt}<textarea data-o="${owner}" data-k="${s.key}" rows="3">${escapeHtml(String(v ?? ""))}</textarea></label>`;
+  if (s.type === "url") return `<label class="set-row set-stack">${txt}<input type="url" class="set-input" data-o="${owner}" data-k="${s.key}" data-type="url" value="${escapeHtml(String(v ?? ""))}"></label>`;
   if (s.type === "secret") {
-    return `<div class="mdn-secret" data-secret-row="${owner}.${s.key}"><label>${title}</label>
-      <input type="password" autocomplete="off" data-secret-input="${owner}.${s.key}" placeholder="not shown after save">
-      <span class="mdn-secret-actions"><button type="button" data-secret="set" data-o="${owner}" data-k="${s.key}">Save</button>
-      <button type="button" data-secret="clear" data-o="${owner}" data-k="${s.key}">Clear</button></span>
-      <span class="mdn-secret-status" data-secret-status="${owner}.${s.key}">…</span></div>`;
+    return `<div class="set-row set-stack mdn-secret" data-secret-row="${owner}.${s.key}"><label class="set-txt"><span class="set-label">${title}</span></label>
+      <input type="password" class="set-input" autocomplete="off" data-secret-input="${owner}.${s.key}" placeholder="${t("not shown after save")}">
+      <span class="mdn-secret-actions"><button type="button" class="set-btn" data-secret="set" data-o="${owner}" data-k="${s.key}">${t("Save")}</button>
+      <button type="button" class="set-btn" data-secret="clear" data-o="${owner}" data-k="${s.key}">${t("Clear")}</button>
+      <span class="mdn-secret-status" data-secret-status="${owner}.${s.key}">…</span></span></div>`;
   }
-  return `<label>${title}<br><input type="${s.type === "number" ? "number" : "text"}" data-o="${owner}" data-k="${s.key}" value="${escapeHtml(String(v ?? ""))}"></label>`;
+  const num = s.type === "number";
+  return `<label class="set-row${num ? "" : " set-stack"}">${txt}<input type="${num ? "number" : "text"}" class="set-input${num ? " set-num" : ""}" data-o="${owner}" data-k="${s.key}" value="${escapeHtml(String(v ?? ""))}"></label>`;
 }
 
 function hostSecretId(owner: string, key: string): string {
@@ -1789,8 +1883,8 @@ async function refreshSecretStatus(node: HTMLElement) {
   try {
     const sid = hostSecretId(owner, key);
     const [has, backend] = await Promise.all([host.secrets.has(sid), host.secrets.backend()]);
-    node.textContent = has ? `stored ✓ (${backend})` : `not stored (${backend})`;
-  } catch { node.textContent = "unavailable"; }
+    node.textContent = has ? `${t("stored ✓")} (${backend})` : `${t("not stored")} (${backend})`;
+  } catch { node.textContent = t("unavailable"); }
 }
 
 async function saveOrClearSecret(btn: HTMLButtonElement) {

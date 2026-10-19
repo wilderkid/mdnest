@@ -85,6 +85,31 @@ export const ZH: Record<string, string> = {
   Language: "界面语言", "Follow system": "跟随系统", "Shell style": "界面风格", "Restart to apply everywhere": "部分界面重启后生效",
   "Open full settings window": "在窗口中打开完整设置", "No settings match": "没有匹配的设置", "Plugin errors": "插件错误",
   "Light / dark": "浅色 / 深色", "Follow theme": "跟随主题", Light: "浅色", Dark: "深色",
+  // settings (B)
+  Autosave: "自动保存", "1.5 s after edits stop": "编辑停止 1.5 秒后保存", "Straight quotes, -- and ... become typographic": "直引号、--、... 自动转换为排版符号",
+  "Type :smile: to pick": "输入 :smile: 唤起", "Used when a file is not valid UTF-8": "文件不是有效 UTF-8 时使用", "Custom folder": "自定义文件夹",
+  "Window chrome around the editor; colours follow the theme": "编辑区外围的界面样式，颜色跟随主题", "Plain (theme only)": "朴素（仅主题）",
+  On: "已开启", Off: "已关闭", "Writing Goal": "写作目标", "stored ✓": "已保存 ✓", "not stored": "未保存", unavailable: "不可用",
+  "not shown after save": "保存后不再显示", Clear: "清除", Sidebar: "侧边栏", "Switch workspace": "切换工作区", All: "全部",
+  "Search file names and contents in this folder.": "搜索当前文件夹中的文件名与内容。", "Open a folder to search it.": "打开文件夹后即可搜索。",
+  // plugin settings
+  "Enable AI": "启用 AI", "Provider preset": "服务预设", "Base URL": "接口地址", Model: "模型", "API key": "API 密钥", Temperature: "温度",
+  "Max tokens": "最大 Token 数", "Translate into": "翻译为", "Local only (localhost or private LAN)": "仅限本地（localhost 或局域网）",
+  "Embeddings (used by the Library plugin)": "向量模型（知识库使用）", "Embeddings base URL": "向量接口地址", "Embeddings model": "向量模型",
+  "Embeddings API key (optional)": "向量 API 密钥（可选）", "Daily request limit (0 = none)": "每日请求上限（0 = 不限）", "Daily token limit (0 = none)": "每日 Token 上限（0 = 不限）",
+  "Excluded folders (one prefix per line)": "排除的文件夹（每行一个前缀）", "Rewrite shortcut": "改写快捷键", Privacy: "隐私",
+  "Relay (Grok)": "中转（Grok）", "Ollama (local)": "Ollama（本地）", Custom: "自定义",
+  "Selected text, nearby document context, and chat messages are sent to the configured provider. Nothing is sent while AI is off. Documents in excluded folders are never sent. There is no telemetry.": "选中的文字、附近的文档上下文和聊天消息会发送到所配置的服务。AI 关闭时不会发送任何内容；排除文件夹中的文档永远不会发送。没有任何遥测。",
+  "OpenAI-compatible /v1/embeddings. The default is a local Ollama (ollama pull nomic-embed-text); the relay preset has no embeddings endpoint. Changing the model rebuilds the index.": "兼容 OpenAI 的 /v1/embeddings 接口。默认使用本地 Ollama（ollama pull nomic-embed-text）；中转预设没有向量接口。更换模型会重建索引。",
+  "Index the open folder": "为打开的文件夹建立索引", "Also exclude (one folder per line)": "额外排除（每行一个文件夹）", "Build vectors when AI is on": "AI 开启时生成向量",
+  "Sources per @library question": "每次 @知识库 提问引用的来源数",
+  "The index stays on this computer (app data folder). Keyword search needs nothing else. With AI enabled, chunk text is sent to the embeddings endpoint set in Settings → AI to build vectors; folders excluded there or here are never indexed.": "索引保存在本机（应用数据文件夹）。关键词搜索无需其他配置。开启 AI 后，分段文本会发送到“设置 → AI”中的向量接口以生成向量；在那里或这里排除的文件夹永远不会被索引。",
+  "Highlight sentences longer than N words": "高亮超过 N 字的长句", "Long sentence threshold (words)": "长句阈值（字）",
+  "Meaning match cut-off for all models (cosine distance 0–2, lower = stricter; 0 = per-model default)": "语义匹配阈值（余弦距离 0–2，越小越严格；0 = 按模型默认）",
+  "Per-model cut-offs, one per line: model = max [relative] (e.g. nomic-embed-text = 0.4 0.05). Built-in: nomic-embed-text 0.4 / 0.05, others 0.8 / 0.15": "按模型设置阈值，每行一个：模型 = 最大值 [相对值]（如 nomic-embed-text = 0.4 0.05）。内置：nomic-embed-text 0.4 / 0.05，其他 0.8 / 0.15",
+  // toasts
+  Readonly: "只读", Editable: "可编辑", "Copied table": "已复制表格", "Enter a value to store": "请输入要保存的值",
+
   // dialogs
   Cancel: "取消", OK: "确定", "Don't Save": "不保存", "Pandoc not found": "未找到 Pandoc", "Install Pandoc": "安装 Pandoc", "Re-check": "重新检测",
   "These formats need Pandoc. Built-in Word, HTML, and PDF still work.": "这些格式需要安装 Pandoc。内置的 Word、HTML 和 PDF 导出不受影响。",
