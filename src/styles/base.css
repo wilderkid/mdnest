@@ -178,3 +178,15 @@ body.typora-sourceview-on content { visibility: hidden; }
 .mdn-cm-fallback.mdn-dark .cm-s-inner .cm-comment { color: #7f848e; } .mdn-cm-fallback.mdn-dark .cm-s-inner .cm-number { color: #d19a66; }
 .mdn-cm-fallback.mdn-dark .cm-s-inner .cm-def, .mdn-cm-fallback.mdn-dark .cm-s-inner .cm-variable-2 { color: #61afef; }
 .recent-dir { font-size: 11px; opacity: .55; padding: 0 10px 4px 30px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---- footnotes & reference definitions (Phase 2 fixes) ---- */
+#write sup.md-footnote { font-size: .75em; line-height: 0; padding: 0 .15em; cursor: pointer; }
+#write sup.md-footnote a { text-decoration: none; }
+#write sup.md-footnote.md-footnote-missing { opacity: .6; }
+.md-def-footnote { display: flex; gap: .5em; font-size: .9em; margin: .4em 0; color: var(--mdn-muted, #6b7280); }
+.md-def-footnote .md-def-name { flex: none; user-select: none; }
+.md-def-footnote .md-def-name::before { content: "[^"; }
+.md-def-footnote .md-def-name::after { content: "]:"; }
+.md-def-footnote .md-def-content { flex: 1; min-width: 0; color: var(--text-color, inherit); }
+.md-def-link { white-space: pre-wrap; font-family: var(--monospace, ui-monospace, monospace); font-size: .85em; color: var(--mdn-muted, #6b7280); margin: .4em 0; }
+.typora-export .md-def-link { display: none; }

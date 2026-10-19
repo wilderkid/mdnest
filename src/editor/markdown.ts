@@ -93,9 +93,104 @@ function typoraExtras(md: any) {
   });
 }
 
+/**
+ * Footnotes, kept in place (unlike markdown-it-footnote, which moves definitions to the end):
+ *   inline `[^label]` → footnote_ref token; block `[^label]: text` (+ continuation lines) → footnote_def.
+ */
+function footnotePlugin(md: any) {
+  const DEF = /^\[\^([^\]\s]+)\]:[ \t]?/;
+  md.block.ruler.before("reference", "footnote_def", (state: any, startLine: number, endLine: number, silent: boolean) => {
+    if (state.sCount[startLine] - state.blkIndent >= 4) return false;
+    const start = state.bMarks[startLine] + state.tShift[startLine], max = state.eMarks[startLine];
+    const m = DEF.exec(state.src.slice(start, max)); if (!m) return false;
+    if (silent) return true;
+    const lines = [state.src.slice(start + m[0].length, max)];
+    let next = startLine + 1;
+    const terms = state.md.block.ruler.getRules("paragraph");
+    while (next < endLine && !state.isEmpty(next)) {
+      const s = state.bMarks[next] + state.tShift[next]; const l = state.src.slice(s, state.eMarks[next]);
+      if (state.sCount[next] - state.blkIndent < 4) {
+        if (DEF.test(l)) break;
+        const old = state.parentType; state.parentType = "paragraph";
+        const stop = terms.some((r: any) => r(state, next, endLine, true));
+        state.parentType = old; if (stop) break;
+      }
+      lines.push(l); next++;
+    }
+    const open = state.push("footnote_def_open", "div", 1);
+    open.meta = { label: m[1], tight: next < endLine && !state.isEmpty(next) }; open.block = true; open.map = [startLine, next];
+    const inl = state.push("inline", "", 0); inl.content = lines.join("\n"); inl.map = [startLine, next]; inl.children = [];
+    state.push("footnote_def_close", "div", -1);
+    state.line = next;
+    return true;
+  }, { alt: ["paragraph", "reference"] });
+  md.inline.ruler.before("link", "footnote_ref", (state: any, silent: boolean) => {
+    if (state.src.charCodeAt(state.pos) !== 0x5b || state.src.charCodeAt(state.pos + 1) !== 0x5e) return false;
+    const m = /^\[\^([^\]\s]+)\]/.exec(state.src.slice(state.pos, state.posMax)); if (!m) return false;
+    if (!silent) { const t = state.push("footnote_ref", "sup", 0); t.meta = { label: m[1] }; }
+    state.pos += m[0].length;
+    return true;
+  });
+}
+
+/**
+ * Reference-style links/images: markdown-it resolves them and drops the definitions. We keep both:
+ * runs of `[id]: url "title"` lines become a link_def block (raw text, saved verbatim) and every
+ * link/image token records how it was written (full `[t][id]`, collapsed `[t][]`, shortcut `[t]`).
+ */
+function referencePlugin(md: any) {
+  const rules = md.block.ruler.__rules__;
+  const orig = rules.find((r: any) => r.name === "reference").fn;
+  md.block.ruler.at("reference", (state: any, startLine: number, endLine: number, silent: boolean) => {
+    if (silent) return orig(state, startLine, endLine, true);
+    if (!orig(state, startLine, endLine, false)) return false;
+    const isFootnote = (l: number) => state.src.slice(state.bMarks[l] + state.tShift[l], state.bMarks[l] + state.tShift[l] + 2) === "[^";
+    while (state.line < endLine && !state.isEmpty(state.line) && state.sCount[state.line] - state.blkIndent < 4 && !isFootnote(state.line)) {
+      if (!orig(state, state.line, endLine, false)) break;
+    }
+    const tok = state.push("link_def", "div", 0); tok.block = true; tok.map = [startLine, state.line];
+    tok.content = state.getLines(startLine, state.line, state.blkIndent, false).replace(/\n+$/, "");
+    return true;
+  });
+  const wrap = (name: string, bang: number) => {
+    const fn = md.inline.ruler.__rules__.find((r: any) => r.name === name).fn;
+    md.inline.ruler.at(name, (state: any, silent: boolean) => {
+      const start = state.pos, n0 = state.tokens.length;
+      if (!fn(state, silent)) return false;
+      if (silent) return true;
+      const end = state.pos; const save = state.pos; state.pos = start;
+      const labelEnd = state.md.helpers.parseLinkLabel(state, start + bang, !bang);
+      state.pos = save;
+      // (pending text is flushed as a text token first, so search for the link/image token)
+      let tok: any = null;
+      for (let i = n0; i < state.tokens.length; i++) if (state.tokens[i].type === (bang ? "image" : "link_open")) { tok = state.tokens[i]; break; }
+      if (labelEnd < 0 || !tok) return true;
+      const after = labelEnd + 1;
+      let meta: any = null;
+      if (end === after) meta = { refType: "shortcut", ref: null };
+      else if (state.src[after] === "[") {
+        const label = state.src.slice(after + 1, end - 1);
+        meta = label ? { refType: "full", ref: label } : { refType: "collapsed", ref: null };
+      }
+      if (meta) tok.meta = { ...(tok.meta || {}), ...meta };
+      return true;
+    });
+  };
+  wrap("link", 0); wrap("image", 1);
+}
+
 export const md = new MarkdownIt("commonmark", { html: true })
   .enable(["table", "strikethrough"])
-  .use(markPlugin).use(mathPlugin).use(frontMatterPlugin).use(typoraExtras);
+  .use(markPlugin).use(mathPlugin).use(frontMatterPlugin).use(footnotePlugin).use(referencePlugin).use(typoraExtras);
+
+/** markdown-it env holding the link reference definitions found in `doc` (for re-parsing fragments) */
+export function refEnvFor(doc: PMNode): any {
+  const defs: string[] = [];
+  doc.descendants((n) => { if (n.type.name === "link_def") defs.push(n.textContent); return n.isBlock && !n.isTextblock; });
+  const env: any = {};
+  if (defs.length) md.parse(defs.join("\n\n"), env);
+  return env;
+}
 
 const listIsTight = (tokens: any[], i: number) => {
   while (++i < tokens.length) if (tokens[i].type !== "list_item_open") return tokens[i].hidden;
@@ -116,14 +211,17 @@ export const parser = new MarkdownParser(schema, md, {
   toc: { node: "toc" },
   html_block: { node: "html_block", getAttrs: (tok) => ({ html: tok.content }) },
   hr: { node: "horizontal_rule" },
-  image: { node: "image", getAttrs: (tok) => ({ src: tok.attrGet("src"), title: tok.attrGet("title") || null, alt: tok.children?.[0]?.content || null }) },
+  image: { node: "image", getAttrs: (tok) => ({ src: tok.attrGet("src"), title: tok.attrGet("title") || null, alt: tok.children?.[0]?.content || null, refType: tok.meta?.refType ?? null, ref: tok.meta?.ref ?? null }) },
+  footnote_ref: { node: "footnote_ref", getAttrs: (tok) => ({ label: tok.meta.label }) },
+  footnote_def: { block: "footnote_def", getAttrs: (tok) => ({ label: tok.meta.label, tight: !!tok.meta.tight }) },
+  link_def: { block: "link_def", noCloseToken: true },
   hardbreak: { node: "hard_break" },
   math_inline: { node: "inline_math", getAttrs: (tok) => ({ tex: tok.content }) },
   em: { mark: "em" },
   strong: { mark: "strong" },
   s: { mark: "strike" },
   mark: { mark: "highlight" },
-  link: { mark: "link", getAttrs: (tok) => ({ href: tok.attrGet("href"), title: tok.attrGet("title") || null }) },
+  link: { mark: "link", getAttrs: (tok) => ({ href: tok.attrGet("href"), title: tok.attrGet("title") || null, refType: tok.meta?.refType ?? null, ref: tok.meta?.ref ?? null }) },
   code_inline: { mark: "code", noCloseToken: true },
   table: { block: "table" },
   thead: { ignore: true },
@@ -133,6 +231,9 @@ export const parser = new MarkdownParser(schema, md, {
   td: { block: "table_cell", getAttrs: (tok) => ({ align: (/text-align:\s*(\w+)/.exec(tok.attrGet("style") || "") || [])[1] || null }) },
 });
 
+// prosemirror-markdown turns soft line breaks into spaces, which rewrites every wrapped paragraph on
+// save; keep them as "\n" (rendered as a space in export, as a line break while editing).
+(parser as any).tokenHandlers.softbreak = (state: any) => state.addText("\n");
 const d = defaultMarkdownSerializer;
 function serializeCellInline(state: MarkdownSerializerState, cell: PMNode) {
   const sub = new (MarkdownSerializerState as any)(serializer.nodes, serializer.marks, {});
@@ -147,6 +248,19 @@ export const serializer = new MarkdownSerializer({
   toc(state, node) { state.write("[TOC]"); state.closeBlock(node); },
   html_block(state, node) { state.text(node.attrs.html.replace(/\n$/, ""), false); state.closeBlock(node); },
   inline_math(state, node) { state.write("$" + node.attrs.tex + "$"); },
+  footnote_ref(state, node) { state.write("[^" + node.attrs.label + "]"); },
+  footnote_def(state, node) {
+    const st: any = state;
+    if (st.closed && st.closed.type === node.type && st.closed.attrs.tight) st.flushClose(1);
+    // continuation lines are indented 4 spaces (also accepted lazily when parsing)
+    state.wrapBlock("    ", "[^" + node.attrs.label + "]: ", node, () => state.renderInline(node));
+  },
+  link_def(state, node) { state.text(node.textContent, false); state.closeBlock(node); },
+  image(state, node, parent, index) {
+    const a = node.attrs;
+    if (!a.refType) return (d.nodes.image as any)(state, node, parent, index);
+    state.write("![" + state.esc(a.alt || "") + "]" + (a.refType === "full" ? "[" + a.ref + "]" : a.refType === "collapsed" ? "[]" : ""));
+  },
   list_item(state, node) {
     if (node.attrs.checked !== null) state.write(node.attrs.checked ? "[x] " : "[ ] ");
     state.renderContent(node);
@@ -170,6 +284,18 @@ export const serializer = new MarkdownSerializer({
   ...d.marks,
   strike: { open: "~~", close: "~~", mixable: true, expelEnclosingWhitespace: true },
   highlight: { open: "==", close: "==", mixable: true, expelEnclosingWhitespace: true },
+  link: {
+    open(state, mark, parent, index) {
+      if (mark.attrs.refType) { (state as any).inAutolink = false; return "["; }
+      return (d.marks.link.open as any)(state, mark, parent, index);
+    },
+    close(state, mark, parent, index) {
+      const a = mark.attrs;
+      if (a.refType) { (state as any).inAutolink = undefined; return a.refType === "full" ? "][" + a.ref + "]" : a.refType === "collapsed" ? "][]" : "]"; }
+      return (d.marks.link.close as any)(state, mark, parent, index);
+    },
+    mixable: (d.marks.link as any).mixable,
+  },
   md_src: { open: "", close: "" }, // never reached: raw regions are collapsed before serializing
 });
 

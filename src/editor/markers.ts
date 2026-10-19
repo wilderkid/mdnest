@@ -8,7 +8,7 @@ import { Decoration, DecorationSet, EditorView } from "prosemirror-view";
 import { Fragment, Mark, Node as PMNode } from "prosemirror-model";
 import { Transform } from "prosemirror-transform";
 import { schema } from "./schema";
-import { parser, serializer } from "./markdown";
+import { parser, serializer, refEnvFor } from "./markdown";
 import { renderTex } from "./render";
 
 const CARET = "\uE000", LEAD = "\uE001";
@@ -32,10 +32,10 @@ export function inlineToMarkdown(frag: Fragment, caret?: number): { text: string
 }
 
 /** markdown source → inline fragment (falls back to plain text when it would not be a paragraph) */
-export function markdownToInline(raw: string): Fragment {
+export function markdownToInline(raw: string, env: any = {}): Fragment {
   if (!raw) return Fragment.empty;
   try {
-    const doc = parser.parse(LEAD + raw);
+    const doc = (parser as any).parse(LEAD + raw, { references: env.references });
     if (doc && doc.childCount === 1 && doc.firstChild!.type === schema.nodes.paragraph) {
       const c = doc.firstChild!.content;
       const first = c.firstChild!;
@@ -101,7 +101,7 @@ function collapseBlock(tr: Transform, blockPos: number, caret: number | null): n
   const para = schema.nodes.paragraph.create(null, Fragment.from(schema.text(LEAD)).append(Fragment.fromArray(parts)));
   let text = serializer.serialize(schema.node("doc", null, [para])).replace(/\n+$/, "").replace(LEAD, "");
   text = text.replace(/[\ue100-\ue1ff]/g, (ch) => raws[ch.charCodeAt(0) - PH] ?? "");
-  let frag = markdownToInline(text);
+  let frag = markdownToInline(text, /[\[\]]/.test(text) ? refEnvFor(tr.doc) : {});
   // locate + remove caret sentinel
   let newCaret: number | null = null;
   if (caretPlaced) {
@@ -140,7 +140,8 @@ function expandable(doc: PMNode, pos: number) {
   type Seg = { from: number; to: number; node: PMNode };
   const segs: Seg[] = [];
   parent.forEach((n, off) => segs.push({ from: start + off, to: start + off + n.nodeSize, node: n }));
-  const formatted = (n: PMNode) => n.type.name === "inline_math" || n.marks.some((m) => m.type !== src);
+  const ATOMS = ["inline_math", "footnote_ref"];
+  const formatted = (n: PMNode) => ATOMS.includes(n.type.name) || n.marks.some((m) => m.type !== src);
   // segments that touch the caret and are formatted
   let lo = -1, hi = -1;
   segs.forEach((s, i) => { if (formatted(s.node) && s.from <= pos && pos <= s.to) { if (lo < 0) lo = i; hi = i; } });
@@ -149,7 +150,7 @@ function expandable(doc: PMNode, pos: number) {
   const shares = (a: PMNode, b: PMNode) => a.marks.some((m) => m.type !== src && m.isInSet(b.marks));
   while (lo > 0 && shares(segs[lo].node, segs[lo - 1].node)) lo--;
   while (hi < segs.length - 1 && shares(segs[hi].node, segs[hi + 1].node)) hi++;
-  if (segs.slice(lo, hi + 1).some((s) => !s.node.isText && s.node.type.name !== "inline_math")) return null; // images etc.
+  if (segs.slice(lo, hi + 1).some((s) => !s.node.isText && !ATOMS.includes(s.node.type.name))) return null; // images etc.
   return { from: segs[lo].from, to: segs[hi].to, start, parent };
 }
 

@@ -30,6 +30,46 @@ class InlineMathView implements NodeView {
   stopEvent(e: Event) { return e.type === "mousedown"; }
 }
 
+/** footnote reference: superscript label (title = definition text). Click → caret next to it, which
+ *  reveals the editable `[^label]` source; Ctrl/Cmd+click jumps to the definition. */
+class FootnoteRefView implements NodeView {
+  dom: HTMLElement;
+  constructor(private node: PMNode, private view: EditorView, private getPos: () => number | undefined) {
+    this.dom = document.createElement("sup");
+    this.dom.className = "md-footnote"; this.dom.setAttribute("md-inline", "footnote"); this.dom.setAttribute("mdtype", "footnote");
+    this.render();
+    this.dom.addEventListener("click", (e) => e.preventDefault());
+    this.dom.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      if (e.ctrlKey || e.metaKey) { this.jump(); return; }
+      const p = this.getPos(); if (p == null) return;
+      this.view.dispatch(this.view.state.tr.setSelection(TextSelection.create(this.view.state.doc, p + this.node.nodeSize)));
+      this.view.focus();
+    });
+  }
+  definition(): { pos: number; text: string } | null {
+    let r: { pos: number; text: string } | null = null;
+    this.view.state.doc.descendants((n, pos) => { if (!r && n.type.name === "footnote_def" && n.attrs.label === this.node.attrs.label) r = { pos, text: n.textContent }; return !r; });
+    return r;
+  }
+  render() {
+    const l = this.node.attrs.label;
+    this.dom.innerHTML = "";
+    const a = document.createElement("a"); a.href = "#dfref-footnote-" + l; a.setAttribute("name", "ref-footnote-" + l); a.textContent = l;
+    this.dom.appendChild(a);
+    const d = this.definition(); this.dom.title = d ? d.text : `[^${l}] (no definition)`;
+    this.dom.classList.toggle("md-footnote-missing", !d);
+  }
+  jump() {
+    const d = this.definition(); if (!d) return;
+    this.view.dispatch(this.view.state.tr.setSelection(TextSelection.create(this.view.state.doc, d.pos + 1)).scrollIntoView());
+    this.view.focus();
+  }
+  update(n: PMNode) { if (n.type !== this.node.type) return false; this.node = n; this.render(); return true; }
+  ignoreMutation() { return true; }
+  stopEvent(e: Event) { return e.type === "mousedown"; }
+}
+
 /** TOC block: rendered from document headings; refreshed by the editor on every doc change */
 export class TocView implements NodeView {
   dom: HTMLElement;
@@ -77,6 +117,7 @@ export function nodeViews() {
     math_block: (n: PMNode, v: EditorView, g: any) => new CodeView(n, v, g, "math"),
     front_matter: (n: PMNode, v: EditorView, g: any) => new CodeView(n, v, g, "yaml"),
     inline_math: (n: PMNode, v: EditorView, g: any) => new InlineMathView(n, v, g),
+    footnote_ref: (n: PMNode, v: EditorView, g: any) => new FootnoteRefView(n, v, g),
     toc: (_n: PMNode, v: EditorView) => { const t = new TocView(v); tocViews.add(t); return t; },
     html_block: (n: PMNode) => new HtmlBlockView(n),
   };

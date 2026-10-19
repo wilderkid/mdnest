@@ -52,6 +52,19 @@ const nodes: Record<string, NodeSpec> = {
     attrs: { html: { default: "" } }, group: "block", atom: true,
     toDOM: () => ["div", { class: "md-htmlblock md-rawblock", mdtype: "html_block" }],
   },
+  // footnote definition [^label]: text — stays where it is written (.md-def-footnote/.md-def-name/.md-def-content)
+  footnote_def: {
+    attrs: { label: { default: "" }, tight: { default: false } }, content: "inline*", group: "block", defining: true,
+    parseDOM: [{ tag: "div.md-def-footnote", contentElement: ".md-def-content", getAttrs: (d: any) => ({ label: d.querySelector(".md-def-name")?.textContent || "" }) }],
+    toDOM: (n) => ["div", { class: "md-def-footnote md-end-block", mdtype: "def_footnote", id: "dfref-footnote-" + n.attrs.label },
+      ["span", { class: "md-def-name", contenteditable: "false" }, n.attrs.label], ["span", { class: "md-def-content" }, 0]],
+  },
+  // link reference definitions ([id]: url "title"), kept as raw lines and saved verbatim
+  link_def: {
+    content: "text*", marks: "", group: "block", code: true, defining: true,
+    parseDOM: [{ tag: "div.md-def-link", preserveWhitespace: "full" }],
+    toDOM: () => ["div", { class: "md-def-link md-rawblock md-end-block", mdtype: "def_link", spellcheck: "false" }, 0],
+  },
   ordered_list: {
     attrs: { order: { default: 1 }, tight: { default: true } }, content: "list_item+", group: "block",
     parseDOM: [{ tag: "ol" }],
@@ -72,13 +85,20 @@ const nodes: Record<string, NodeSpec> = {
   },
   text: { group: "inline" },
   image: {
-    inline: true, attrs: { src: {}, alt: { default: null }, title: { default: null } }, group: "inline", draggable: true,
+    inline: true, attrs: { src: {}, alt: { default: null }, title: { default: null }, refType: { default: null }, ref: { default: null } }, group: "inline", draggable: true,
     parseDOM: [{ tag: "img[src]", getAttrs: (d: any) => ({ src: d.getAttribute("src"), title: d.getAttribute("title"), alt: d.getAttribute("alt") }) }],
     toDOM: (n) => ["span", { "md-inline": "image", class: "md-image" }, ["img", { src: resolveImageSrc(n.attrs.src), alt: n.attrs.alt, title: n.attrs.title }]],
   },
   inline_math: {
     inline: true, group: "inline", atom: true, attrs: { tex: { default: "" } },
     toDOM: (n) => ["span", { "md-inline": "inline_math", class: "md-inline-math" }, n.attrs.tex],
+  },
+  // footnote reference [^label] → <sup class="md-footnote"> (Typora theme contract)
+  footnote_ref: {
+    inline: true, group: "inline", atom: true, attrs: { label: { default: "" } },
+    parseDOM: [{ tag: "sup.md-footnote", getAttrs: (d: any) => ({ label: d.textContent }) }],
+    toDOM: (n) => ["sup", { class: "md-footnote", "md-inline": "footnote", mdtype: "footnote" },
+      ["a", { href: "#dfref-footnote-" + n.attrs.label, name: "ref-footnote-" + n.attrs.label }, n.attrs.label]],
   },
   hard_break: {
     inline: true, group: "inline", selectable: false,
@@ -111,7 +131,7 @@ const inlineMark = (type: string, tag: string): MarkSpec => ({
 
 const marks: Record<string, MarkSpec> = {
   link: {
-    attrs: { href: {}, title: { default: null } }, inclusive: false,
+    attrs: { href: {}, title: { default: null }, refType: { default: null }, ref: { default: null } }, inclusive: false,
     parseDOM: [{ tag: "a[href]", getAttrs: (d: any) => ({ href: d.getAttribute("href"), title: d.getAttribute("title") }) }],
     toDOM: (m) => ["span", { "md-inline": "link" }, ["a", { href: m.attrs.href, title: m.attrs.title }, 0]] as any,
   },
