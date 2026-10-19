@@ -283,3 +283,40 @@ pub async fn net_stream(
 pub async fn net_cancel(id: String) -> bool {
     crate::net::cancel(&id)
 }
+
+// ---------- workspace index ("library" core service) ----------
+
+#[cfg(feature = "library")]
+fn kb_data_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    use tauri::Manager;
+    app.path().app_data_dir().map_err(|e| e.to_string())
+}
+
+/// One index request (`{op, root, ...}`, see kb::dispatch). Runs on a blocking worker thread.
+#[tauri::command]
+pub async fn kb_call(app: tauri::AppHandle, req: serde_json::Value) -> Result<serde_json::Value, String> {
+    #[cfg(feature = "library")]
+    {
+        let dir = kb_data_dir(&app)?;
+        tauri::async_runtime::spawn_blocking(move || crate::kb::dispatch(&dir, req)).await.map_err(|e| e.to_string())?
+    }
+    #[cfg(not(feature = "library"))]
+    { let _ = (app, req); Err("library support not built".into()) }
+}
+
+/// Watch a workspace folder; debounced batches of changed Markdown paths arrive on `on_change`.
+#[tauri::command]
+pub async fn kb_watch(id: String, root: String, on_change: tauri::ipc::Channel<Vec<String>>) -> Result<(), String> {
+    #[cfg(feature = "library")]
+    { crate::kb::watch::start(&id, std::path::Path::new(&root), std::time::Duration::from_millis(1500), move |b| { let _ = on_change.send(b); }) }
+    #[cfg(not(feature = "library"))]
+    { let _ = (id, root, on_change); Err("library support not built".into()) }
+}
+
+#[tauri::command]
+pub async fn kb_unwatch(id: String) -> bool {
+    #[cfg(feature = "library")]
+    { crate::kb::watch::stop(&id) }
+    #[cfg(not(feature = "library"))]
+    { let _ = id; false }
+}

@@ -1,4 +1,6 @@
 mod commands;
+#[cfg(feature = "library")]
+pub mod kb;
 mod net;
 #[cfg(any(target_os = "linux", target_os = "macos", windows))]
 mod pdf;
@@ -97,6 +99,9 @@ pub fn run() {
             commands::secret_backend,
             commands::net_stream,
             commands::net_cancel,
+            commands::kb_call,
+            commands::kb_watch,
+            commands::kb_unwatch,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

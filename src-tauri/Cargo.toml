@@ -5,6 +5,16 @@ description = "mdnest markdown editor"
 authors = ["mdnest"]
 edition = "2021"
 rust-version = "1.77.2"
+default-run = "mdnest"
+
+[[bin]]
+name = "kb-cli"
+path = "src/bin/kb-cli.rs"
+required-features = ["library"]
+
+[[bin]]
+name = "mdnest"
+path = "src/main.rs"
 
 [lib]
 name = "mdnest_lib"
@@ -26,6 +36,15 @@ url = "2"
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-openssl"] }
 futures-util = "0.3"
 tokio = { version = "1", features = ["sync", "time", "rt", "macros"] }
+# Workspace index ("library"): SQLite (bundled, FTS5) + sqlite-vec + file watching.
+rusqlite = { version = "0.37", features = ["bundled"], optional = true }
+sqlite-vec = { version = "0.1", optional = true }
+notify = { version = "8", default-features = false, features = ["macos_fsevent"], optional = true }
+
+[features]
+default = ["library"]
+# The cross-check (no MSVC/macOS C toolchain on this box) runs without it; see scripts/cross-check.sh.
+library = ["dep:rusqlite", "dep:sqlite-vec", "dep:notify"]
 
 # Platform TLS everywhere (smaller than rustls+ring, ~1 MB on Linux): OpenSSL on Linux (libssl3 is a
 # deb dependency and is also used by keyring's crypto-openssl), schannel on Windows,
