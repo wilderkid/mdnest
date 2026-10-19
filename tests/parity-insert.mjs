@@ -324,6 +324,7 @@ ok(await page.locator("#sidebar-sort-btn").innerText().then((t) => t.includes("S
 
 ok(errors.length === 0, "no page errors", errors.join(" | "));
 await browser.close();
+fs.rmSync(DOC, { force: true }); fs.rmSync(path.resolve("dev-data/.trash"), { recursive: true, force: true });
 const failed = results.filter((r) => !r.pass);
 console.log(JSON.stringify({ passed: results.length - failed.length, failed: failed.length }, null, 1));
 process.exit(failed.length ? 1 : 0);
