@@ -2,6 +2,8 @@
 // Typora defaults: brackets/quotes on, Markdown syntax off. Never inside code or math.
 import { Plugin, TextSelection } from "prosemirror-state";
 import { EditorView } from "prosemirror-view";
+import { closeHistory } from "prosemirror-history";
+import { curlyQuote, smartPunctOn } from "./smartpunct";
 
 export const PAIR_BRACKETS_KEY = "mdnest.autoPair.brackets";
 export const PAIR_MARKDOWN_KEY = "mdnest.autoPair.markdown";
@@ -86,8 +88,16 @@ export function autoPairPlugin() {
         // Pair "[" only as the first character of an empty paragraph.
         if (text === "[" && (before.length > 0 || view.state.doc.resolve(from).parent.content.size > 0)) return false;
         if ((text === "*" || text === "_" || text === "`" || text === "~" || text === "=") && before.endsWith(text)) return false;
-        const tr = view.state.tr.insertText(text + close, from, to);
-        tr.setSelection(TextSelection.create(tr.doc, from + 1));
+        let open = text, shut = close;
+        if (smartPunctOn() && (text === '"' || text === "'")) {
+          const prev = before.slice(-1);
+          open = curlyQuote(prev, text);
+          shut = text === '"' ? "\u201D" : "\u2019";
+        }
+        let tr = view.state.tr;
+        if (open !== text) tr = closeHistory(tr);
+        tr = tr.insertText(open + shut, from, to);
+        tr.setSelection(TextSelection.create(tr.doc, from + open.length));
         view.dispatch(tr.scrollIntoView());
         return true;
       },
@@ -100,7 +110,8 @@ export function autoPairPlugin() {
         const map = pairBracketsOn() ? pairs() : MD_PAIRS;
         const before = from > 0 ? view.state.doc.textBetween(from - 1, from) : "";
         const after = view.state.doc.textBetween(from, Math.min(from + 1, view.state.doc.content.size));
-        if (map[before] === after) {
+        const curly = (before === "\u201C" && after === "\u201D") || (before === "\u2018" && after === "\u2019");
+        if (map[before] === after || curly) {
           event.preventDefault();
           view.dispatch(view.state.tr.delete(from - 1, from + 1).scrollIntoView());
           return true;

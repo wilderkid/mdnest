@@ -5,6 +5,7 @@ import { imageAlignFromStyle, imageStyle, imageZoomFromStyle } from "../src/edit
 import { setTaskStatus } from "../src/editor/editops";
 import { EditorState, TextSelection } from "prosemirror-state";
 import { applyEol, decodeAs, detectEol, encodeText, openBytes, type SaveEncoding } from "../src/editor/encoding";
+import { curlyQuote } from "../src/editor/smartpunct";
 
 let failed = 0;
 const ok = (c: boolean, name: string, info = "") => {
@@ -85,6 +86,10 @@ function roundEnc(text: string, enc: SaveEncoding): { back: string; unmapped: st
   ok(saved.bytes.includes(0x0d) && saved.bytes.includes(0x0a), "CRLF preserved in encoded bytes");
   ok(decodeAs(saved.bytes, "GB18030") === "甲\n乙\n", "CRLF decoded back to LF text");
 }
+
+ok(curlyQuote("", '"') === "\u201C" && curlyQuote("a", '"') === "\u201D", "curly double quotes");
+ok(curlyQuote("", "'") === "\u2018" && curlyQuote("n", "'") === "\u2019", "apostrophe stays a right single quote");
+ok(curlyQuote(" ", "'") === "\u2018", "opening single quote after space");
 
 console.log(`\n${failed ? failed + " failed" : "all passed"}`);
 process.exit(failed ? 1 : 0);

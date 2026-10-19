@@ -9,6 +9,7 @@ import { arrowHandler } from "./codeview";
 import { inRawRegion } from "./markers";
 import { EditorState, TextSelection } from "prosemirror-state";
 import { blockEnterRule, taskListFromParagraph } from "./blockenter";
+import { smartPunctRules } from "./smartpunct";
 export { tableCells } from "./blockenter";
 
 /** Ctrl+B etc.: toggle the real mark, or — inside a raw region — wrap/unwrap literal delimiters */
@@ -65,6 +66,7 @@ export function buildInputRules(s: Schema) {
     markRule(/(\^)([^^\s]+)\^$/, m.superscript),
     markRule(/(?<!~)(~)([^~\s]+)~(?!~)$/, m.subscript),
     new InputRule(/(?<!\$)\$([^$\s][^$]*)\$$/, (state, match, start, end) => inRawRegion(state) ? null : state.tr.replaceWith(start, end, n.inline_math.create({ tex: match[1] }))),
+    ...smartPunctRules(),
   ]});
 }
 
@@ -76,7 +78,10 @@ export function buildKeymaps(s: Schema, extra: { toggleSource: () => void; save:
   const skip = (id: string, fn: any) => (st: any, d: any, v: any) => extra.claimed?.(id) ? true : fn(st, d, v);
   const keys: Record<string, any> = {
     "Mod-Enter": (st: any, d: any) => isInTable(st) ? addRowAfter(st, d) : exitCode(st, d),
-    "Mod-z": skip("edit.undo", undo), "Shift-Mod-z": skip("edit.redo", redo), "Mod-y": skip("edit.redo", redo),
+    // The shell dispatcher also binds Mod-z. If it already undid, swallow this so one Ctrl+Z
+    // reverts a single conversion instead of two history steps.
+    "Mod-z": (st: any, d: any, v: any) => undo(st, d, v),
+    "Shift-Mod-z": skip("edit.redo", redo), "Mod-y": skip("edit.redo", redo),
     "Mod-b": skip("format.strong", fmt(m.strong, "**")), "Mod-i": skip("format.emphasis", fmt(m.em, "*")),
     "Shift-Mod-`": skip("format.code", fmt(m.code, "`")), "Alt-Shift-5": skip("format.strike", fmt(m.strike, "~~")),
     "Mod-0": skip("paragraph.paragraph", setBlockType(n.paragraph)),

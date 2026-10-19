@@ -100,6 +100,39 @@ try {
   fs.rmSync(outside, { force: true });
 
   ok(errors.length === 0, "B2 no page errors", errors.join(" | "));
+
+  // ---------- B3: smart punctuation ----------
+  await page.evaluate(() => localStorage.setItem("mdnest.smartPunct", "1"));
+  await page.evaluate((p) => window.mdnest.runCommand && (window.mdnest.state.path = p), DOC);
+  await run("file.reopen.utf8");
+  await page.waitForTimeout(200);
+  await page.locator("#write").click();
+  await page.keyboard.press("Control+End");
+  await page.keyboard.type(' "hi" it\'s ');
+  await page.keyboard.type("--");
+  await page.keyboard.type(" ");
+  await page.keyboard.type("---");
+  await page.keyboard.type(" ");
+  await page.keyboard.type("...");
+  await page.waitForTimeout(200);
+  const punct = await md();
+  ok(punct.includes("\u201Chi\u201D"), "B3 straight quotes become curly", punct);
+  ok(punct.includes("it\u2019s"), "B3 apostrophe becomes a right single quote", punct);
+  ok(punct.includes("\u2013") && punct.includes("\u2014") && punct.includes("\u2026"), "B3 dashes and ellipsis", punct);
+  await page.keyboard.press("Control+z");
+  await page.waitForTimeout(120);
+  const undone = await md();
+  ok(undone.includes("...") && !undone.includes("\u2026"), "B3 undo reverts the last conversion", undone);
+  // A line that is only --- stays a rule candidate, not an em dash.
+  await page.evaluate(() => window.mdnest.editor.setMarkdown("---\n"));
+  await page.waitForTimeout(80);
+  ok((await md()).startsWith("---"), "B3 line-start --- is not converted", await md());
+  await page.evaluate(() => window.mdnest.editor.setMarkdown("```\n\"hi\" -- ...\n```\n"));
+  await page.waitForTimeout(80);
+  ok((await md()).includes('"hi"'), "B3 does not convert inside a code fence", await md());
+  await page.screenshot({ path: path.join(OUT, "smart-punct.png") });
+  await page.evaluate(() => localStorage.setItem("mdnest.smartPunct", "0"));
+  ok(errors.length === 0, "B3 no page errors", errors.join(" | "));
 } catch (e) {
   ok(false, "parity-012b threw", e?.message || String(e));
 } finally {

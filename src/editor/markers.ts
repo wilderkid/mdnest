@@ -210,7 +210,9 @@ export function markersPlugin() {
       // 1) literally typed / pasted Markdown punctuation becomes raw source (md_src)
       const inserted: [number, number][] = [];
       trs.forEach((t, ti) => {
-        if (t.getMeta("history$") || !t.docChanged) return;
+        // A smart-punctuation replacement must stay its own undo step. Marking the
+        // inserted glyph merges that step with the characters the user just typed.
+        if (t.getMeta("history$") || t.getMeta("smart-punct") || !t.docChanged) return;
         t.steps.forEach((step, si) => step.getMap().forEach((_os, _oe, ns, ne) => {
           if (ne <= ns) return;
           let a = ns, b = ne; const rest = t.mapping.slice(si + 1);

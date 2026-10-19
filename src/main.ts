@@ -37,6 +37,7 @@ import {
   linkAt, selectLine, selectStyledScope, selectWord, selectionHtml, setImageAlign, setImageZoom, setTaskStatus, toggleTaskList,
 } from "./editor/editops";
 import { pairBracketsOn, pairMarkdownOn, PAIR_BRACKETS_KEY, PAIR_MARKDOWN_KEY } from "./editor/autopair";
+import { smartPunctOn, SMART_PUNCT_KEY } from "./editor/smartpunct";
 import {
   ENCODINGS, SAVE_ENCODINGS, EOL_KEY, FALLBACK_KEY, applyEol, b64ToBytes, bytesToB64, decodeAs, defaultEol,
   encodeText, encodingLabel, fallbackEncoding, openBytes, type SaveEncoding,
@@ -500,6 +501,7 @@ const plugins = new PluginManager({
   { id: "insert.table", title: "Insert: Table…", key: "Ctrl+T", run: () => openTableDialog() },
   { id: "file.exportHtml", title: "File: Export HTML…", run: () => exportHtml() },
   { id: "file.exportPdf", title: "File: Export PDF…", run: () => exportPdf() },
+  { id: "edit.smartPunct", title: "Edit: Smart Punctuation", run: () => { const on = !smartPunctOn(); localStorage.setItem(SMART_PUNCT_KEY, on ? "1" : "0"); notify("Smart punctuation " + (on ? "on" : "off")); scheduleMenu(); } },
   { id: "file.reload", title: "File: Reload from Disk", run: () => reloadFromDisk(true) },
   { id: "file.eol.lf", title: "File: Line Endings LF", run: () => { state.eol = "LF"; setDirty(true); paintEncoding(); scheduleMenu(); } },
   { id: "file.eol.crlf", title: "File: Line Endings CRLF", run: () => { state.eol = "CRLF"; setDirty(true); paintEncoding(); scheduleMenu(); } },
@@ -1245,6 +1247,7 @@ function menuState(windows = openWindows): MenuState {
     windows,
     pairBrackets: pairBracketsOn(),
     pairMarkdown: pairMarkdownOn(),
+    smartPunct: smartPunctOn(),
     readonly,
     eol: state.eol,
     encoding: state.encoding,
@@ -1558,6 +1561,7 @@ sidebar.addTab("settings", "⚙", undefined, {
       <label><input type="checkbox" id="set-reopen" ${localStorage.getItem(REOPEN_KEY) !== "0" ? "checked" : ""}> Reopen last file on startup</label>
       <label><input type="checkbox" id="set-pair-brackets" ${pairBracketsOn() ? "checked" : ""}> Auto-pair brackets and quotes</label>
       <label><input type="checkbox" id="set-pair-md" ${pairMarkdownOn() ? "checked" : ""}> Auto-pair Markdown syntax</label>
+      <label><input type="checkbox" id="set-smart" ${smartPunctOn() ? "checked" : ""}> Smart punctuation</label>
       <label>Default line ending for new files<br><select id="set-eol">
         <option value="LF" ${defaultEol() === "LF" ? "selected" : ""}>LF</option>
         <option value="CRLF" ${defaultEol() === "CRLF" ? "selected" : ""}>CRLF</option>
@@ -1574,6 +1578,7 @@ sidebar.addTab("settings", "⚙", undefined, {
     (el.querySelector("#set-reopen") as HTMLInputElement).onchange = (e) => localStorage.setItem(REOPEN_KEY, (e.target as HTMLInputElement).checked ? "1" : "0");
     (el.querySelector("#set-pair-brackets") as HTMLInputElement).onchange = (e) => { localStorage.setItem(PAIR_BRACKETS_KEY, (e.target as HTMLInputElement).checked ? "1" : "0"); scheduleMenu(); };
     (el.querySelector("#set-pair-md") as HTMLInputElement).onchange = (e) => { localStorage.setItem(PAIR_MARKDOWN_KEY, (e.target as HTMLInputElement).checked ? "1" : "0"); scheduleMenu(); };
+    (el.querySelector("#set-smart") as HTMLInputElement).onchange = (e) => { localStorage.setItem(SMART_PUNCT_KEY, (e.target as HTMLInputElement).checked ? "1" : "0"); scheduleMenu(); };
     (el.querySelector("#set-eol") as HTMLSelectElement).onchange = (e) => localStorage.setItem(EOL_KEY, (e.target as HTMLSelectElement).value);
     (el.querySelector("#set-fallback") as HTMLSelectElement).onchange = (e) => localStorage.setItem(FALLBACK_KEY, (e.target as HTMLSelectElement).value);
     const fsel = el.querySelector("#set-imgfolder") as HTMLSelectElement, fcus = el.querySelector("#set-imgfolder-custom") as HTMLInputElement;
