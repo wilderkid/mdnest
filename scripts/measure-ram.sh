@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Idle-RAM benchmark: PSS summed over app + all descendant processes (WebKitWebProcess, WebKitNetworkProcess).
 # usage: measure-ram.sh LABEL BINARY WAIT_S SAMPLES [FILE]
+# --no-restore: never reopen the last file (older builds ignore the flag; the fresh profile covers them).
 # Each sample uses a fresh XDG profile (no localStorage/recent/cache carry-over), same Xvfb display.
 set -u
 LABEL=$1 BIN=$2 WAIT=$3 N=$4 FILE=${5:-}
@@ -14,7 +15,7 @@ for i in $(seq 1 $N); do
   prof=$(mktemp -d /tmp/mdnram.XXXX)
   # PROFILE_SRC=1 → start from a copy of the real profile (localStorage incl. mdnest.lastFile, installed themes)
   if [ -n "${PROFILE_SRC:-}" ]; then mkdir -p $prof/data $prof/config; cp -a ~/.local/share/app.mdnest.editor $prof/data/; cp -a ~/.config/app.mdnest.editor $prof/config/; fi
-  XDG_DATA_HOME=$prof/data XDG_CONFIG_HOME=$prof/config XDG_CACHE_HOME=$prof/cache "$BIN" $FILE >/dev/null 2>&1 &
+  XDG_DATA_HOME=$prof/data XDG_CONFIG_HOME=$prof/config XDG_CACHE_HOME=$prof/cache "$BIN" --no-restore $FILE >/dev/null 2>&1 &
   P=$!; sleep "$WAIT"
   line="$LABEL #$i"; tot=0
   for p in $(desc $P); do

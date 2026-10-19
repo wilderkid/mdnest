@@ -258,6 +258,16 @@ function minimalInline(node: PMNode, options: any = {}): string | null {
   } catch { /* fall back */ }
   return null;
 }
+/** re-parse a textblock's inline content against `env` (used when a new link definition appears) */
+export function reparseInlineWithEnv(node: PMNode, env: any): PMNode | null {
+  const sub = new MSS(serializer.nodes, serializer.marks, {}); sub.noBracketEsc = true;
+  sub.renderInline(node);
+  try {
+    const d = (parser as any).parse(sub.out, { references: env.references });
+    if (d.childCount === 1 && d.firstChild.type.name === "paragraph") return d.firstChild;
+  } catch { /* ignore */ }
+  return null;
+}
 function renderInlineMinimal(state: MarkdownSerializerState, node: PMNode) {
   const cand = minimalInline(node, (state as any).options);
   if (cand == null) state.renderInline(node); else state.text(cand, false);

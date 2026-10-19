@@ -8,6 +8,7 @@ import { schema } from "./schema";
 import { parseMarkdown, serializeMarkdown } from "./markdown";
 import { revealPlugin } from "./reveal";
 import { markersPlugin, collapseAll } from "./markers";
+import { defsPlugin, defsKeymap } from "./defs";
 import { tableToolbarPlugin } from "./tabletools";
 import { searchPlugin } from "./search";
 import { nodeViews, tocViews } from "./views";
@@ -42,6 +43,7 @@ function externalDecorations(hooks: EditorHooks) {
 export function createEditor(mount: HTMLElement, markdown: string, hooks: EditorHooks) {
   const plugins = [
     markersPlugin(), // first: its keydown hook syncs a stale post-click selection before keymaps run
+    defsPlugin(), defsKeymap(),
     buildInputRules(schema), ...buildKeymaps(schema, hooks.keys), history(), dropCursor(), gapCursor(),
     columnResizing(), tableEditing(), revealPlugin(), tableToolbarPlugin(), searchPlugin(), externalDecorations(hooks),
   ];
@@ -75,6 +77,23 @@ export function createEditor(mount: HTMLElement, markdown: string, hooks: Editor
     handlePaste(view, event, slice) {
       // WebKitGTK: the paste event carries no clipboardData, so ProseMirror captures the native paste in
       // a hidden element and hands us a slice holding <img src="blob:…">. Import those bytes instead.
+      // a file copied in a file manager (text/uri-list / gnome-copied-files) can likewise reach us only as
+      // pasted text "file:///…": import the image files instead of inserting their URIs
+      // (WebKitGTK turns a text/uri-list clipboard into links: [/path/x.png](file:///path/x.png))
+      const uris: string[] = []; let plain = false;
+      slice.content.descendants((n) => {
+        if (!n.isText || !n.text!.trim()) return true;
+        const l = n.marks.find((m) => m.type.name === "link" && /^file:\/\//i.test(m.attrs.href));
+        if (l) { if (uris[uris.length - 1] !== l.attrs.href) uris.push(l.attrs.href); }
+        else if (/^\s*(file:\/\/\S+\s*)+$/i.test(n.text!)) uris.push(...n.text!.trim().split(/\s+/));
+        else plain = true;
+        return true;
+      });
+      if (hooks.onImageFiles && uris.length && !plain) {
+        const dt = new DataTransfer(); dt.setData("text/plain", uris.join("\n"));
+        const items = collectImages(dt);
+        if (items.length) { hooks.onImageFiles(items, view.state.selection.from); return true; }
+      }
       const srcs: string[] = []; let other = false;
       slice.content.descendants((n) => { if (n.type.name === "image") { if (/^(blob|data):/i.test(n.attrs.src)) srcs.push(n.attrs.src); else other = true; } else if (n.isText && n.text!.trim()) other = true; return true; });
       if (srcs.length && !other && hooks.onImageFiles && !(event.clipboardData?.files?.length)) {

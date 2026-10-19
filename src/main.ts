@@ -101,6 +101,7 @@ async function save(as: boolean) {
 
 // ---------- autosave, recent files, file watching ----------
 const AUTOSAVE_KEY = "mdnest.autosave";
+const REOPEN_KEY = "mdnest.reopenLast"; // "0" = start with the welcome page (default: reopen last file)
 let autosaveTimer: any;
 function scheduleAutosave() {
   if (localStorage.getItem(AUTOSAVE_KEY) !== "1" || !state.path) return;
@@ -226,6 +227,7 @@ sidebar.addTab("settings", "⚙", undefined, {
   id: "settings", title: "Settings", render: (el) => {
     const folder = imageFolderPattern();
     const core = `<h4>Editor</h4><label><input type="checkbox" id="set-autosave" ${localStorage.getItem(AUTOSAVE_KEY) === "1" ? "checked" : ""}> Autosave (1.5 s after edits)</label>
+      <label><input type="checkbox" id="set-reopen" ${localStorage.getItem(REOPEN_KEY) !== "0" ? "checked" : ""}> Reopen last file on startup</label>
       <h4>Images</h4><label>When pasting / dropping images, copy them to<br><select id="set-imgfolder">
       ${["./assets", "./${filename}.assets"].map((o) => `<option value="${o}" ${o === folder ? "selected" : ""}>${o}</option>`).join("")}
       <option value="custom" ${["./assets", "./${filename}.assets"].includes(folder) ? "" : "selected"}>custom…</option></select>
@@ -236,6 +238,7 @@ sidebar.addTab("settings", "⚙", undefined, {
         : `<label>${s.title}<br><input type="${s.type === "number" ? "number" : "text"}" data-o="${owner}" data-k="${s.key}" value="${v}"></label>`;
     }).join("")).join("") + (plugins.errors.length ? `<h4>Plugin errors</h4>` + plugins.errors.map((e) => `<div>${e.id}: ${e.error}</div>`).join("") : "") + `</div>`;
     (el.querySelector("#set-autosave") as HTMLInputElement).onchange = (e) => localStorage.setItem(AUTOSAVE_KEY, (e.target as HTMLInputElement).checked ? "1" : "0");
+    (el.querySelector("#set-reopen") as HTMLInputElement).onchange = (e) => localStorage.setItem(REOPEN_KEY, (e.target as HTMLInputElement).checked ? "1" : "0");
     const fsel = el.querySelector("#set-imgfolder") as HTMLSelectElement, fcus = el.querySelector("#set-imgfolder-custom") as HTMLInputElement;
     fsel.onchange = () => { if (fsel.value !== "custom") { localStorage.setItem(IMAGE_FOLDER_KEY, fsel.value); fcus.value = fsel.value; } else fcus.focus(); };
     fcus.onchange = () => { localStorage.setItem(IMAGE_FOLDER_KEY, fcus.value.trim() || "./assets"); fsel.value = ["./assets", "./${filename}.assets"].includes(fcus.value) ? fcus.value : "custom"; };
@@ -257,14 +260,16 @@ window.addEventListener("beforeunload", (e) => { if (state.dirty && host.kind ==
   await initThemes();
   const q = new URLSearchParams(location.search);
   const cli = await host.cliFile().catch(() => null);
-  const ws = q.get("folder") ?? (cli ? cli.replace(/[\\/][^\\/]*$/, "") : null) ?? localStorage.getItem("mdnest.lastFolder") ?? (await host.defaultWorkspace());
+  const args = await host.cliArgs().catch(() => [] as string[]);
+  // --no-restore (or ?restore=0, or the setting) → no last folder/file: start on the welcome page
+  const restore = !args.includes("--no-restore") && q.get("restore") !== "0" && localStorage.getItem(REOPEN_KEY) !== "0";
+  const ws = q.get("folder") ?? (cli ? cli.replace(/[\\/][^\\/]*$/, "") : null) ?? (restore ? localStorage.getItem("mdnest.lastFolder") : null) ?? (await host.defaultWorkspace());
   if (ws) await sidebar.openFolder(ws).catch(() => {});
-  const f = cli ?? q.get("file") ?? localStorage.getItem("mdnest.lastFile") ?? (ws && host.kind === "browser" ? ws + "/sample.md" : null);
+  const f = cli ?? q.get("file") ?? (restore ? localStorage.getItem("mdnest.lastFile") : null) ?? (restore && ws && host.kind === "browser" ? ws + "/sample.md" : null);
   if (f) await openFile(f); else afterLoad();
   if (q.get("sidebar") === "0") document.body.classList.remove("pin-outline");
   document.body.classList.add("mdn-ready");
-  // CLI: mdnest doc.md [--theme name] [--export-html out.html] [--export-pdf out.pdf] [--quit]
-  const args = await host.cliArgs().catch(() => [] as string[]);
+  // CLI: mdnest doc.md [--theme name] [--export-html out.html] [--export-pdf out.pdf] [--quit] [--no-restore] [--debug-log path]
   const arg = (k: string) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : null; };
   if (arg("--theme")) { await themes.apply(arg("--theme")!); sel.value = themes.current; }
   // --debug-log PATH: write clipboard/drag-and-drop event diagnostics to PATH (native testing aid)
