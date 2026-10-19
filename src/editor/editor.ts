@@ -7,6 +7,7 @@ import { tableEditing, columnResizing } from "prosemirror-tables";
 import { schema } from "./schema";
 import { parseMarkdown, serializeMarkdown } from "./markdown";
 import { revealPlugin } from "./reveal";
+import { markersPlugin, collapseAll } from "./markers";
 import { nodeViews, tocViews } from "./views";
 import { buildInputRules, buildKeymaps } from "./rules";
 import type { DecorationProvider } from "../plugins/api";
@@ -36,7 +37,7 @@ function externalDecorations(hooks: EditorHooks) {
 export function createEditor(mount: HTMLElement, markdown: string, hooks: EditorHooks) {
   const plugins = [
     buildInputRules(schema), ...buildKeymaps(schema, hooks.keys), history(), dropCursor(), gapCursor(),
-    columnResizing(), tableEditing(), revealPlugin(), externalDecorations(hooks),
+    columnResizing(), tableEditing(), markersPlugin(), revealPlugin(), externalDecorations(hooks),
   ];
   const mkState = (md: string) => {
     const doc = parseMarkdown(md);
@@ -76,7 +77,8 @@ export function createEditor(mount: HTMLElement, markdown: string, hooks: Editor
   // Typora-compatible wrapper: <content><div id="write">…
   return {
     view,
-    getMarkdown: () => serializeMarkdown(view.state.doc),
+    getMarkdown: () => serializeMarkdown(collapseAll(view.state.doc)),
+    getDoc: () => collapseAll(view.state.doc),
     setMarkdown: (md: string) => { view.updateState(mkState(md)); tocViews.forEach((t) => t.dom.isConnected ? t.refresh(view.state.doc) : tocViews.delete(t)); },
     refreshDecorations: () => view.dispatch(view.state.tr.setMeta("refresh", true)),
   };

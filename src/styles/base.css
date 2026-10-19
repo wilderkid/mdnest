@@ -143,3 +143,9 @@ body.typora-sourceview-on content { visibility: hidden; }
 .ws-panel { padding: 4px 12px; } .ws-panel h3 { font-size: 13px; margin: 6px 0; } .ws-panel td { padding: 2px 8px 2px 0; }
 #write .mdn-long-sentence { background: rgba(255, 196, 0, .25); border-radius: 2px; }
 @media print { #typora-sidebar, footer.ty-footer { display: none; } content { position: static; } }
+
+/* ---------- Phase 2: editable markers ---------- */
+#write .md-src .md-meta { color: #9a9a9a; font-family: inherit; font-size: inherit; opacity: .85; }
+#write .md-src .md-url { color: #9a9a9a; }
+#write .md-src .md-math-src { font-family: var(--monospace); font-size: .9em; }
+#write .md-inline-math-preview { display: inline-block; margin-left: 4px; padding: 0 4px; border-radius: 3px; background: rgba(127,127,127,.12); vertical-align: middle; }

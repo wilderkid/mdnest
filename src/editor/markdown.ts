@@ -170,6 +170,7 @@ export const serializer = new MarkdownSerializer({
   ...d.marks,
   strike: { open: "~~", close: "~~", mixable: true, expelEnclosingWhitespace: true },
   highlight: { open: "==", close: "==", mixable: true, expelEnclosingWhitespace: true },
+  md_src: { open: "", close: "" }, // never reached: raw regions are collapsed before serializing
 });
 
 export function parseMarkdown(src: string): PMNode {

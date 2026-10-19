@@ -6,9 +6,30 @@ import { undo, redo } from "prosemirror-history";
 import { splitListItem, liftListItem, sinkListItem, wrapInList } from "prosemirror-schema-list";
 import { goToNextCell } from "prosemirror-tables";
 import { arrowHandler } from "./codeview";
+import { inRawRegion } from "./markers";
+import { EditorState, TextSelection } from "prosemirror-state";
+
+/** Ctrl+B etc.: toggle the real mark, or — inside a raw region — wrap/unwrap literal delimiters */
+function fmt(mark: MarkType, delim: string) {
+  const toggle = toggleMark(mark);
+  return (state: EditorState, dispatch?: any, view?: any) => {
+    if (!inRawRegion(state)) return toggle(state, dispatch, view);
+    const { from, to } = state.selection; const d = delim.length;
+    const doc = state.doc;
+    if (dispatch) {
+      const before = from >= d ? doc.textBetween(from - d, from) : "", after = doc.textBetween(to, Math.min(to + d, doc.content.size));
+      let tr = state.tr;
+      if (before === delim && after === delim) { tr = tr.delete(to, to + d).delete(from - d, from); tr.setSelection(TextSelection.create(tr.doc, from - d, to - d)); }
+      else { tr = tr.insertText(delim, to).insertText(delim, from); tr.setSelection(TextSelection.create(tr.doc, from + d, to + d)); }
+      dispatch(tr.scrollIntoView());
+    }
+    return true;
+  };
+}
 
 function markRule(re: RegExp, type: MarkType) {
   return new InputRule(re, (state, match, start, end) => {
+    if (inRawRegion(state)) return null; // raw Markdown is being edited literally
     const inner = match[2]; if (!inner) return null;
     const tr = state.tr; const textStart = start + match[0].indexOf(inner);
     tr.replaceWith(start, end, state.schema.text(inner, [type.create()]));
@@ -42,7 +63,7 @@ export function buildInputRules(s: Schema) {
     markRule(/(`)([^`]+)`$/, m.code),
     markRule(/(~~)([^~]+)~~$/, m.strike),
     markRule(/(==)([^=]+)==$/, m.highlight),
-    new InputRule(/(?<!\$)\$([^$\s][^$]*)\$$/, (state, match, start, end) => state.tr.replaceWith(start, end, n.inline_math.create({ tex: match[1] }))),
+    new InputRule(/(?<!\$)\$([^$\s][^$]*)\$$/, (state, match, start, end) => inRawRegion(state) ? null : state.tr.replaceWith(start, end, n.inline_math.create({ tex: match[1] }))),
   ]});
 }
 
@@ -51,7 +72,7 @@ export function buildKeymaps(s: Schema, extra: { toggleSource: () => void; save:
   const heading = (l: number) => setBlockType(n.heading, { level: l });
   const keys: Record<string, any> = {
     "Mod-z": undo, "Shift-Mod-z": redo, "Mod-y": redo,
-    "Mod-b": toggleMark(m.strong), "Mod-i": toggleMark(m.em), "Shift-Mod-`": toggleMark(m.code), "Alt-Shift-5": toggleMark(m.strike),
+    "Mod-b": fmt(m.strong, "**"), "Mod-i": fmt(m.em, "*"), "Shift-Mod-`": fmt(m.code, "`"), "Alt-Shift-5": fmt(m.strike, "~~"),
     "Mod-0": setBlockType(n.paragraph), "Mod-1": heading(1), "Mod-2": heading(2), "Mod-3": heading(3), "Mod-4": heading(4), "Mod-5": heading(5), "Mod-6": heading(6),
     "Shift-Mod-q": wrapIn(n.blockquote), "Shift-Mod-]": wrapInList(n.bullet_list), "Shift-Mod-[": wrapInList(n.ordered_list),
     "Shift-Mod-k": setBlockType(n.code_block),

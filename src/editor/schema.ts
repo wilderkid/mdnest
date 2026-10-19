@@ -116,6 +116,9 @@ const marks: Record<string, MarkSpec> = {
   strike: inlineMark("del", "del"),
   highlight: inlineMark("highlight", "mark"),
   code: { ...inlineMark("code", "code"), excludes: "_", code: true } as MarkSpec,
+  // Raw-markdown region: while the caret is inside a formatted span, the span is replaced by its
+  // Markdown source carrying this mark; it is re-parsed into real marks when the caret leaves.
+  md_src: { inclusive: true, excludes: "", parseDOM: [], toDOM: () => ["span", { class: "md-expand md-src" }, 0] as any },
 };
 
 export let imageBase = "";

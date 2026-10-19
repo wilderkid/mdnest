@@ -1,0 +1,10 @@
+import { chromium } from "playwright";
+const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 1280, height: 900 } });
+p.on("pageerror", e => console.log("ERR", e.message));
+await p.goto("http://127.0.0.1:4173/?theme=mdnest"); await p.waitForSelector("body.mdn-ready"); await p.waitForTimeout(800);
+const para = () => p.evaluate(() => window.mdnest.editor.view.state.selection.$from.parent.toString().slice(0, 160));
+await p.locator("#write p strong").first().click(); await p.waitForTimeout(200);
+console.log("after click:", await para());
+await p.screenshot({ path: "screenshots/phase2/_dbg.png", clip: { x: 260, y: 300, width: 1000, height: 150 } });
+await p.keyboard.type("XY"); console.log("typed:", await para());
+await b.close();

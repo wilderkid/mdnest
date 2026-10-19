@@ -1,34 +1,11 @@
-// Live-preview "source reveal": when the caret is inside an inline mark, show its Markdown
-// delimiters as .md-meta widgets and mark the wrapper with .md-expand; the textblock containing
-// the caret gets .md-focus and its ancestors .md-focus-container (Typora-theme compatible classes).
+// Block focus + block-level reveal: the textblock containing the caret gets .md-focus and its
+// ancestors .md-focus-container (Typora-theme compatible classes); headings show their "#" prefix
+// and selected images their source. Inline markers are real text — see markers.ts.
 import { Plugin, PluginKey, EditorState, NodeSelection } from "prosemirror-state";
 import { Decoration, DecorationSet } from "prosemirror-view";
-import { Mark, Node as PMNode } from "prosemirror-model";
-
-const delim: Record<string, [string, string] | ((m: Mark) => [string, string])> = {
-  strong: ["**", "**"], em: ["*", "*"], code: ["`", "`"], strike: ["~~", "~~"], highlight: ["==", "=="],
-  link: (m) => ["[", `](${m.attrs.href}${m.attrs.title ? ` "${m.attrs.title}"` : ""})`],
-};
 
 function meta(text: string, cls: string) {
   return () => { const s = document.createElement("span"); s.className = "md-meta " + cls; s.textContent = text; s.setAttribute("contenteditable", "false"); return s; };
-}
-
-/** contiguous ranges of each mark inside a textblock */
-function markRanges(block: PMNode, blockStart: number) {
-  const out: { mark: Mark; from: number; to: number }[] = [];
-  const open = new Map<Mark, { from: number; to: number }>();
-  block.forEach((child, offset) => {
-    const pos = blockStart + offset;
-    for (const [m, r] of open) if (!m.isInSet(child.marks)) { out.push({ mark: m, ...r }); open.delete(m); }
-    for (const m of child.marks) {
-      let found = false;
-      for (const [om, r] of open) if (om.eq(m)) { r.to = pos + child.nodeSize; found = true; }
-      if (!found) open.set(m, { from: pos, to: pos + child.nodeSize });
-    }
-  });
-  for (const [m, r] of open) out.push({ mark: m, ...r });
-  return out;
 }
 
 export const revealKey = new PluginKey("md-reveal");
@@ -62,16 +39,6 @@ export function revealPlugin() {
           const blockStart = $from.start();
           if (parent.type.name === "heading") {
             decos.push(Decoration.widget(blockStart, meta("#".repeat(parent.attrs.level) + " ", "md-before md-heading-meta"), { side: -1, marks: [] }));
-          }
-          const pos = sel.from, end = sel.to;
-          for (const r of markRanges(parent, blockStart)) {
-            if (r.to < pos || r.from > end) continue; // caret/selection touches the mark range (inclusive edges)
-            const spec = delim[r.mark.type.name];
-            if (!spec) continue;
-            const [b, a] = typeof spec === "function" ? spec(r.mark) : spec;
-            decos.push(Decoration.inline(r.from, r.to, { class: "md-expand" }));
-            decos.push(Decoration.widget(r.from, meta(b, "md-before"), { side: -1, marks: [] }));
-            decos.push(Decoration.widget(r.to, meta(a, "md-after" + (r.mark.type.name === "link" ? " md-url md-content" : "")), { side: 1, marks: [] }));
           }
         }
         return DecorationSet.create(state.doc, decos);
