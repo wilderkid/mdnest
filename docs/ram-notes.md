@@ -21,3 +21,14 @@ it uses 190 MB. A stale second instance also skewed some ad-hoc numbers, because
 
 The Phase 2 saving on sample.md (−65 MB in the web process) comes from loading MathJax as separate
 components without SRE/speech, plus the trimmed font ranges.
+
+## Phase 3 (AI plugin, AI off)
+
+Measured on 2026-10-19, same method. Each row interleaves two samples per build. The baseline binary was rebuilt from `0c68237` in a temporary worktree. Absolute numbers run about 7 MB higher than the earlier table because of today's box state, so compare within the table only.
+
+| Build | Binary | .deb | Welcome page | sample.md |
+|---|---|---|---|---|
+| Pre-AI `0c68237` | 6,332,640 B | 4.00 MiB | 196 / 196 MB | 251 / 250 MB |
+| Phase 3 `a855c93`, AI off | 8,283,160 B | 4.93 MiB | 198 / 198 MB | 251 / 252 MB |
+
+With AI off, RAM changes by about +1–2 MB, all of it in the Rust process. The binary grows by 1.95 MB (reqwest + rustls/ring, tokio, keyring with the Secret Service/D-Bus stack). The frontend adds about 4 kB to the main chunk; the AI UI is lazy (runtime 6.6 kB, panel 3.7 kB + 1.5 kB CSS) and only loads once AI is enabled.
