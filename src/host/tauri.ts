@@ -54,6 +54,25 @@ export const tauriHost: Host = {
       return () => { void invoke("kb_unwatch", { id }); };
     },
   },
+  async watchFs(root, onChange) {
+    await this.unwatchFs();
+    const id = "fs" + Math.random().toString(36).slice(2);
+    fsWatchId = id;
+    const ch = new Channel<string[]>();
+    ch.onmessage = (paths) => onChange(paths);
+    try {
+      await invoke("fs_watch", { id, root, onChange: ch });
+      return true;
+    } catch {
+      fsWatchId = null;
+      return false;
+    }
+  },
+  async unwatchFs() {
+    const id = fsWatchId;
+    fsWatchId = null;
+    if (id) { try { await invoke("fs_unwatch", { id }); } catch { /* gone */ } }
+  },
   net: {
     stream(req: StreamRequest, onEvent: (ev: StreamEvent) => void) {
       const id = streamId();
@@ -88,6 +107,8 @@ export const tauriHost: Host = {
     },
   },
 };
+
+let fsWatchId: string | null = null;
 
 function streamId(): string {
   const rnd = Math.random().toString(36).slice(2, 10);

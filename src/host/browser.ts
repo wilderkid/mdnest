@@ -69,6 +69,28 @@ export const browserHost: Host = {
       return () => ac.abort();
     },
   },
+  async watchFs(root, onChange) {
+    await this.unwatchFs();
+    const ac = new AbortController();
+    fsAbort = ac;
+    void (async () => {
+      try {
+        const res = await fetch("/api/fs/watch?root=" + encodeURIComponent(root), { signal: ac.signal });
+        if (!res.ok || !res.body) return;
+        const rd = res.body.getReader(); const dec = new TextDecoder(); let buf = "";
+        for (;;) {
+          const { value, done } = await rd.read(); if (done) return;
+          buf += dec.decode(value, { stream: true });
+          let i; while ((i = buf.indexOf("\n")) >= 0) { const line = buf.slice(0, i); buf = buf.slice(i + 1); if (line.trim()) onChange(JSON.parse(line)); }
+        }
+      } catch { /* stopped */ }
+    })();
+    return true;
+  },
+  async unwatchFs() {
+    fsAbort?.abort();
+    fsAbort = null;
+  },
   secrets: {
     async set(id, value) {
       await j(await fetch("/api/secret/set", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id, value }) }));
@@ -142,6 +164,8 @@ export const browserHost: Host = {
     },
   },
 };
+
+let fsAbort: AbortController | null = null;
 
 function streamId(): string {
   const rnd = Math.random().toString(36).slice(2, 10);

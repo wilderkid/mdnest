@@ -36,7 +36,7 @@ What really was Windows-specific (before):
 | | done | partial | missing | win-broken | n/a |
 |---|---|---|---|---|---|
 | Before (0.1.0) | 28 | 42 | 85 | 4 | 4 |
-| After (0.1.1) | 143 | 8 | 8 | 0 | 4 |
+| After (0.1.2 so far) | 153 | 0 | 6 | 0 | 4 |
 
 Counted by `python3 scripts/parity-count.py` (163 rows; an empty After cell inherits Before).
 
@@ -194,7 +194,7 @@ Counted by `python3 scripts/parity-count.py` (163 rows; an empty After cell inhe
 
 | Item | Shortcut | Before | After | Notes |
 |---|---|---|---|---|
-| File tree (`#file-library-tree`) | | done | done | Markdown + txt; same extension set as the walk |
+| File tree (`#file-library-tree`) | | done | done | Markdown + txt; disk watch refreshes expanded folders |
 | Article list with excerpt and mtime (`#file-library-list`) | | missing | done | excerpt, time, parent loc |
 | Tree / list switch | | missing | done | selection persisted in localStorage |
 | Bottom bar: new file | | missing | done | #sidebar-footer |
@@ -213,7 +213,7 @@ Counted by `python3 scripts/parity-count.py` (163 rows; an empty After cell inhe
 | Outline: highlight current heading | | missing | done | .outline-item-active |
 | Outline: collapse / expand |  | missing | missing | outline lists headings; no collapse control |
 | File tree keyboard navigation | | missing | done | arrows, Enter, F2, Delete |
-| Live refresh when files change on disk | | missing | partial | refresh on focus and after our own operations |
+| Live refresh when files change on disk | | missing | done | fs_watch (notify) or Vite fs.watch; expanded folders and the list refresh; selection kept; focus refresh when the watcher is not built |
 
 ## Quick insert (Typora has no slash menu; these are its Markdown input rules and shortcuts)
 
@@ -275,7 +275,7 @@ Still missing or only partial after 0.1.1. Each note says why.
 - **Open link** (done). Format ▸ Hyperlink Actions ▸ Open Link / Copy Link Address, the link context menu, and Ctrl+click. A relative `.md` link opens in MD Nest. Other URLs go through `open_external` (http(s), mailto, local files).
 - **Readonly mode** (done). View ▸ Readonly Mode sets `editable` false, adds `ty-readonly` and a footer indicator, and blocks source edits, slash, paste, and drop.
 - **Outline collapse** (done). Headings with children have an `.outline-expander`. Expand All / Collapse All live in the outline context menu and in View ▸ Outline ▸. Collapse state stays while the document is open.
-- **Live file refresh** (partial). The tree refreshes on window focus and after our own create/rename/trash. It does not watch the disk.
+- **Live file refresh** (done). The open folder is watched (`fs_watch` / Vite `fs.watch`). Changed paths refresh the expanded folders and the list view, and the selection stays. Without the library feature the tree still refreshes on focus.
 - **Find next / previous** (done). F3 / Shift+F3 with the bar closed search the last query or the selection, wrap, and notify "Not found".
 - **Comment-only lines** (partial). An inline `<!-- note -->` is a mark and round-trips. A line that is only a comment parses as an HTML block, which is how markdown-it treats it.
 - **In-editor text drag on Windows** (partial). WebView2 HTML5 drops carry no paths, so folder and file drops use Tauri's drag-drop event. That turns off in-editor text drag-move on Windows.

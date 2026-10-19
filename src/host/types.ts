@@ -56,6 +56,12 @@ export interface Host {
   net: HostNet;
   /** Plugin platform: workspace index (SQLite + FTS5 + sqlite-vec in Rust). */
   index: HostIndex;
+  /**
+   * Watch every file under `root` (not only Markdown). `onChange` gets debounced changed paths.
+   * Returns stop(). Resolves false when the host has no watcher (refresh on focus instead).
+   */
+  watchFs(root: string, onChange: (paths: string[]) => void): Promise<boolean>;
+  unwatchFs(): Promise<void>;
 }
 
 /** Index requests are `{ op, root, ... }`; see src-tauri/src/kb/mod.rs `dispatch`. */

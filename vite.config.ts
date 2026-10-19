@@ -334,6 +334,21 @@ function devFs(): Plugin {
         });
         return;
       }
+      if (url.pathname === "/api/fs/watch") {
+        const root = url.searchParams.get("root") ?? "";
+        if (!inside(ROOT, root)) return send(403, "outside sandbox", "text/plain");
+        res.writeHead(200, { "content-type": "application/x-ndjson", "cache-control": "no-cache" });
+        let batch = new Set<string>(), timer: any = null;
+        const w = fs.watch(root, { recursive: true }, (_ev, name) => {
+          if (!name) return;
+          const parts = String(name).split(/[\\/]/);
+          if (parts.some((s) => s.startsWith("."))) return;
+          batch.add(path.join(root, String(name)));
+          clearTimeout(timer); timer = setTimeout(() => { try { res.write(JSON.stringify([...batch]) + "\n"); } catch { /* closed */ } batch = new Set(); }, 250);
+        });
+        req.on("close", () => { w.close(); clearTimeout(timer); });
+        return;
+      }
       if (url.pathname === "/api/kb/watch") {
         const root = url.searchParams.get("root") ?? "";
         if (!inside(ROOT, root)) return send(403, "outside sandbox", "text/plain");

@@ -122,6 +122,8 @@ pub fn run() {
             commands::kb_call,
             commands::kb_watch,
             commands::kb_unwatch,
+            commands::fs_watch,
+            commands::fs_unwatch,
             menu::set_app_menu,
             commands::create_file,
             commands::create_dir,

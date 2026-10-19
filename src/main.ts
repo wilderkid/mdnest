@@ -297,7 +297,17 @@ async function openAt(path: string, line?: number) {
   setTimeout(() => { if (citeFlash === mine) { citeFlash = null; editor.view.dispatch(editor.view.state.tr.setMeta("addToHistory", false)); } }, 1800);
 }
 async function pickAndOpen() { if (!(await guard("opening a file"))) return; const p = await host.pickFile(); if (p) await openFile(p); }
-async function pickFolderPath(p: string) { await sidebar.openFolder(p); localStorage.setItem("mdnest.lastFolder", p); plugins.emit("workspace-changed", p); }
+let fsWatching = false;
+let fsWatchRoot: string | null = null;
+async function startFsWatch(root: string | null) {
+  if (root === fsWatchRoot && fsWatching) return;
+  fsWatchRoot = root;
+  if (!root) { fsWatching = false; await host.unwatchFs().catch(() => {}); return; }
+  try {
+    fsWatching = await host.watchFs(root, (paths) => { void sidebar.refreshExpanded(paths); });
+  } catch { fsWatching = false; }
+}
+async function pickFolderPath(p: string) { await sidebar.openFolder(p); localStorage.setItem("mdnest.lastFolder", p); plugins.emit("workspace-changed", p); void startFsWatch(p); }
 async function pickFolder() { const p = await host.pickFolder(); if (p) await pickFolderPath(p); }
 let quietSave = false;
 async function save(as: boolean) {
@@ -1559,7 +1569,7 @@ window.addEventListener("beforeunload", (e) => { if (state.dirty && host.kind ==
   // --no-restore (or ?restore=0, or the setting) → no last folder/file: start on the welcome page
   const restore = !args.includes("--no-restore") && q.get("restore") !== "0" && localStorage.getItem(REOPEN_KEY) !== "0";
   const ws = q.get("folder") ?? (cli ? cli.replace(/[\\/][^\\/]*$/, "") : null) ?? (restore ? localStorage.getItem("mdnest.lastFolder") : null) ?? (await host.defaultWorkspace());
-  if (ws) { await sidebar.openFolder(ws).catch(() => {}); if (sidebar.root) plugins.emit("workspace-changed", sidebar.root); }
+  if (ws) { await sidebar.openFolder(ws).catch(() => {}); if (sidebar.root) { plugins.emit("workspace-changed", sidebar.root); void startFsWatch(sidebar.root); } }
   const f = cli ?? q.get("file") ?? (restore ? localStorage.getItem("mdnest.lastFile") : null) ?? (restore && ws && host.kind === "browser" && !q.has("welcome") ? ws + "/sample.md" : null);
   if (f) await openFile(f); else { editor.setMarkdown(EMPTY_DOC); state.lastSaved = editor.getMarkdown(); setDirty(false); afterLoad(); showWelcome(); }
   if (q.get("sidebar") === "0") document.body.classList.remove("pin-outline");
@@ -1580,14 +1590,14 @@ window.addEventListener("beforeunload", (e) => { if (state.dirty && host.kind ==
         if (!(await guard("closing"))) return;
         await host.closeWindow();
       });
-      await listen("tauri://focus", () => { void sidebar.refreshExpanded(); });
+      await listen("tauri://focus", () => { if (!fsWatching) void sidebar.refreshExpanded(); });
       await listen<{ paths?: string[]; position?: { x: number; y: number } }>("tauri://drag-drop", (ev) => {
         const paths = ev.payload?.paths ?? [];
         if (paths.length) void onNativeDrop({ paths, position: ev.payload?.position });
       });
     } catch (e) { console.error(e); }
   }
-  window.addEventListener("focus", () => { void sidebar.refreshExpanded(); });
+  window.addEventListener("focus", () => { if (!fsWatching) void sidebar.refreshExpanded(); });
   document.addEventListener("drop", (e) => {
     const dt = e.dataTransfer;
     if (!dt) return;

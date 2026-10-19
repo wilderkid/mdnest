@@ -429,8 +429,58 @@ export class Sidebar {
     if (this.filter.trim()) await this.applyFilter();
   }
 
-  /** Re-list folders that are currently expanded (and the list view). */
-  async refreshExpanded() { await this.refresh(); }
+  /** Re-list folders that are currently expanded (and the list view). Selection and expansion stay. */
+  async refreshExpanded(paths?: string[]) {
+    if (!this.root) return;
+    if (paths && paths.length && this.view !== "list") {
+      const dirs = new Set<string>();
+      for (const p of paths) {
+        const parent = parentOf(p);
+        if (parent === this.root || this.expanded.has(parent)) dirs.add(parent);
+        // A new directory event should also refresh its parent so the folder itself appears.
+        if (this.expanded.has(p)) dirs.add(p);
+      }
+      if (dirs.size) {
+        for (const dir of dirs) await this.rerenderFolder(dir);
+        this.markActive(this.activeFile);
+      }
+    } else {
+      await this.renderTree();
+    }
+    if (this.view === "list" || this.filter) await this.renderList();
+    if (this.filter.trim()) await this.applyFilter();
+  }
+
+  /** Replace the children of one expanded folder without collapsing siblings. */
+  private async rerenderFolder(dir: string) {
+    if (!this.root) return;
+    if (dir === this.root) {
+      const holder = this.tree.querySelector(":scope > div:not(.sidebar-folder-name)") as HTMLElement | null;
+      if (!holder) { await this.renderTree(); return; }
+      holder.innerHTML = "";
+      await this.renderDir(this.root, holder, true);
+      return;
+    }
+    const node = this.tree.querySelector<HTMLElement>(`.file-library-folder[data-path="${cssEscape(dir)}"]`);
+    if (!node) {
+      // Parent may have been created outside an expanded folder; refresh the root listing.
+      await this.rerenderFolder(this.root);
+      return;
+    }
+    let kids = node.querySelector(":scope > .file-node-children") as HTMLElement | null;
+    if (!kids) {
+      kids = document.createElement("div");
+      kids.className = "file-node-children";
+      node.appendChild(kids);
+    }
+    kids.innerHTML = "";
+    if (this.expanded.has(dir)) {
+      node.classList.add("file-node-expanded");
+      const icon = node.querySelector(".file-node-icon");
+      if (icon) icon.textContent = "▾";
+      await this.renderDir(dir, kids, true);
+    }
+  }
 
   private async renderTree() {
     if (!this.root) return;

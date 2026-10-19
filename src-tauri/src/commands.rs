@@ -307,6 +307,25 @@ pub async fn kb_call(app: tauri::AppHandle, req: serde_json::Value) -> Result<se
     { let _ = (app, req); Err("library support not built".into()) }
 }
 
+/// Watch a folder for any non-hidden path change. Debounced batches arrive on `on_change`.
+/// Without the library feature this returns an error and the frontend refreshes on focus.
+#[tauri::command]
+pub async fn fs_watch(id: String, root: String, on_change: tauri::ipc::Channel<Vec<String>>) -> Result<(), String> {
+    #[cfg(feature = "library")]
+    { crate::kb::watch::start_fs(&id, std::path::Path::new(&root), std::time::Duration::from_millis(400), move |b| { let _ = on_change.send(b); }) }
+    #[cfg(not(feature = "library"))]
+    { let _ = (id, root, on_change); Err("library support not built".into()) }
+}
+
+/// Stop a watch started by `fs_watch` or `kb_watch`.
+#[tauri::command]
+pub async fn fs_unwatch(id: String) -> bool {
+    #[cfg(feature = "library")]
+    { crate::kb::watch::stop(&id) }
+    #[cfg(not(feature = "library"))]
+    { let _ = id; false }
+}
+
 /// Watch a workspace folder; debounced batches of changed Markdown paths arrive on `on_change`.
 #[tauri::command]
 pub async fn kb_watch(id: String, root: String, on_change: tauri::ipc::Channel<Vec<String>>) -> Result<(), String> {
