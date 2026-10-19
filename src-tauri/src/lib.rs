@@ -83,7 +83,7 @@ pub fn run() {
             commands::list_themes,
             commands::default_workspace,
             commands::cli_file,
-            commands::write_binary_file,
+            commands::write_binary_file, commands::copy_file,
             commands::file_mtime,
             commands::cli_args,
             commands::quit_app,

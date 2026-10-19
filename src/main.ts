@@ -267,6 +267,21 @@ window.addEventListener("beforeunload", (e) => { if (state.dirty && host.kind ==
   const args = await host.cliArgs().catch(() => [] as string[]);
   const arg = (k: string) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : null; };
   if (arg("--theme")) { await themes.apply(arg("--theme")!); sel.value = themes.current; }
+  // --debug-log PATH: write clipboard/drag-and-drop event diagnostics to PATH (native testing aid)
+  if (arg("--debug-log")) {
+    const out = arg("--debug-log")!; const lines: string[] = []; let t: any = 0;
+    const log = (m: string) => { lines.push(new Date().toISOString().slice(11, 23) + " " + m); clearTimeout(t); t = setTimeout(() => host.writeFile(out, lines.join("\n") + "\n").catch(() => {}), 200); };
+    (window as any).mdnestDebug = log;
+    for (const ev of ["paste", "drop", "beforeinput"]) document.addEventListener(ev, (e: any) => {
+      const dt: DataTransfer | null = e.clipboardData ?? e.dataTransfer ?? null;
+      const types = dt ? [...dt.types].join(",") : "-";
+      const files = dt ? [...dt.files].map((f) => f.name + ":" + f.type + ":" + f.size).join(",") : "";
+      const items = dt ? [...(dt.items ?? [])].map((i) => i.kind + ":" + i.type).join(",") : "";
+      const data = dt ? [...dt.types].map((k) => k + "=" + JSON.stringify((() => { try { return dt.getData(k); } catch { return "?"; } })().replace(/ style="[^"]*"/g, "").slice(0, 400))).join(" ") : "";
+      log(`${ev}${e.inputType ? "(" + e.inputType + ")" : ""} types=[${types}] files=[${files}] items=[${items}] ${data}`);
+    }, true);
+    log("debug log on");
+  }
   try {
     if (arg("--export-html")) await exportHtml(arg("--export-html")!);
     if (arg("--export-pdf")) await exportPdf(arg("--export-pdf")!);

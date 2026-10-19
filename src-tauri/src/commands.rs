@@ -151,7 +151,16 @@ pub async fn default_workspace() -> Option<String> {
 /// First non-flag CLI argument, resolved to an absolute path ("open with" / `mdnest file.md`).
 #[tauri::command]
 pub async fn cli_file() -> Option<String> {
-    let arg = std::env::args().skip(1).find(|a| !a.starts_with('-'))?;
+    // skip flags and the values of flags that take one
+    const WITH_VALUE: [&str; 4] = ["--theme", "--export-html", "--export-pdf", "--debug-log"];
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let mut arg = None; let mut i = 0;
+    while i < args.len() {
+        if WITH_VALUE.contains(&args[i].as_str()) { i += 2; continue; }
+        if !args[i].starts_with('-') { arg = Some(args[i].clone()); break; }
+        i += 1;
+    }
+    let arg = arg?;
     let p = std::path::PathBuf::from(arg);
     let abs = if p.is_absolute() { p } else { std::env::current_dir().ok()?.join(p) };
     abs.is_file().then(|| abs.to_string_lossy().into_owned())
@@ -174,6 +183,26 @@ pub async fn write_binary_file(path: String, data: String, unique: bool) -> Resu
         loop { let cand = parent.join(format!("{stem}-{i}{ext}")); if !cand.exists() { dest = cand; break; } i += 1; }
     }
     fs::write(&dest, bytes).map_err(|e| e.to_string())?;
+    Ok(dest.to_string_lossy().into_owned())
+}
+
+/// Copy a local file (e.g. an image dropped from a file manager) to `dest`, creating parent folders.
+/// With `unique`, an existing destination gets a "-1", "-2", … suffix. Returns the final path.
+#[tauri::command]
+pub async fn copy_file(src: String, dest: String, unique: bool) -> Result<String, String> {
+    let meta = fs::metadata(&src).map_err(|e| format!("{src}: {e}"))?;
+    if !meta.is_file() { return Err(format!("{src}: not a file")); }
+    let mut dest = std::path::PathBuf::from(&dest);
+    if let Some(parent) = dest.parent() { fs::create_dir_all(parent).map_err(|e| e.to_string())?; }
+    if fs::canonicalize(&src).ok() == fs::canonicalize(&dest).ok() { return Ok(dest.to_string_lossy().into_owned()); }
+    if unique && dest.exists() {
+        let stem = dest.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+        let ext = dest.extension().map(|s| format!(".{}", s.to_string_lossy())).unwrap_or_default();
+        let parent = dest.parent().map(|p| p.to_path_buf()).unwrap_or_default();
+        let mut i = 1;
+        loop { let cand = parent.join(format!("{stem}-{i}{ext}")); if !cand.exists() { dest = cand; break; } i += 1; }
+    }
+    fs::copy(&src, &dest).map_err(|e| e.to_string())?;
     Ok(dest.to_string_lossy().into_owned())
 }
 

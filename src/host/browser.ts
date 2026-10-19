@@ -13,6 +13,11 @@ export const browserHost: Host = {
   fileUrl(abs) { return "/fs" + abs; },
   async cliFile() { return null; },
   async cliArgs() { return []; },
+  async copyFile(src, dest, unique) { // dev server: only inside the sandboxed workspace
+    const r = await fetch("/fs" + src); if (!r.ok) throw new Error("cannot read " + src);
+    const b = new Uint8Array(await r.arrayBuffer()); let bin = ""; for (let i = 0; i < b.length; i += 0x8000) bin += String.fromCharCode(...b.subarray(i, i + 0x8000));
+    return this.writeBinary(dest, btoa(bin), unique);
+  },
   async writeBinary(path, data, unique) { return (await j(await fetch("/api/writeb", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path, data, unique }) }))).path; },
   async mtime(path) { return (await j(await fetch("/api/mtime?path=" + encodeURIComponent(path)))).mtime; },
   async exportPdf() { throw new Error("unsupported"); },

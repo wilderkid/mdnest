@@ -11,6 +11,7 @@ import { markersPlugin, collapseAll } from "./markers";
 import { tableToolbarPlugin } from "./tabletools";
 import { searchPlugin } from "./search";
 import { nodeViews, tocViews } from "./views";
+import { collectImages, imagesFromPastedHtml, pastedHtmlIsOnlyImages, type ImageItem } from "../shell/images";
 import { buildInputRules, buildKeymaps } from "./rules";
 import type { DecorationProvider } from "../plugins/api";
 
@@ -19,7 +20,7 @@ export interface EditorHooks {
   keys: Parameters<typeof buildKeymaps>[1];
   decorationProviders: DecorationProvider[];
   /** pasted / dropped image files; return true when handled */
-  onImageFiles?: (files: File[], pos: number | null) => boolean;
+  onImageFiles?: (files: ImageItem[], pos: number | null) => boolean;
 }
 
 const extKey = new PluginKey("ext-decos");
@@ -71,13 +72,30 @@ export function createEditor(mount: HTMLElement, markdown: string, hooks: Editor
       if (node.type.name === "image") { view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, nodePos))); return true; }
       return false;
     },
-    handlePaste(view, event) {
-      const files = [...(event.clipboardData?.files ?? [])].filter((f) => f.type.startsWith("image/"));
-      if (files.length && hooks.onImageFiles) return hooks.onImageFiles(files, null);
+    handlePaste(view, event, slice) {
+      // WebKitGTK: the paste event carries no clipboardData, so ProseMirror captures the native paste in
+      // a hidden element and hands us a slice holding <img src="blob:…">. Import those bytes instead.
+      const srcs: string[] = []; let other = false;
+      slice.content.descendants((n) => { if (n.type.name === "image") { if (/^(blob|data):/i.test(n.attrs.src)) srcs.push(n.attrs.src); else other = true; } else if (n.isText && n.text!.trim()) other = true; return true; });
+      if (srcs.length && !other && hooks.onImageFiles && !(event.clipboardData?.files?.length)) {
+        const pos = view.state.selection.from;
+        imagesFromPastedHtml(srcs.map((s) => `<img src="${s.replace(/"/g, "&quot;")}">`).join("")).then((f) => { if (f.length) hooks.onImageFiles!(f, pos); });
+        return true;
+      }
+      const files = collectImages(event.clipboardData);
+      if (files.length && hooks.onImageFiles) { event.preventDefault(); return hooks.onImageFiles(files, null); }
+      // WebKitGTK: a clipboard image arrives as <img src="blob:…"> HTML only
+      const html = event.clipboardData?.getData("text/html") ?? "";
+      if (hooks.onImageFiles && pastedHtmlIsOnlyImages(html)) {
+        event.preventDefault();
+        const pos = view.state.selection.from;
+        imagesFromPastedHtml(html).then((f) => { if (f.length) hooks.onImageFiles!(f, pos); });
+        return true;
+      }
       return false;
     },
     handleDrop(view, event) {
-      const files = [...((event as DragEvent).dataTransfer?.files ?? [])].filter((f) => f.type.startsWith("image/"));
+      const files = collectImages((event as DragEvent).dataTransfer);
       if (!files.length || !hooks.onImageFiles) return false;
       const p = view.posAtCoords({ left: (event as DragEvent).clientX, top: (event as DragEvent).clientY });
       event.preventDefault();

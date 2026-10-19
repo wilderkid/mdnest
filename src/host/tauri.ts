@@ -18,6 +18,7 @@ export const tauriHost: Host = {
   cliFile: () => invoke<string | null>("cli_file"),
   cliArgs: () => invoke<string[]>("cli_args"),
   writeBinary: (path, data, unique) => invoke<string>("write_binary_file", { path, data, unique }),
+  copyFile: (src, dest, unique) => invoke<string>("copy_file", { src, dest, unique }),
   mtime: (path) => invoke<number | null>("file_mtime", { path }),
   exportPdf: (html, out) => invoke<void>("export_pdf", { html, out }),
   quit: (code = 0) => invoke<void>("quit_app", { code }),

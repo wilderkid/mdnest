@@ -26,7 +26,8 @@ def saved(): return open(doc).read()
 # keyboard focus needs a window manager on the test display (bare Xvfb never focuses the toplevel)
 wm = sp.Popen(["xfwm4", "--compositor=off"], env=env, stdout=sp.DEVNULL, stderr=sp.DEVNULL) if shutil.which("xfwm4") else None
 time.sleep(1.5)
-app = sp.Popen([BIN, doc], env=penv, stdout=sp.DEVNULL, stderr=sp.DEVNULL)
+DBG = os.path.join(work, "debug.log")
+app = sp.Popen([BIN, doc, "--debug-log", DBG], env=penv, stdout=sp.DEVNULL, stderr=sp.DEVNULL)
 try:
     win = ""
     for _ in range(40):
@@ -74,6 +75,7 @@ try:
 finally:
     app.terminate(); app.wait(5); sp.run(["pkill", "-f", "xclip -selection clipboard"], env=env)
     if wm: wm.terminate()
+if os.path.exists(DBG): print(open(DBG).read()[-1500:], file=sys.stderr)
 fail = [r for r in res if not r["pass"]]
 print(json.dumps({"passed": len(res) - len(fail), "failed": len(fail), "results": res, "work": work}, indent=1, ensure_ascii=False))
 sys.exit(1 if fail else 0)

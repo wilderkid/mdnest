@@ -16,6 +16,7 @@ export interface Host {
   cliFile(): Promise<string | null>;        // file passed on the command line, if any
   cliArgs(): Promise<string[]>;
   writeBinary(path: string, base64: string, unique: boolean): Promise<string>; // returns final path
+  copyFile(src: string, dest: string, unique: boolean): Promise<string>; // returns final path
   mtime(path: string): Promise<number | null>;
   exportPdf(html: string, outPath: string): Promise<void>; // throws "unsupported" where no native path exists
   quit(code?: number): Promise<void>;

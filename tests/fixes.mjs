@@ -76,6 +76,29 @@ try {
   ok(/<sup class="md-footnote"[^>]*><a href="#dfref-footnote-1"/.test(html) && /class="md-def-footnote/.test(html) && /id="dfref-footnote-note"/.test(html), "export HTML: sup.md-footnote links to #dfref-footnote-*", "");
   // themes: Drake renders its own footnote style
   await page.evaluate(() => window.mdnest.editor && document.querySelector("#theme_css"));
+  // WebKitGTK-style clipboard: HTML with only <img src="data:/blob:"> and no files → imported into ./assets
+  const png = fs.readFileSync("tests/fixtures/logo.png").toString("base64");
+  fs.rmSync(path.join(WS, "assets"), { recursive: true, force: true }); fs.mkdirSync(path.join(WS, "assets"));
+  await page.locator("#write p", { hasText: "Final paragraph" }).click(); await page.keyboard.press("End");
+  await page.evaluate((b64) => {
+    const dt = new DataTransfer(); dt.setData("text/html", `<img src="data:image/png;base64,${b64}">`);
+    document.querySelector("#write").dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+  }, png);
+  await page.waitForTimeout(800);
+  let a = fs.readdirSync(path.join(WS, "assets"));
+  m = await md();
+  ok(a.some((f) => /^image-\d{8}-\d{6}\.png$/.test(f)) && /!\[[^\]]*\]\(assets\/image-\d{8}-\d{6}\.png\)/.test(m), "paste of HTML-only image (WebKitGTK clipboard) → saved to ./assets", a.join(","));
+  // WebKitGTK-style file drop: no files, uri-list unreadable, text/html = <a>file:///…</a>
+  const srcImg = path.join(WS, "drop src.png"); fs.copyFileSync("tests/fixtures/logo.png", srcImg);
+  await page.evaluate((u) => {
+    const el = document.querySelector("#write h1"); const r = el.getBoundingClientRect();
+    const dt = new DataTransfer(); dt.setData("text/html", `<a>${u}</a>`);
+    el.dispatchEvent(new DragEvent("drop", { dataTransfer: dt, bubbles: true, cancelable: true, clientX: r.right - 2, clientY: r.top + r.height / 2 }));
+  }, "file://" + encodeURI(srcImg));
+  await page.waitForTimeout(800);
+  a = fs.readdirSync(path.join(WS, "assets")); m = await md();
+  ok(a.includes("drop-src.png") && m.includes("](assets/drop-src.png)"), "drop of file:// URI (WebKitGTK html form) → copied + linked", a.join(","));
+  fs.rmSync(srcImg, { force: true });
 } catch (e) { ok(false, "exception", e.message); }
 ok(errors.length === 0, "no page errors", errors.join(" | "));
 await browser.close();
