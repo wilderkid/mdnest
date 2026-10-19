@@ -857,6 +857,65 @@ async function toggleAlwaysOnTop() {
   } else notify("Always on top " + (alwaysOnTop ? "on" : "off"));
   scheduleMenu();
 }
+let maximized = false;
+async function minimizeWindow() {
+  if (host.kind !== "tauri") { notify("Minimize is a window command"); return; }
+  try {
+    const { getCurrentWindow } = await import("@tauri-apps/api/window");
+    await getCurrentWindow().minimize();
+  } catch (e: any) { notify(String(e?.message ?? e)); }
+}
+async function toggleMaximize() {
+  if (host.kind !== "tauri") {
+    maximized = !maximized;
+    notify(maximized ? (MAC ? "Zoom" : "Maximize") : "Restore");
+    scheduleMenu();
+    return;
+  }
+  try {
+    const { getCurrentWindow } = await import("@tauri-apps/api/window");
+    const win = getCurrentWindow();
+    if (await win.isMaximized()) { await win.unmaximize(); maximized = false; }
+    else { await win.maximize(); maximized = true; }
+  } catch (e: any) { notify(String(e?.message ?? e)); }
+  scheduleMenu();
+}
+async function focusWindow(label: string) {
+  if (host.kind !== "tauri") { notify(label); return; }
+  try {
+    const { Window } = await import("@tauri-apps/api/window");
+    await new Window(label).setFocus();
+  } catch (e: any) { notify(String(e?.message ?? e)); }
+}
+async function bringAllToFront() {
+  if (host.kind !== "tauri") { notify("Bring All to Front"); return; }
+  try {
+    const { getAllWindows, getCurrentWindow } = await import("@tauri-apps/api/window");
+    const cur = getCurrentWindow().label;
+    for (const w of await getAllWindows()) {
+      if (w.label !== cur) await w.setFocus().catch(() => {});
+    }
+    await getCurrentWindow().setFocus();
+  } catch (e: any) { notify(String(e?.message ?? e)); }
+}
+async function listWindows(): Promise<{ label: string; title: string; current?: boolean }[]> {
+  if (host.kind !== "tauri") {
+    const label = await host.windowLabel().catch(() => "browser");
+    return [{ label, title: document.title || "MD Nest", current: true }];
+  }
+  try {
+    const { getAllWindows, getCurrentWindow } = await import("@tauri-apps/api/window");
+    const cur = getCurrentWindow().label;
+    const all = await getAllWindows();
+    const out: { label: string; title: string; current?: boolean }[] = [];
+    for (const w of all) {
+      let title = w.label;
+      try { title = await w.title(); } catch { /* label is enough */ }
+      out.push({ label: w.label, title: title || w.label, current: w.label === cur });
+    }
+    return out;
+  } catch { return []; }
+}
 function centerCaret() {
   if (!document.body.classList.contains("ty-on-typewriter-mode")) return;
   try {
@@ -956,6 +1015,11 @@ const markCmd = (name: string) => () => pmRun(toggleMark(schema.marks[name]));
   { id: "view.wordCount", title: "View: Word Count", run: () => toggleWordPopover() },
   { id: "view.fullScreen", title: "View: Full Screen", key: "F11", run: () => toggleFullScreen() },
   { id: "view.alwaysOnTop", title: "View: Always on Top", run: () => toggleAlwaysOnTop() },
+  { id: "window.alwaysOnTop", title: "Window: Always on Top", run: () => toggleAlwaysOnTop() },
+  { id: "window.minimize", title: "Window: Minimize", key: "CmdOrCtrl+M", run: () => minimizeWindow() },
+  { id: "window.maximize", title: "Window: Maximize", run: () => toggleMaximize() },
+  { id: "window.fullScreen", title: "Window: Full Screen", run: () => toggleFullScreen() },
+  { id: "window.bringAllToFront", title: "Window: Bring All to Front", when: () => MAC, run: () => bringAllToFront() },
   { id: "view.actualSize", title: "View: Actual Size", key: "CmdOrCtrl+Shift+0", run: () => setZoom(1) },
   { id: "view.zoomIn", title: "View: Zoom In", key: "CmdOrCtrl+Shift+=", run: () => setZoom(zoomLevel() * 1.1) },
   { id: "view.zoomOut", title: "View: Zoom Out", key: "CmdOrCtrl+Shift+-", run: () => setZoom(zoomLevel() / 1.1) },
@@ -982,7 +1046,7 @@ function syncThemeCommands() {
   }
 }
 
-function menuState(): MenuState {
+function menuState(windows = openWindows): MenuState {
   let inTable = false;
   try { inTable = editor.view.state.selection.$from.node(1)?.type.name === "table" || !!editor.view.dom.querySelector("table .selectedCell, .ProseMirror-selectednode"); } catch { /* boot */ }
   try {
@@ -1005,6 +1069,8 @@ function menuState(): MenuState {
     statusBar: localStorage.getItem(STATUS_KEY) !== "0",
     fullScreen,
     alwaysOnTop,
+    maximized,
+    windows,
     pairBrackets: pairBracketsOn(),
     pairMarkdown: pairMarkdownOn(),
   };
@@ -1012,10 +1078,20 @@ function menuState(): MenuState {
 
 let menuTimer: any;
 let lastSpec = "";
+let openWindows: { label: string; title: string; current?: boolean }[] = [];
 async function refreshMenu() {
+  const windows = await listWindows();
+  openWindows = windows;
+  for (const w of windows) {
+    addCmd({
+      id: "window.focus." + w.label,
+      title: "Window: " + (w.title || w.label),
+      run: () => focusWindow(w.label),
+    });
+  }
   syncRecentCommands();
   syncThemeCommands();
-  const spec = buildMenuSpec(commands, menuState(), MAC);
+  const spec = buildMenuSpec(commands, menuState(windows), MAC);
   const json = JSON.stringify(spec);
   if (json === lastSpec) return;
   lastSpec = json;

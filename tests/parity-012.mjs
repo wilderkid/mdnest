@@ -173,6 +173,29 @@ try {
   await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");
 
+  // ---------- A3: Window menu ----------
+  await page.locator('#mdn-menubar .mdn-menu[data-menu="window"] > .mdn-menu-label').click();
+  await page.waitForTimeout(80);
+  const winItems = await page.locator('#mdn-menubar .mdn-menu[data-menu="window"] .dropdown-menu button').allTextContents();
+  const joined = winItems.join(" | ");
+  ok(winItems.some((t) => /Minimize/.test(t)), "A3 Window menu has Minimize", joined);
+  ok(winItems.some((t) => /Maximize|Restore|Zoom/.test(t)), "A3 Window menu has Maximize/Restore", joined);
+  ok(winItems.some((t) => /Always on Top/.test(t)), "A3 Window menu has Always on Top", joined);
+  ok(winItems.some((t) => /Full Screen/.test(t)), "A3 Window menu has Full Screen", joined);
+  ok(winItems.some((t) => /MD Nest|browser|parity/.test(t)), "A3 Window menu lists this window", joined);
+  await page.screenshot({ path: path.join(OUT, "window-menu.png") });
+  await page.keyboard.press("Escape");
+  // View still has the alias.
+  await page.locator('#mdn-menubar .mdn-menu[data-menu="view"] > .mdn-menu-label').click();
+  ok(await page.locator('#mdn-menubar button[data-id="view.alwaysOnTop"]').count() === 1, "A3 View keeps Always on Top alias");
+  await page.keyboard.press("Escape");
+  await run("window.maximize");
+  await page.waitForTimeout(80);
+  const note = await page.locator("#mdn-toast").innerText();
+  ok(/Maximize|Restore|Zoom/.test(note), "A3 Maximize runs in the browser host", note);
+  const minAccel = await page.evaluate(() => window.mdnest.commands.find((c) => c.id === "window.minimize")?.key);
+  ok(minAccel === "CmdOrCtrl+M", "A3 Minimize is Ctrl+M", String(minAccel));
+
   ok(errors.length === 0, "no page errors", errors.join(" | "));
 } catch (e) {
   ok(false, "EXCEPTION", e?.message ?? e);

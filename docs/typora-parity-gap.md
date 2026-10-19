@@ -45,7 +45,7 @@ Counted by `python3 scripts/parity-count.py` (163 rows; an empty After cell inhe
 | Item | Shortcut | Before | After | Notes |
 |---|---|---|---|---|
 | Native menu bar File/Edit/Paragraph/Format/View/Themes/Help | | missing | done | HTML menubar in the browser host; GTK/Windows menu via set_app_menu |
-| Window menu (minimize, zoom, always on top) |  | missing | partial | Always on Top is a View item; no separate Window menu (minimize/zoom are the OS window) |
+| Window menu (minimize, zoom, always on top) |  | missing | done | Window menu: Minimize (Ctrl+M), Maximize/Restore (Zoom on macOS), Always on Top, Full Screen, open windows; View keeps an Always on Top alias |
 | App menu on macOS (About, Preferences, Quit) | | missing | done | built in Rust; not run on this box |
 
 ## File
@@ -263,7 +263,7 @@ Counted by `python3 scripts/parity-count.py` (163 rows; an empty After cell inhe
 
 Still missing or only partial after 0.1.1. Each note says why.
 
-- **Window menu** (partial). Always on Top lives under View. There is no Window menu for minimize or zoom; those stay with the OS window.
+- **Window menu** (done). Window has Minimize (Ctrl+M), Maximize/Restore (Zoom on macOS), Always on Top, Full Screen, and the open MD Nest windows. View still has an Always on Top alias.
 - **Export to Word / pandoc** (missing). No pandoc integration. Export is PDF, HTML, and HTML without styles.
 - **Line endings and encodings** (missing). Files are read and written as UTF-8. There is no CRLF/LF or encoding picker.
 - **Smart punctuation, spell check, emoji autocomplete** (missing). Not built. The editor keeps `spellcheck` off.

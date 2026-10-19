@@ -32,10 +32,10 @@ await page.waitForSelector("#mdn-menubar");
 await page.waitForTimeout(400);
 
 const labels = await page.locator("#mdn-menubar > .mdn-menu > .mdn-menu-label").allTextContents();
-ok(labels.join(",") === "File,Edit,Paragraph,Format,View,Themes,Help", "menubar renders File/Edit/Paragraph/Format/View/Themes/Help", labels.join(","));
+ok(labels.join(",") === "File,Edit,Paragraph,Format,View,Window,Themes,Help", "menubar renders File/Edit/Paragraph/Format/View/Window/Themes/Help", labels.join(","));
 ok(await page.evaluate(() => /os-linux|os-windows|is-mac/.test(document.body.className)), "os class present", await page.evaluate(() => document.body.className));
 
-const menus = ["file", "edit", "paragraph", "format", "view", "themes", "help"];
+const menus = ["file", "edit", "paragraph", "format", "view", "window", "themes", "help"];
 for (const name of menus) {
   await page.locator(`#mdn-menubar .mdn-menu[data-menu="${name}"] > .mdn-menu-label`).click();
   const open = await page.locator(`#mdn-menubar .mdn-menu[data-menu="${name}"].mdn-menu-open > .dropdown-menu`).isVisible();

@@ -34,6 +34,9 @@ export interface MenuState {
   alwaysOnTop?: boolean;
   pairBrackets?: boolean;
   pairMarkdown?: boolean;
+  maximized?: boolean;
+  /** Open MD Nest windows. The current one is checked. */
+  windows?: { label: string; title: string; current?: boolean }[];
 }
 
 export function laterPart(_id: string): 2 | 3 | null {
@@ -200,12 +203,22 @@ export function menuTemplate(mac: boolean): MenuNode[] {
       item("view.wordCount", "Word Count"),
       sep(),
       item("view.fullScreen", "Full Screen", "F11"),
+      // Alias kept so older tests and the command palette still find it. The Window menu owns the item.
       item("view.alwaysOnTop", "Always on Top"),
       item("view.actualSize", "Actual Size", "CmdOrCtrl+Shift+0"),
       item("view.zoomIn", "Zoom In", "CmdOrCtrl+Shift+="),
       item("view.zoomOut", "Zoom Out", "CmdOrCtrl+Shift+-"),
       sep(),
       item("view.palette", "Command Palette", "CmdOrCtrl+Shift+P"),
+    ],
+  };
+  const windowMenu: MenuNode = {
+    id: "menu.window", label: "Window", submenu: [
+      item("window.minimize", "Minimize", "CmdOrCtrl+M"),
+      item("window.maximize", mac ? "Zoom" : "Maximize"),
+      item("window.alwaysOnTop", "Always on Top"),
+      item("window.fullScreen", "Full Screen", "F11"),
+      sep(),
     ],
   };
   const themes: MenuNode = { id: "menu.themes", label: "Themes", submenu: [
@@ -217,7 +230,7 @@ export function menuTemplate(mac: boolean): MenuNode[] {
     item("help.about", "About MD Nest"),
     item("help.dataFolder", "Open Data Folder"),
   ] };
-  return [file, edit, paragraph, format, view, themes, help];
+  return [file, edit, paragraph, format, view, windowMenu, themes, help];
 }
 
 const TABLE_IDS = new Set([
@@ -231,10 +244,18 @@ function fileName(p: string): string {
   return p.split(/[\\/]/).pop() || p;
 }
 
-function applyState(node: MenuNode, state: MenuState, commands: Command[], occupied: Set<string>): MenuNode {
+function applyState(node: MenuNode, state: MenuState, commands: Command[], occupied: Set<string>, mac = MAC): MenuNode {
   if (node.role === "separator") return { role: "separator" };
+  if (node.id === "menu.window") {
+    const kids = (node.submenu ?? [])
+      .filter((c) => c.id !== "window.bringAllToFront")
+      .map((c) => applyState(c, state, commands, occupied, mac));
+    const wins = (state.windows ?? []).map((w) => item("window.focus." + w.label, w.title || w.label, undefined, { checked: !!w.current }));
+    const front = mac ? [item("window.bringAllToFront", "Bring All to Front"), sep()] : [];
+    return { ...node, submenu: [...kids, ...front, ...wins] };
+  }
   if (node.submenu && !node.id?.startsWith("file.openRecent") && node.id !== "menu.themes") {
-    return { ...node, submenu: node.submenu.map((c) => applyState(c, state, commands, occupied)) };
+    return { ...node, submenu: node.submenu.map((c) => applyState(c, state, commands, occupied, mac)) };
   }
   if (node.id === "file.openRecent") {
     const files = state.recent.slice(0, 12).map((p, i) => item("file.recent." + i, fileName(p)));
@@ -264,7 +285,11 @@ function applyState(node: MenuNode, state: MenuState, commands: Command[], occup
   if (node.id === "view.toolbar") return { ...node, enabled, checked: !!state.toolbar, accel: accelFor(node, occupied) };
   if (node.id === "view.statusBar") return { ...node, enabled, checked: state.statusBar !== false, accel: accelFor(node, occupied) };
   if (node.id === "view.fullScreen") return { ...node, enabled, checked: !!state.fullScreen, accel: accelFor(node, occupied) };
-  if (node.id === "view.alwaysOnTop") return { ...node, enabled, checked: !!state.alwaysOnTop, accel: accelFor(node, occupied) };
+  if (node.id === "view.alwaysOnTop" || node.id === "window.alwaysOnTop") return { ...node, enabled, checked: !!state.alwaysOnTop, accel: accelFor(node, occupied) };
+  if (node.id === "window.maximize") {
+    const label = mac ? "Zoom" : (state.maximized ? "Restore" : "Maximize");
+    return { ...node, label, enabled, checked: !!state.maximized, accel: accelFor(node, occupied) };
+  }
   if (node.id === "edit.autoPair.brackets") return { ...node, enabled, checked: state.pairBrackets !== false };
   if (node.id === "edit.autoPair.markdown") return { ...node, enabled, checked: !!state.pairMarkdown };
   let accel = node.accel;
@@ -342,7 +367,7 @@ export function coreCommandIds(mac: boolean): Set<string> {
 export function buildMenuSpec(commands: Command[], state: MenuState, mac = MAC): MenuNode[] {
   const core = coreCommandIds(mac);
   const occupied = state.pluginKeyOwners.size ? state.pluginKeyOwners : occupiedAccels(commands, core);
-  return menuTemplate(mac).map((n) => applyState(n, state, commands, occupied));
+  return menuTemplate(mac).map((n) => applyState(n, state, commands, occupied, mac));
 }
 
 function esc(s: string): string {
