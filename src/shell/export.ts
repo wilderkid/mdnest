@@ -9,6 +9,7 @@ import { renderTex, renderMermaid, loadMathJax } from "../editor/render";
 import { loadMode } from "../editor/codeview";
 import baseCss from "../styles/base.css?raw";
 import type { Host } from "../host/types";
+import { osClass } from "./os";
 
 const EXPORT_CSS = `
 html, body { height: auto !important; overflow: visible !important; }
@@ -101,7 +102,7 @@ export async function buildExportHtml(doc: PMNode, host: Host, o: { theme: strin
   for (const f of sheets) themeCss += `/* ${f} */\n` + (await inlineCss(host.themeUrl(f))) + "\n";
   let mjCss = "";
   try { const MJ = await loadMathJax(); const st = MJ.svgStylesheet?.(); if (st) mjCss = st.textContent || st.innerHTML || ""; } catch {}
-  const bodyClass = ["typora-export", "os-linux", ...["mdn-dark", "mdn-cm-fallback"].filter((c) => document.body.classList.contains(c))].join(" ");
+  const bodyClass = ["typora-export", osClass(), ...["mdn-dark", "mdn-cm-fallback"].filter((c) => document.body.classList.contains(c))].join(" ");
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="generator" content="MD Nest"><title>${esc(o.title)}</title>${o.baseHref ? `<base href="${esc(o.baseHref)}">` : ""}

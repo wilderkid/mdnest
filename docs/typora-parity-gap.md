@@ -44,41 +44,41 @@ What really was Windows-specific (before):
 
 | Item | Shortcut | Before | After | Notes |
 |---|---|---|---|---|
-| Native menu bar File/Edit/Paragraph/Format/View/Themes/Help | | missing | | none on any OS |
+| Native menu bar File/Edit/Paragraph/Format/View/Themes/Help | | missing | done | HTML menubar in the browser host; GTK/Windows menu via set_app_menu |
 | Window menu (minimize, zoom, always on top) | | missing | | |
-| App menu on macOS (About, Preferences, Quit) | | missing | | |
+| App menu on macOS (About, Preferences, Quit) | | missing | done | built in Rust; not run on this box |
 
 ## File
 
 | Item | Shortcut | Before | After | Notes |
 |---|---|---|---|---|
-| New | Ctrl+N | missing | | |
-| New Window | Ctrl+Shift+N | missing | | |
-| Open… | Ctrl+O | partial | | shortcut + palette only |
-| Open Folder… | Ctrl+Shift+O | partial | | shortcut + palette only |
-| Open Quickly (quick open by file name) | Ctrl+P | missing | | Ctrl+P printed on Windows |
-| Open Recent submenu (+ Clear Items) | | partial | | sidebar "Recent" tab only |
-| Reopen Closed File | Ctrl+Shift+T | missing | | |
-| Reload from Disk | | partial | | palette only |
-| Save | Ctrl+S | done | | |
-| Save As… | Ctrl+Shift+S | partial | | shortcut + palette only |
+| New | Ctrl+N | missing | partial | menu item + command id; dialog in part 2 |
+| New Window | Ctrl+Shift+N | missing | partial | menu item; window in part 2 |
+| Open… | Ctrl+O | partial | done | menu + shortcut |
+| Open Folder… | Ctrl+Shift+O | partial | done | menu + shortcut |
+| Open Quickly (quick open by file name) | Ctrl+P | missing | partial | command id; UI in part 2 |
+| Open Recent submenu (+ Clear Items) | | partial | partial | submenu lists recent files; Clear Items in part 2 |
+| Reopen Closed File | Ctrl+Shift+T | missing | partial | command id; part 2 |
+| Reload from Disk | | partial | done | menu item |
+| Save | Ctrl+S | done | done | menu + shortcut |
+| Save As… | Ctrl+Shift+S | partial | done | menu + shortcut |
 | Save All | | n/a | | single document per window |
 | Move To… | | missing | | |
 | Rename… / Duplicate | | missing | | |
 | Open File Location (reveal in Explorer/Finder) | | missing | | |
 | Reveal in Sidebar | | missing | | |
-| Export → PDF | | partial | | palette only |
-| Export → HTML | | partial | | palette only |
-| Export → HTML (without styles) | | missing | | |
+| Export → PDF | | partial | done | File → Export submenu |
+| Export → HTML | | partial | done | File → Export submenu |
+| Export → HTML (without styles) | | missing | partial | menu item; export path in a later part |
 | Export → Word / pandoc formats | | missing | | needs pandoc |
 | Import | | n/a | | pandoc |
 | Print… | Ctrl+Alt+P | missing | | |
 | Properties / word count info | | partial | | footer word count |
-| Preferences… | Ctrl+, | partial | | sidebar ⚙ tab |
-| Close | Ctrl+W | missing | | |
-| Quit | Ctrl+Q | missing | | window close only |
-| Drag a .md file onto the window → open | | missing | | |
-| Drag a folder onto the window → open folder | | missing | | |
+| Preferences… | Ctrl+, | partial | done | menu opens the sidebar settings tab |
+| Close | Ctrl+W | missing | partial | command id; dirty guard in part 2 |
+| Quit | Ctrl+Q | missing | partial | menu item (omitted on macOS, where it is in the app menu) |
+| Drag a .md file onto the window → open | | missing | done | handleNativeDrop; Windows uses tauri drag-drop |
+| Drag a folder onto the window → open folder | | missing | done | same handler |
 | Welcome page with Open File / Open Folder buttons | | missing | | one line of text |
 | Launch: restore last folder / file | | done | | setting "Reopen last file" |
 | Autosave | | done | | setting |
@@ -88,8 +88,8 @@ What really was Windows-specific (before):
 
 | Item | Shortcut | Before | After | Notes |
 |---|---|---|---|---|
-| Undo / Redo | Ctrl+Z / Ctrl+Y, Ctrl+Shift+Z | done | | keys only |
-| Cut / Copy / Paste / Select All | Ctrl+X/C/V/A | done | | keys only |
+| Undo / Redo | Ctrl+Z / Ctrl+Y, Ctrl+Shift+Z | done | done | menu + focus-aware dispatcher |
+| Cut / Copy / Paste / Select All | Ctrl+X/C/V/A | done | done | predefined menu items + select all |
 | Copy as Markdown | Ctrl+Shift+C | missing | | |
 | Copy as HTML code | | missing | | |
 | Copy as Plain Text | | missing | | |
@@ -99,9 +99,9 @@ What really was Windows-specific (before):
 | Select styled scope | Ctrl+E | missing | | |
 | Select word | Ctrl+D | missing | | |
 | Jump to top / bottom | Ctrl+Home / Ctrl+End | done | | native caret keys |
-| Find… | Ctrl+F | done | | |
-| Find Next / Previous | F3 / Shift+F3 | partial | | Enter in the find bar |
-| Replace | Ctrl+H | done | | |
+| Find… | Ctrl+F | done | done | menu + shortcut |
+| Find Next / Previous | F3 / Shift+F3 | partial | partial | menu items; find-bar behaviour unchanged |
+| Replace | Ctrl+H | done | done | menu + shortcut |
 | Find in files (sidebar search) | Ctrl+Shift+F | partial | | library plugin, only when indexing is on |
 | Smart punctuation / substitutions | | missing | | |
 | Spell check | | missing | | |
@@ -115,17 +115,17 @@ What really was Windows-specific (before):
 
 | Item | Shortcut | Before | After | Notes |
 |---|---|---|---|---|
-| Heading 1–6 | Ctrl+1…6 | partial | | keys only |
-| Paragraph | Ctrl+0 | partial | | keys only |
+| Heading 1–6 | Ctrl+1…6 | partial | done | menu + shortcut |
+| Paragraph | Ctrl+0 | partial | done | menu + shortcut |
 | Increase / Decrease heading level | Ctrl+= / Ctrl+- | missing | | |
 | Insert paragraph before / after | | missing | | |
-| Table insert (rows × cols dialog) | Ctrl+T | partial | | fixed 3×3, no dialog |
+| Table insert (rows × cols dialog) | Ctrl+T | partial | partial | menu inserts 3×3; dialog in part 3 |
 | Table submenu (add/delete row/col, align, move, delete table) | | partial | | floating table toolbar |
-| Code fences | Ctrl+Shift+K | partial | | key only |
+| Code fences | Ctrl+Shift+K | partial | done | menu + shortcut |
 | Math block | Ctrl+Shift+M | missing | | input rule `$$` only |
-| Quote | Ctrl+Shift+Q | partial | | key only |
-| Ordered list | Ctrl+Shift+[ | partial | | key only |
-| Unordered list | Ctrl+Shift+] | partial | | key only |
+| Quote | Ctrl+Shift+Q | partial | done | menu + shortcut |
+| Ordered list | Ctrl+Shift+[ | partial | done | menu + shortcut |
+| Unordered list | Ctrl+Shift+] | partial | done | menu + shortcut |
 | Task list | Ctrl+Shift+X | missing | | input rule `[ ]` inside a list only |
 | Toggle task status | | partial | | click on the checkbox |
 | Indent / Outdent list item | Ctrl+] / Ctrl+[, Tab / Shift+Tab | done | | keys only |
@@ -143,11 +143,11 @@ What really was Windows-specific (before):
 
 | Item | Shortcut | Before | After | Notes |
 |---|---|---|---|---|
-| Strong | Ctrl+B | partial | | key + `**x**` input rule |
-| Emphasis | Ctrl+I | partial | | key + `*x*` input rule |
+| Strong | Ctrl+B | partial | done | menu + shortcut |
+| Emphasis | Ctrl+I | partial | done | menu + shortcut |
 | Underline | Ctrl+U | missing | | no `<u>` mark |
-| Code | Ctrl+Shift+` | partial | | key + input rule |
-| Strike | Alt+Shift+5 | partial | | key + `~~x~~` input rule |
+| Code | Ctrl+Shift+` | partial | done | menu + shortcut |
+| Strike | Alt+Shift+5 | partial | done | menu + shortcut |
 | Highlight | | partial | | `==x==` input rule only |
 | Inline math | | partial | | `$x$` input rule only |
 | Superscript / Subscript | | missing | | |
@@ -162,11 +162,11 @@ What really was Windows-specific (before):
 
 | Item | Shortcut | Before | After | Notes |
 |---|---|---|---|---|
-| Source code mode | Ctrl+/ | done | | footer button too |
+| Source code mode | Ctrl+/ | done | done | menu + footer + shortcut |
 | Focus mode | F8 | missing | | |
 | Typewriter mode | F9 | missing | | |
-| Toggle sidebar | Ctrl+Shift+L | partial | | footer ☰ button, palette |
-| Outline | Ctrl+Shift+1 | partial | | sidebar tab |
+| Toggle sidebar | Ctrl+Shift+L | partial | done | menu + shortcut + footer |
+| Outline | Ctrl+Shift+1 | partial | done | menu shows the outline tab |
 | Articles (file list view) | Ctrl+Shift+2 | missing | | |
 | File tree | Ctrl+Shift+3 | partial | | tree only, no toolbar |
 | Status bar toggle | | missing | | footer always shown |
@@ -177,17 +177,17 @@ What really was Windows-specific (before):
 | Formatting toolbar | | missing | | |
 | Readonly mode | | missing | | |
 | Toggle DevTools | | n/a | | release builds |
-| Command palette | Ctrl+Shift+P | done | | MD Nest extra |
+| Command palette | Ctrl+Shift+P | done | done | View menu + shortcut |
 
 ## Themes and Help
 
 | Item | Shortcut | Before | After | Notes |
 |---|---|---|---|---|
-| Themes menu listing theme CSS files | | partial | | footer select |
+| Themes menu listing theme CSS files | | partial | done | radio items + footer select |
 | Open theme folder | | missing | | |
 | base.user.css / name.user.css | | done | | |
 | Help: Markdown reference / quick start | | missing | | |
-| Help: About (version) | | missing | | |
+| Help: About (version) | | missing | done | toast "MD Nest 0.1.1" |
 | Help: Keyboard shortcuts | | missing | | |
 
 ## Sidebar
@@ -252,9 +252,9 @@ What really was Windows-specific (before):
 
 | Item | Shortcut | Before | After | Notes |
 |---|---|---|---|---|
-| Relative / local images (`mdfile` URLs for `C:\…` paths) | | win-broken | | handler rejected drive-letter paths |
-| Browser accelerators off (Ctrl+P print, Ctrl+R/F5 reload, page zoom) | | win-broken | | reload lost unsaved edits |
-| No Edge default context menu (Back/Refresh/Print) | | win-broken | | |
-| `body.os-windows` class for themes | | win-broken | | hard-coded os-linux |
+| Relative / local images (`mdfile` URLs for `C:\…` paths) | | win-broken | done | frontend forward slashes; decoder accepts drive letters |
+| Browser accelerators off (Ctrl+P print, Ctrl+R/F5 reload, page zoom) | | win-broken | done | WebView2 settings + frontend swallow |
+| No Edge default context menu (Back/Refresh/Print) | | win-broken | done | WebView2 settings + frontend preventDefault |
+| `body.os-windows` class for themes | | win-broken | done | os-windows / os-linux / is-mac, including export |
 | Native file dialogs (open/save/folder) | | done | | dialog:default capability |
 | Ctrl shortcuts (Mod = Ctrl) | | done | | |

@@ -67,16 +67,24 @@ export function buildInputRules(s: Schema) {
   ]});
 }
 
-export function buildKeymaps(s: Schema, extra: { toggleSource: () => void; save: () => void; saveAs: () => void; open: () => void; openFolder: () => void; palette: () => void }) {
+export function buildKeymaps(s: Schema, extra: { toggleSource: () => void; save: () => void; saveAs: () => void; open: () => void; openFolder: () => void; palette: () => void; claimed?: (id: string) => boolean }) {
   const n = s.nodes, m = s.marks;
   const heading = (l: number) => setBlockType(n.heading, { level: l });
+  // The shell dispatcher owns these. Skip when it already ran the matching command.
+  const skip = (id: string, fn: any) => (st: any, d: any, v: any) => extra.claimed?.(id) ? true : fn(st, d, v);
   const keys: Record<string, any> = {
     "Mod-Enter": (st: any, d: any) => isInTable(st) ? addRowAfter(st, d) : exitCode(st, d),
-    "Mod-z": undo, "Shift-Mod-z": redo, "Mod-y": redo,
-    "Mod-b": fmt(m.strong, "**"), "Mod-i": fmt(m.em, "*"), "Shift-Mod-`": fmt(m.code, "`"), "Alt-Shift-5": fmt(m.strike, "~~"),
-    "Mod-0": setBlockType(n.paragraph), "Mod-1": heading(1), "Mod-2": heading(2), "Mod-3": heading(3), "Mod-4": heading(4), "Mod-5": heading(5), "Mod-6": heading(6),
-    "Shift-Mod-q": wrapIn(n.blockquote), "Shift-Mod-]": wrapInList(n.bullet_list), "Shift-Mod-[": wrapInList(n.ordered_list),
-    "Shift-Mod-k": setBlockType(n.code_block),
+    "Mod-z": skip("edit.undo", undo), "Shift-Mod-z": skip("edit.redo", redo), "Mod-y": skip("edit.redo", redo),
+    "Mod-b": skip("format.strong", fmt(m.strong, "**")), "Mod-i": skip("format.emphasis", fmt(m.em, "*")),
+    "Shift-Mod-`": skip("format.code", fmt(m.code, "`")), "Alt-Shift-5": skip("format.strike", fmt(m.strike, "~~")),
+    "Mod-0": skip("paragraph.paragraph", setBlockType(n.paragraph)),
+    "Mod-1": skip("paragraph.heading.1", heading(1)), "Mod-2": skip("paragraph.heading.2", heading(2)),
+    "Mod-3": skip("paragraph.heading.3", heading(3)), "Mod-4": skip("paragraph.heading.4", heading(4)),
+    "Mod-5": skip("paragraph.heading.5", heading(5)), "Mod-6": skip("paragraph.heading.6", heading(6)),
+    "Shift-Mod-q": skip("paragraph.quote", wrapIn(n.blockquote)),
+    "Shift-Mod-]": skip("paragraph.unorderedList", wrapInList(n.bullet_list)),
+    "Shift-Mod-[": skip("paragraph.orderedList", wrapInList(n.ordered_list)),
+    "Shift-Mod-k": skip("paragraph.codeFence", setBlockType(n.code_block)),
     Enter: splitListItem(n.list_item), "Mod-[": liftListItem(n.list_item), "Mod-]": sinkListItem(n.list_item),
     Tab: chainCommands(goToNextCell(1), sinkListItem(n.list_item)), "Shift-Tab": chainCommands(goToNextCell(-1), liftListItem(n.list_item)),
     "Shift-Enter": chainCommands(exitCode, (st: any, d: any) => { d?.(st.tr.replaceSelectionWith(n.hard_break.create()).scrollIntoView()); return true; }),

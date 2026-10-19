@@ -8,6 +8,30 @@
   --sidebar-width: 260px; --footer-height: 30px; --mermaid-theme: default;
 }
 html, body { margin: 0; padding: 0; height: 100%; }
+body.mdn-menubar-on { --menubar-height: 28px; }
+#mdn-menubar { display: none; }
+body.mdn-menubar-on #mdn-menubar { display: flex; position: fixed; top: 0; left: 0; right: 0; height: var(--menubar-height);
+  align-items: stretch; gap: 0; z-index: 40; background: var(--side-bar-bg-color); color: var(--control-text-color);
+  border-bottom: 1px solid rgba(0,0,0,.1); font-size: 13px; user-select: none; }
+.mdn-menu { position: relative; }
+.mdn-menu-label { font: inherit; color: inherit; background: transparent; border: 0; padding: 0 10px; height: 100%; cursor: pointer; }
+.mdn-menu-label:hover, .mdn-menu-open > .mdn-menu-label { background: var(--item-hover-bg-color); }
+#mdn-menubar .dropdown-menu { display: none; position: absolute; top: 100%; left: 0; min-width: 240px; max-height: 70vh; overflow: auto;
+  background: var(--bg-color); color: var(--text-color); border: 1px solid rgba(127,127,127,.35); border-radius: 4px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.18); padding: 4px 0; z-index: 50; }
+#mdn-menubar .mdn-menu-open > .dropdown-menu { display: block; }
+.mdn-menu-item, .mdn-menu-sub { display: flex; align-items: center; justify-content: space-between; gap: 24px;
+  width: 100%; box-sizing: border-box; text-align: left; font: inherit; color: inherit; background: transparent;
+  border: 0; padding: 4px 14px; cursor: pointer; position: relative; }
+.mdn-menu-item:hover, .mdn-menu-sub:hover { background: var(--item-hover-bg-color); }
+.mdn-menu-item:disabled { opacity: .4; cursor: default; }
+.mdn-menu-accel { opacity: .6; font-size: 12px; }
+.mdn-menu-sep { height: 1px; margin: 4px 0; background: rgba(127,127,127,.3); }
+.mdn-menu-sub > .mdn-submenu { display: none; top: -4px; left: 100%; }
+.mdn-menu-sub:hover > .mdn-submenu, .mdn-menu-sub:focus-within > .mdn-submenu { display: block; }
+.mdn-menu-caret { opacity: .6; }
+body.mdn-menubar-on #typora-sidebar { top: var(--menubar-height); }
+body.mdn-menubar-on content, body.mdn-menubar-on #typora-source { top: var(--menubar-height); }
 html { font-size: 16px; -webkit-text-size-adjust: 100%; }
 body { background: var(--bg-color); color: var(--text-color); overflow: hidden;
   font-family: system-ui, -apple-system, "Segoe UI", "Noto Sans", "Noto Sans CJK SC", sans-serif; line-height: 1.6; }

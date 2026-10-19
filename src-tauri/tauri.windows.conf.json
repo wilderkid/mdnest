@@ -1,6 +1,18 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "MD Nest",
+  "app": {
+    "windows": [
+      {
+        "title": "MD Nest",
+        "width": 1200,
+        "height": 800,
+        "resizable": true,
+        "dragDropEnabled": true,
+        "label": "main"
+      }
+    ]
+  },
   "bundle": {
     "targets": ["nsis"],
     "publisher": "MD Nest",

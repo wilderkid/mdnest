@@ -13,7 +13,9 @@ export const tauriHost: Host = {
   listDir: (path) => invoke<DirEntry[]>("list_dir", { path }),
   listThemes: () => invoke<string[]>("list_themes"),
   themeUrl: (file) => scheme("mdtheme") + encodeURIComponent(file).replace(/%2F/g, "/"),
-  fileUrl: (abs) => scheme("mdfile") + encodeURI(abs.replace(/^\//, "")),
+  // Always forward slashes. A Windows path `C:\Users\x\a.png` becomes
+  // `http://mdfile.localhost/C:/Users/x/a.png` (drive letter kept; the handler accepts it).
+  fileUrl: (abs) => scheme("mdfile") + encodeURI(abs.replace(/\\/g, "/").replace(/^\//, "")),
   defaultWorkspace: () => invoke<string | null>("default_workspace"),
   cliFile: () => invoke<string | null>("cli_file"),
   cliArgs: () => invoke<string[]>("cli_args"),

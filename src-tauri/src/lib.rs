@@ -1,6 +1,7 @@
 mod commands;
 #[cfg(feature = "library")]
 pub mod kb;
+mod menu;
 mod net;
 #[cfg(any(target_os = "linux", target_os = "macos", windows))]
 mod pdf;
@@ -76,6 +77,18 @@ pub fn run() {
             if let Some(bundled) = bundled_themes_dir(app.handle()) {
                 seed_missing(&bundled, &themes).map_err(|e| e.to_string())?;
             }
+            let handle = app.handle().clone();
+            app.on_menu_event(move |app, event| {
+                menu::emit_menu_event(app, &event.id().0);
+            });
+            // Window menu (Linux/Windows) also reports through the window handler.
+            if let Some(win) = handle.get_webview_window("main") {
+                let h2 = handle.clone();
+                win.on_menu_event(move |_win, event| {
+                    menu::emit_menu_event(&h2, &event.id().0);
+                });
+                disable_webview_chrome(&win);
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -102,7 +115,29 @@ pub fn run() {
             commands::kb_call,
             commands::kb_watch,
             commands::kb_unwatch,
+            menu::set_app_menu,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
+
+/// WebView2 still ships browser accelerators (Ctrl+R, F5, Ctrl+P, page zoom) and Edge's
+/// default context menu. Turn both off. The frontend also swallows those keys.
+#[cfg(windows)]
+fn disable_webview_chrome(win: &tauri::WebviewWindow) {
+    let _ = win.with_webview(|webview| {
+        use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Settings3;
+        use windows::core::Interface;
+        unsafe {
+            let Ok(core) = webview.controller().CoreWebView2() else { return };
+            let Ok(settings) = core.Settings() else { return };
+            let _ = settings.SetAreDefaultContextMenusEnabled(false);
+            if let Ok(settings3) = settings.cast::<ICoreWebView2Settings3>() {
+                let _ = settings3.SetAreBrowserAcceleratorKeysEnabled(false);
+            }
+        }
+    });
+}
+
+#[cfg(not(windows))]
+fn disable_webview_chrome(_win: &tauri::WebviewWindow) {}

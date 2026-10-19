@@ -1,0 +1,86 @@
+// Native smoke: GTK menu bar exists, and a menu-level shortcut reaches the webview.
+// The binary must be a Tauri release build (npx tauri build --no-bundle) so the frontend is embedded.
+// Usage: node tests/native/parity-smoke.mjs [binary]
+import fs from "node:fs";
+import path from "node:path";
+import { execFile, spawn } from "node:child_process";
+import { startNative } from "./wd.mjs";
+
+const APP = process.argv[2] ?? process.env.APP ?? "src-tauri/target/release/mdnest";
+const DISPLAY = process.env.DISPLAY_TEST ?? ":79";
+const OUT = path.resolve("screenshots/parity");
+fs.mkdirSync(OUT, { recursive: true });
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const env = { ...process.env, DISPLAY, NO_AT_BRIDGE: "1" };
+const sh = (cmd, args) => new Promise((res) => execFile(cmd, args, { env }, (err, stdout, stderr) => res({ err, stdout: String(stdout || ""), stderr: String(stderr || "") })));
+
+let n;
+let wm;
+let fail = 0;
+const ok = (c, m, info = "") => { console.log((c ? "PASS " : "FAIL ") + m + (info ? " — " + String(info).slice(0, 200) : "")); if (!c) fail++; };
+
+try {
+  n = await startNative({ app: APP, display: DISPLAY, args: ["--no-restore"] });
+  // Bare Xvfb never focuses the toplevel, so F10 / Ctrl+2 need a window manager on this display only.
+  wm = spawn("xfwm4", ["--compositor=off"], { env, stdio: "ignore" });
+  await n.waitFor(() => window.mdnest?.editor?.view && window.mdnest.host.kind === "tauri" && document.body.classList.contains("mdn-ready"), { timeout: 20000 });
+  await sleep(1200);
+  const wid = (await sh("xdotool", ["search", "--onlyvisible", "--name", "MD Nest"])).stdout.split("\n").filter(Boolean)[0];
+  ok(!!wid, "GTK window is visible", wid || "no window");
+  let origin = { x: 8, y: 32 };
+  if (wid) {
+    await sh("xdotool", ["windowactivate", "--sync", wid]);
+    await sleep(300);
+    const geo = (await sh("xdotool", ["getwindowgeometry", "--shell", wid])).stdout;
+    const g = Object.fromEntries(geo.split("\n").filter((l) => l.includes("=")).map((l) => l.split("=")));
+    origin = { x: +g.X || 0, y: +g.Y || 0 };
+  }
+  const shot = path.join(OUT, "native-menu-file.png");
+  await new Promise((res, rej) => execFile("python3", ["-c", `
+import os, sys
+os.environ["DISPLAY"] = sys.argv[1]
+import gi
+gi.require_version("Gdk", "3.0")
+from gi.repository import Gdk
+Gdk.init([])
+win = Gdk.get_default_root_window()
+w, h = win.get_width(), win.get_height()
+pb = Gdk.pixbuf_get_from_window(win, 0, 0, w, h)
+if pb is None:
+    raise SystemExit("pixbuf is empty")
+pb.savev(sys.argv[2], "png", [], [])
+print(w, h)
+`, DISPLAY, shot], (err, stdout, stderr) => err ? rej(new Error(String(stderr || err))) : res(String(stdout))));
+  ok(fs.existsSync(shot) && fs.statSync(shot).size > 8000, "native menu screenshot captured", shot + " " + (fs.existsSync(shot) ? fs.statSync(shot).size : 0));
+  if (wid) await sh("xdotool", ["key", "--window", wid, "Escape"]);
+  await sleep(200);
+
+  await n.exec(() => {
+    window.mdnest.editor.setMarkdown("# Hello\n\nA paragraph.\n");
+    window.mdnest.editor.view.focus();
+  });
+  await sleep(300);
+  if (wid) {
+    await sh("xdotool", ["windowactivate", "--sync", wid]);
+    await sleep(200);
+    // Click the editor so the shell has focus, then send the Paragraph > Heading 2 accelerator.
+    await sh("xdotool", ["mousemove", String(origin.x + 480), String(origin.y + 180)]);
+    await sh("xdotool", ["click", "1"]);
+    await sleep(200);
+    await sh("xdotool", ["key", "--clearmodifiers", "ctrl+2"]);
+  }
+  await sleep(500);
+  const level = await n.exec(() => {
+    const v = window.mdnest.editor.view;
+    let name = "";
+    v.state.doc.descendants((node) => { if (!name && node.isTextblock) name = node.type.name + ":" + (node.attrs.level ?? ""); });
+    return { name, md: window.mdnest.editor.getMarkdown().slice(0, 60) };
+  });
+  ok(String(level.md).includes("## "), "Ctrl+2 reaches the webview as heading 2", JSON.stringify(level));
+} catch (e) {
+  ok(false, "native smoke threw", e.message || String(e));
+} finally {
+  if (n) await n.close().catch(() => {});
+  if (wm) { try { wm.kill(); } catch { /* gone */ } }
+}
+process.exit(fail ? 1 : 0);

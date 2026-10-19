@@ -25,6 +25,16 @@ import { EditorSearch } from "./editor/search";
 import { insertImageFiles, IMAGE_FOLDER_KEY, imageFolderPattern } from "./shell/images";
 import { buildExportHtml, printHtml } from "./shell/export";
 import { insertTable } from "./editor/tabletools";
+import { setBlockType, toggleMark, wrapIn } from "prosemirror-commands";
+import { wrapInList } from "prosemirror-schema-list";
+import { undo, redo } from "prosemirror-history";
+import { schema } from "./editor/schema";
+import {
+  installKeyboardDispatcher, installPageKeyGuard, installContextMenuGuard, runFocusAware, commandEnabled,
+} from "./shell/commands";
+import { buildMenuSpec, renderMenuBar, menuBarVisible, type MenuState } from "./shell/menu";
+import { applyOsClass, osClass } from "./shell/os";
+import { handleNativeDrop, pathsFromUriList, type NativeDrop } from "./shell/drop";
 
 const WELCOME = `# Welcome to MD Nest\n\nOpen a file (Ctrl+O) or a folder (Ctrl+Shift+O). Toggle source mode with Ctrl+/ and the command palette with Ctrl+Shift+P.\n`;
 
@@ -37,7 +47,8 @@ let citeFlash: { doc: unknown; from: number; to: number } | null = null;
 decorationProviders.push((st) => citeFlash && citeFlash.doc === st.doc ? DecorationSet.create(st.doc, [Decoration.node(citeFlash.from, citeFlash.to, { class: "md-cite-flash" })]) : null);
 const settingSpecs: { owner: string; specs: SettingSpec[] }[] = [];
 
-document.body.classList.add("os-linux", "pin-outline");
+document.body.classList.add(osClass(), "pin-outline");
+applyOsClass();
 const sidebar = new Sidebar(host, (p) => openFile(p));
 document.body.appendChild(sidebar.el);
 const content = document.createElement("content"); document.body.appendChild(content);
@@ -52,6 +63,10 @@ let toastTimer: any;
 const notify = (m: string) => { toast.textContent = m; toast.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => toast.classList.remove("show"), 2600); };
 
 let changeTimer: any;
+// Set by the keyboard dispatcher just before it runs a command, so the editor keymap
+// (installed below) does not run the same shortcut a second time.
+let claimedUntil = 0;
+let claimedId = "";
 const editor: Editor = createEditor(writeEl, WELCOME, {
   decorationProviders,
   onChange: () => {
@@ -63,7 +78,15 @@ const editor: Editor = createEditor(writeEl, WELCOME, {
     }, 150);
   },
   onImageFiles: (files, pos) => { insertImageFiles(editor.view, host, state.path, files, pos, notify); return true; },
-  keys: { toggleSource, save: () => save(false), saveAs: () => save(true), open: pickAndOpen, openFolder: pickFolder, palette: () => openPalette(commands) },
+  keys: {
+    toggleSource: () => { if (Date.now() < claimedUntil && claimedId === "view.source") return; toggleSource(); },
+    save: () => { if (Date.now() < claimedUntil && claimedId === "file.save") return; save(false); },
+    saveAs: () => { if (Date.now() < claimedUntil && claimedId === "file.saveAs") return; save(true); },
+    open: () => { if (Date.now() < claimedUntil && claimedId === "file.open") return; pickAndOpen(); },
+    openFolder: () => { if (Date.now() < claimedUntil && claimedId === "file.openFolder") return; pickFolder(); },
+    palette: () => { if (Date.now() < claimedUntil && claimedId === "view.palette") return; openPalette(commands); },
+    claimed: (id: string) => Date.now() < claimedUntil && claimedId === id,
+  },
   commands: () => commands,
 });
 editor.view.dom.id = "write";
@@ -119,7 +142,8 @@ async function openAt(path: string, line?: number) {
   setTimeout(() => { if (citeFlash === mine) { citeFlash = null; editor.view.dispatch(editor.view.state.tr.setMeta("addToHistory", false)); } }, 1800);
 }
 async function pickAndOpen() { const p = await host.pickFile(); if (p) openFile(p); }
-async function pickFolder() { const p = await host.pickFolder(); if (p) { await sidebar.openFolder(p); localStorage.setItem("mdnest.lastFolder", p); plugins.emit("workspace-changed", p); } }
+async function pickFolderPath(p: string) { await sidebar.openFolder(p); localStorage.setItem("mdnest.lastFolder", p); plugins.emit("workspace-changed", p); }
+async function pickFolder() { const p = await host.pickFolder(); if (p) await pickFolderPath(p); }
 let quietSave = false;
 async function save(as: boolean) {
   let p = state.path;
@@ -263,8 +287,241 @@ const plugins = new PluginManager({
   { id: "view.recent", title: "View: Recent Files", run: () => { document.body.classList.add("pin-outline"); sidebar.select("recent"); } },
   { id: "view.settings", title: "Preferences: Settings", run: () => { document.body.classList.add("pin-outline"); sidebar.select("settings"); } },
 ].forEach(addCmd);
-document.getElementById("sidebar-toggle")!.onclick = () => document.body.classList.toggle("pin-outline");
-document.getElementById("source-toggle")!.onclick = toggleSource;
+
+const MAC = /Mac|iPhone|iPad|iPod/.test(navigator.platform + navigator.userAgent);
+const later = (part: 2 | 3) => () => notify("Coming in part " + part);
+function stub(id: string, title: string, key: string | undefined, part: 2 | 3) {
+  if (commands.some((c) => c.id === id)) return;
+  addCmd({ id, title, ...(key ? { key } : {}), run: later(part) });
+}
+// Items whose features land in later parts. The id stays; only `run` is replaced.
+const PART2: [string, string, string?][] = [
+  ["file.new", "File: New", "CmdOrCtrl+N"],
+  ["file.newWindow", "File: New Window", "CmdOrCtrl+Shift+N"],
+  ["file.quickOpen", "File: Open Quickly…", "CmdOrCtrl+P"],
+  ["file.reopenClosed", "File: Reopen Closed File", "CmdOrCtrl+Shift+T"],
+  ["file.moveTo", "File: Move To…"],
+  ["file.rename", "File: Rename…"],
+  ["file.duplicate", "File: Duplicate"],
+  ["file.openLocation", "File: Open File Location"],
+  ["file.revealSidebar", "File: Reveal in Sidebar"],
+  ["file.print", "File: Print…", "CmdOrCtrl+Alt+P"],
+  ["file.close", "File: Close", "CmdOrCtrl+W"],
+  ["file.quit", "File: Quit", "CmdOrCtrl+Q"],
+  ["file.clearRecent", "File: Clear Recent Items"],
+  ["file.exportHtmlPlain", "File: Export HTML (without styles)"],
+  ["view.articles", "View: Articles", "CmdOrCtrl+Shift+2"],
+  ["view.fileTree", "View: File Tree", "CmdOrCtrl+Shift+3"],
+  ["view.searchFolder", "View: Search in Folder", "CmdOrCtrl+Shift+F"],
+  ["themes.openFolder", "Themes: Open Theme Folder"],
+  ["help.markdown", "Help: Markdown Reference"],
+  ["help.shortcuts", "Help: Keyboard Shortcuts"],
+  ["help.dataFolder", "Help: Open Data Folder"],
+];
+const PART3: [string, string, string?][] = [
+  ["edit.copyMarkdown", "Edit: Copy as Markdown", "CmdOrCtrl+Shift+C"],
+  ["edit.copyHtml", "Edit: Copy as HTML Code"],
+  ["edit.copyPlain", "Edit: Copy as Plain Text"],
+  ["edit.pastePlain", "Edit: Paste as Plain Text", "CmdOrCtrl+Shift+V"],
+  ["edit.delete", "Edit: Delete"],
+  ["edit.selectLine", "Edit: Select Line/Sentence", "CmdOrCtrl+L"],
+  ["edit.selectScope", "Edit: Select Styled Scope", "CmdOrCtrl+E"],
+  ["edit.selectWord", "Edit: Select Word", "CmdOrCtrl+D"],
+  ["edit.jumpTop", "Edit: Jump to Top", "CmdOrCtrl+Home"],
+  ["edit.jumpBottom", "Edit: Jump to Bottom", "CmdOrCtrl+End"],
+  ["edit.findNext", "Edit: Find Next", "F3"],
+  ["edit.findPrevious", "Edit: Find Previous", "Shift+F3"],
+  ["edit.autoPair.brackets", "Edit: Auto Pair Brackets and Quotes"],
+  ["edit.autoPair.markdown", "Edit: Auto Pair Markdown Syntax"],
+  ["paragraph.increaseHeading", "Paragraph: Increase Heading Level", "CmdOrCtrl+="],
+  ["paragraph.decreaseHeading", "Paragraph: Decrease Heading Level", "CmdOrCtrl+-"],
+
+  ["paragraph.table.addRowAbove", "Table: Add Row Above"],
+  ["paragraph.table.addRowBelow", "Table: Add Row Below"],
+  ["paragraph.table.addColBefore", "Table: Add Column Before"],
+  ["paragraph.table.addColAfter", "Table: Add Column After"],
+  ["paragraph.table.deleteRow", "Table: Delete Row"],
+  ["paragraph.table.deleteColumn", "Table: Delete Column"],
+  ["paragraph.table.deleteTable", "Table: Delete Table"],
+  ["paragraph.mathBlock", "Paragraph: Math Block", "CmdOrCtrl+Shift+M"],
+  ["paragraph.taskList", "Paragraph: Task List", "CmdOrCtrl+Shift+X"],
+  ["paragraph.indent", "Paragraph: Indent", "CmdOrCtrl+]"],
+  ["paragraph.outdent", "Paragraph: Outdent", "CmdOrCtrl+["],
+  ["paragraph.insertBefore", "Paragraph: Insert Paragraph Before"],
+  ["paragraph.insertAfter", "Paragraph: Insert Paragraph After"],
+  ["paragraph.linkRef", "Paragraph: Link Reference"],
+  ["paragraph.footnote", "Paragraph: Footnote"],
+  ["paragraph.hr", "Paragraph: Horizontal Line"],
+  ["paragraph.toc", "Paragraph: Table of Contents"],
+  ["paragraph.frontMatter", "Paragraph: YAML Front Matter"],
+  ["paragraph.alert.note", "Alert: Note"],
+  ["paragraph.alert.tip", "Alert: Tip"],
+  ["paragraph.alert.important", "Alert: Important"],
+  ["paragraph.alert.warning", "Alert: Warning"],
+  ["paragraph.alert.caution", "Alert: Caution"],
+  ["paragraph.mermaid", "Paragraph: Mermaid Diagram"],
+  ["paragraph.deleteBlock", "Paragraph: Delete Block"],
+  ["format.underline", "Format: Underline", "CmdOrCtrl+U"],
+  ["format.highlight", "Format: Highlight"],
+  ["format.inlineMath", "Format: Inline Math"],
+  ["format.superscript", "Format: Superscript"],
+  ["format.subscript", "Format: Subscript"],
+  ["format.comment", "Format: Comment"],
+  ["format.link", "Format: Hyperlink", "CmdOrCtrl+K"],
+  ["format.image", "Format: Insert Local Image…", "CmdOrCtrl+Shift+I"],
+  ["format.image.zoom50", "Image: Zoom 50%"],
+  ["format.image.zoom100", "Image: Zoom 100%"],
+  ["format.image.zoom200", "Image: Zoom 200%"],
+  ["format.clear", "Format: Clear Format", "CmdOrCtrl+\\"],
+  ["view.focus", "View: Focus Mode", "F8"],
+  ["view.typewriter", "View: Typewriter Mode", "F9"],
+  ["view.toolbar", "View: Formatting Toolbar"],
+  ["view.statusBar", "View: Status Bar"],
+  ["view.wordCount", "View: Word Count"],
+  ["view.fullScreen", "View: Full Screen", "F11"],
+  ["view.alwaysOnTop", "View: Always on Top"],
+  ["view.actualSize", "View: Actual Size", "CmdOrCtrl+Shift+0"],
+  ["view.zoomIn", "View: Zoom In", "CmdOrCtrl+Shift+="],
+  ["view.zoomOut", "View: Zoom Out", "CmdOrCtrl+Shift+-"],
+];
+for (const [id, title, key] of PART2) stub(id, title, key, 2);
+for (const [id, title, key] of PART3) stub(id, title, key, 3);
+
+function pmRun(fn: (state: any, dispatch?: any, view?: any) => boolean) {
+  const v = editor.view;
+  fn(v.state, v.dispatch, v);
+  v.focus();
+}
+const headingCmd = (level: number) => () => pmRun(setBlockType(schema.nodes.heading, { level }));
+const markCmd = (name: string) => () => pmRun(toggleMark(schema.marks[name]));
+[
+  { id: "edit.undo", title: "Edit: Undo", key: "CmdOrCtrl+Z", run: () => pmRun(undo) },
+  { id: "edit.redo", title: "Edit: Redo", key: MAC ? "Cmd+Shift+Z" : "CmdOrCtrl+Y", run: () => pmRun(redo) },
+  { id: "edit.selectAll", title: "Edit: Select All", key: "CmdOrCtrl+A", run: () => {
+    const v = editor.view;
+    const sel = TextSelection.create(v.state.doc, 0, v.state.doc.content.size);
+    v.dispatch(v.state.tr.setSelection(sel));
+    v.focus();
+  } },
+  { id: "paragraph.heading.1", title: "Paragraph: Heading 1", key: "CmdOrCtrl+1", run: headingCmd(1) },
+  { id: "paragraph.heading.2", title: "Paragraph: Heading 2", key: "CmdOrCtrl+2", run: headingCmd(2) },
+  { id: "paragraph.heading.3", title: "Paragraph: Heading 3", key: "CmdOrCtrl+3", run: headingCmd(3) },
+  { id: "paragraph.heading.4", title: "Paragraph: Heading 4", key: "CmdOrCtrl+4", run: headingCmd(4) },
+  { id: "paragraph.heading.5", title: "Paragraph: Heading 5", key: "CmdOrCtrl+5", run: headingCmd(5) },
+  { id: "paragraph.heading.6", title: "Paragraph: Heading 6", key: "CmdOrCtrl+6", run: headingCmd(6) },
+  { id: "paragraph.paragraph", title: "Paragraph: Paragraph", key: "CmdOrCtrl+0", run: () => pmRun(setBlockType(schema.nodes.paragraph)) },
+  { id: "paragraph.quote", title: "Paragraph: Quote", key: "CmdOrCtrl+Shift+Q", run: () => pmRun(wrapIn(schema.nodes.blockquote)) },
+  { id: "paragraph.orderedList", title: "Paragraph: Ordered List", key: "CmdOrCtrl+Shift+[", run: () => pmRun(wrapInList(schema.nodes.ordered_list)) },
+  { id: "paragraph.unorderedList", title: "Paragraph: Unordered List", key: "CmdOrCtrl+Shift+]", run: () => pmRun(wrapInList(schema.nodes.bullet_list)) },
+  { id: "paragraph.codeFence", title: "Paragraph: Code Fences", key: "CmdOrCtrl+Shift+K", run: () => pmRun(setBlockType(schema.nodes.code_block)) },
+  { id: "paragraph.tableDialog", title: "Paragraph: Table…", key: "CmdOrCtrl+T", run: () => { insertTable(3, 3)(editor.view.state, editor.view.dispatch); editor.view.focus(); } },
+  { id: "format.strong", title: "Format: Strong", key: "CmdOrCtrl+B", run: markCmd("strong") },
+  { id: "format.emphasis", title: "Format: Emphasis", key: "CmdOrCtrl+I", run: markCmd("em") },
+  { id: "format.code", title: "Format: Code", key: "CmdOrCtrl+Shift+`", run: markCmd("code") },
+  { id: "format.strike", title: "Format: Strike", key: "Alt+Shift+5", run: markCmd("strike") },
+  { id: "file.preferences", title: "File: Preferences…", key: "CmdOrCtrl+,", run: () => { document.body.classList.add("pin-outline"); sidebar.select("settings"); } },
+  { id: "help.about", title: "Help: About MD Nest", run: () => notify("MD Nest 0.1.1") },
+  { id: "view.palette", title: "View: Command Palette", key: "CmdOrCtrl+Shift+P", run: () => openPalette(commands) },
+].forEach(addCmd);
+// Recent-file slots. `run` is replaced whenever the recent list changes.
+for (let i = 0; i < 12; i++) addCmd({ id: "file.recent." + i, title: "File: Recent", run: () => {} });
+for (const t of [] as string[]) addCmd({ id: "theme." + t, title: "Theme: " + t, run: () => themes.apply(t) });
+
+function syncRecentCommands() {
+  const list = recent();
+  for (let i = 0; i < 12; i++) {
+    const p = list[i];
+    addCmd({
+      id: "file.recent." + i,
+      title: p ? "File: " + p.split(/[\\/]/).pop() : "File: Recent",
+      when: () => i < recent().length,
+      run: () => { const path = recent()[i]; if (path) openFile(path); },
+    });
+  }
+}
+function syncThemeCommands() {
+  for (const name of themes.themes()) {
+    addCmd({ id: "theme." + name, title: "Theme: " + name, run: () => themes.apply(name).then(() => { const s = document.getElementById("theme-select") as HTMLSelectElement | null; if (s) s.value = themes.current; refreshMenu(); }) });
+  }
+}
+
+function menuState(): MenuState {
+  let inTable = false;
+  try { inTable = editor.view.state.selection.$from.node(1)?.type.name === "table" || !!editor.view.dom.querySelector("table .selectedCell, .ProseMirror-selectednode"); } catch { /* boot */ }
+  try {
+    const sel = editor.view.state.selection.$from;
+    for (let d = sel.depth; d > 0; d--) if (sel.node(d).type.spec.tableRole) inTable = true;
+  } catch { /* ignore */ }
+  return {
+    recent: recent(),
+    themes: themes.themes(),
+    currentTheme: themes.current,
+    sourceMode: source.active,
+    sidebar: document.body.classList.contains("pin-outline"),
+    outline: document.body.classList.contains("ty-show-outline"),
+    hasPath: !!state.path,
+    inTable,
+    pluginKeyOwners: new Set(),
+  };
+}
+
+let menuTimer: any;
+let lastSpec = "";
+async function refreshMenu() {
+  syncRecentCommands();
+  syncThemeCommands();
+  const spec = buildMenuSpec(commands, menuState(), MAC);
+  const json = JSON.stringify(spec);
+  if (json === lastSpec) return;
+  lastSpec = json;
+  if (menuEl) renderMenuBar(menuEl, spec, (id) => { dispatcher.note(id); void runCommand(id); });
+  if (host.kind === "tauri") {
+    try { const { invoke } = await import("@tauri-apps/api/core"); await invoke("set_app_menu", { spec }); }
+    catch (e) { console.error("set_app_menu", e); }
+  }
+}
+function scheduleMenu() { clearTimeout(menuTimer); menuTimer = setTimeout(() => { void refreshMenu(); }, 40); }
+
+// The capture-phase dispatcher owns every menu accelerator, including ones the editor keymap
+// also binds. `runCommand` tells the editor keymap to skip a key the dispatcher just claimed,
+// so save / find / heading shortcuts still run once (and still work from CodeMirror).
+const EDITOR_KEYS = new Set<string>();
+function runCommand(id: string) {
+  claimedId = id; claimedUntil = Date.now() + 50;
+  if (id.startsWith("theme.")) { const name = id.slice(6); void themes.apply(name).then(() => { const s = document.getElementById("theme-select") as HTMLSelectElement | null; if (s) s.value = themes.current; scheduleMenu(); }); return; }
+  const c = commands.find((x) => x.id === id);
+  if (!c) return;
+  if (c.when) { try { if (!c.when()) return; } catch { return; } }
+  if (id === "edit.undo" || id === "edit.redo" || id === "edit.selectAll") {
+    runFocusAware(id, document.activeElement, () => { void c.run(); });
+  } else void c.run();
+  scheduleMenu();
+}
+const dispatcher = installKeyboardDispatcher(() => commands, runCommand, () => {
+  const set = new Set<string>();
+  for (const c of commands) {
+    if (!c.key || EDITOR_KEYS.has(c.id)) continue;
+    // A plugin that owns a key (AI Rewrite = Mod-k) keeps it. Do not also dispatch a core item.
+    set.add(c.id);
+  }
+  // Focus-aware editing keys are dispatched here so an <input> or CodeMirror is edited in place.
+  // Hyperlink is CmdOrCtrl+K, the same key as AI Rewrite. While AI owns it, do not dispatch.
+  const ai = commands.find((c) => c.id === "ai.rewrite" || c.id === "rewrite");
+  if (ai && commandEnabled(ai)) set.delete("format.link");
+  set.add("edit.undo"); set.add("edit.redo"); set.add("edit.selectAll");
+  return set;
+});
+installPageKeyGuard();
+installContextMenuGuard();
+
+const menuEl = document.createElement("div");
+if (menuBarVisible(host.kind)) {
+  document.body.classList.add("mdn-menubar-on");
+  document.body.insertBefore(menuEl, document.body.firstChild);
+}
+
+document.getElementById("sidebar-toggle")!.onclick = () => { document.body.classList.toggle("pin-outline"); scheduleMenu(); };
+document.getElementById("source-toggle")!.onclick = () => { toggleSource(); scheduleMenu(); };
 document.addEventListener("keydown", (e) => {
   // Reject a pending suggestion even when focus has left the editor (palette, prompt, sidebar).
   if (e.key === "Escape" && !e.ctrlKey && !e.metaKey && !e.altKey && !source.active && document.querySelector("#write .md-sug")) {
@@ -272,15 +529,6 @@ document.addEventListener("keydown", (e) => {
     cancelPendingSuggestions(editor.view);
     return;
   }
-  const mod = e.ctrlKey || e.metaKey;
-  if (!mod) return;
-  // global shortcuts that must also work while source mode / CodeMirror has focus
-  if (e.key === "/" ) { e.preventDefault(); toggleSource(); }
-  else if (e.key.toLowerCase() === "s" && source.active) { e.preventDefault(); save(e.shiftKey); }
-  else if (e.key.toLowerCase() === "p" && e.shiftKey) { e.preventDefault(); openPalette(commands); }
-  else if (e.key.toLowerCase() === "f" && !e.shiftKey) { e.preventDefault(); e.stopPropagation(); openFind(false); }
-  else if (e.key.toLowerCase() === "h" && !e.shiftKey) { e.preventDefault(); e.stopPropagation(); openFind(true); }
-  else if (e.key.toLowerCase() === "t" && !e.shiftKey && !source.active) { e.preventDefault(); insertTable(3, 3)(editor.view.state, editor.view.dispatch); }
 }, true);
 
 plugins.activateAll([readingGoal, wordStats, ai, library]); // order irrelevant: topo-sorted by depends
@@ -374,7 +622,17 @@ async function saveOrClearSecret(btn: HTMLButtonElement) {
 }
 sidebar.addTab("recent", "Recent", undefined, { id: "recent", title: "Recent", render: (el) => { recentEl = el; renderRecent(); return () => (recentEl = null); } });
 sidebar.select("files");
-(window as any).mdnest = { editor, host, notify, exportHtmlString, findBar, state, openAt };
+function onNativeDrop(drop: NativeDrop) {
+  return handleNativeDrop(drop, {
+    openFile,
+    openFolder: (p) => pickFolderPath(p),
+    view: editor.view,
+    host,
+    docPath: state.path,
+    notify,
+  });
+}
+(window as any).mdnest = { editor, host, notify, exportHtmlString, findBar, state, openAt, commands, runCommand, refreshMenu, dispatcher, handleNativeDrop: onNativeDrop };
 
 window.addEventListener("beforeunload", (e) => { if (state.dirty && host.kind === "browser") e.preventDefault(); });
 
@@ -392,6 +650,33 @@ window.addEventListener("beforeunload", (e) => { if (state.dirty && host.kind ==
   if (f) await openFile(f); else afterLoad();
   if (q.get("sidebar") === "0") document.body.classList.remove("pin-outline");
   document.body.classList.add("mdn-ready");
+  await refreshMenu();
+  if (host.kind === "tauri") {
+    try {
+      const { listen } = await import("@tauri-apps/api/event");
+      await listen<string>("mdn-menu", (ev) => {
+        const id = ev.payload;
+        if (!id || dispatcher.recent(id)) return;
+        dispatcher.note(id);
+        runCommand(id);
+      });
+      await listen<{ paths?: string[]; position?: { x: number; y: number } }>("tauri://drag-drop", (ev) => {
+        const paths = ev.payload?.paths ?? [];
+        if (paths.length) void onNativeDrop({ paths, position: ev.payload?.position });
+      });
+    } catch (e) { console.error(e); }
+  }
+  document.addEventListener("drop", (e) => {
+    const dt = e.dataTransfer;
+    if (!dt) return;
+    const raw = dt.getData("text/uri-list") || dt.getData("text/plain") || "";
+    const paths = pathsFromUriList(raw);
+    if (!paths.length) return;
+    // Images stay with the editor's HTML5 handler. Folders and Markdown files open.
+    if (paths.every((p) => /\.(png|jpe?g|gif|webp|svg|bmp|avif|ico|tiff?)$/i.test(p))) return;
+    e.preventDefault();
+    void onNativeDrop({ paths, position: { x: e.clientX, y: e.clientY } });
+  }, true);
   let cliFailed = false;
   // CLI: mdnest doc.md [--theme name] [--export-html out.html] [--export-pdf out.pdf] [--quit] [--no-restore] [--debug-log path]
   const arg = (k: string) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : null; };
