@@ -1494,6 +1494,11 @@ async function refreshMenu() {
   const json = JSON.stringify(spec);
   if (json === lastSpec) return;
   lastSpec = json;
+  menuAccels.clear();
+  const walk = (ns: { id?: string; accel?: string; submenu?: unknown[] }[]) => {
+    for (const n of ns) { if (n.id && n.accel) menuAccels.set(n.id, n.accel); if (n.submenu) walk(n.submenu as typeof ns); }
+  };
+  walk(spec as never);
   if (menuEl) renderMenuBar(menuEl, spec, (id) => { void runCommand(id); });
   if (host.kind === "tauri") {
     try { const { invoke } = await import("@tauri-apps/api/core"); await invoke("set_app_menu", { spec }); }
@@ -1634,6 +1639,29 @@ function toggleWordPopover() {
   wordPop.style.left = Math.max(8, anchor.right - 180) + "px";
   wordPop.style.top = Math.max(8, anchor.top - 120) + "px";
 }
+/** menu-command id → accelerator, refreshed with the menu spec (editor context menu shows the same shortcuts) */
+const menuAccels = new Map<string, string>();
+const CTX_ICONS: Record<string, string> = {
+  cut: "cut", copy: "copy", paste: "paste", "edit.copyMarkdown": "code", "edit.pastePlain": "paste",
+  paragraph: "paragraph", format: "bold", insert: "insert", table: "table", "task-status": "check",
+  "link-actions": "link", "image-align": "image", "edit.selectAll": "type",
+  "paragraph.heading.1": "heading", "paragraph.heading.2": "heading", "paragraph.heading.3": "heading",
+  "format.link": "link", "format.image": "image", "paragraph.tableDialog": "table", "paragraph.codeFence": "code",
+  "format.link.open": "open", "format.link.copy": "copy", "image.open": "reveal", "image.delete": "trash",
+  "paragraph.table.deleteTable": "trash", "paragraph.table.copy": "copy", "paragraph.deleteBlock": "trash",
+};
+const CTX_ACCEL: Record<string, string> = { cut: "CmdOrCtrl+X", copy: "CmdOrCtrl+C", paste: "CmdOrCtrl+V" };
+const CTX_SEP_BEFORE = new Set(["edit.copyMarkdown", "paragraph", "task-status", "edit.selectAll"]);
+function decorate(items: ContextItem[]): ContextItem[] {
+  const out: ContextItem[] = [];
+  for (const it of items) {
+    if (CTX_SEP_BEFORE.has(it.id) && out.length) out.push({ id: "-", label: "", sep: true });
+    const accel = CTX_ACCEL[it.id] ?? menuAccels.get(it.id);
+    out.push({ ...it, icon: CTX_ICONS[it.id] ?? it.icon, accel: accel ? accelLabel(accel) : it.accel,
+      danger: it.danger || /delete/i.test(it.id), submenu: it.submenu && decorate(it.submenu) });
+  }
+  return out;
+}
 function rows(pairs: [string, string][]): ContextItem[] {
   return pairs.map(([id, label]) => ({ id, label }));
 }
@@ -1706,7 +1734,7 @@ function editorContextMenu(e: MouseEvent) {
     ]) });
   }
   items.push({ id: "edit.selectAll", label: "Select All" });
-  openContextMenu(e.clientX, e.clientY, items, (id) => {
+  openContextMenu(e.clientX, e.clientY, decorate(items), (id) => {
     if (id === "cut") document.execCommand("cut");
     else if (id === "copy") document.execCommand("copy");
     else if (id === "paste") document.execCommand("paste");
