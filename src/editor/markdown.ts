@@ -64,6 +64,75 @@ function frontMatterPlugin(md: any) {
   });
 }
 
+/**
+ * Typora-style inline marks that CommonMark does not define:
+ * `<u>…</u>`, `^x^` superscript, `~x~` subscript (not `~~strike~~`).
+ * Inline `<!-- … -->` is kept as a comment token instead of being flattened to text.
+ */
+function typoraMarks(md: any) {
+  md.inline.ruler.before("html_inline", "underline_html", (state: any, silent: boolean) => {
+    const m = /^<u>([\s\S]*?)<\/u>/.exec(state.src.slice(state.pos));
+    if (!m || state.pos + m[0].length > state.posMax) return false;
+    if (m[1].includes("<")) return false;
+    if (!silent) {
+      state.push("u_open", "u", 1);
+      const t = state.push("text", "", 0); t.content = m[1];
+      state.push("u_close", "u", -1);
+    }
+    state.pos += m[0].length;
+    return true;
+  });
+  md.inline.ruler.before("emphasis", "superscript", (state: any, silent: boolean) => {
+    const src = state.src;
+    if (src.charCodeAt(state.pos) !== 0x5e) return false;
+    if (src.charCodeAt(state.pos + 1) === 0x5e || src.charCodeAt(state.pos + 1) === 0x20) return false;
+    const end = src.indexOf("^", state.pos + 1);
+    if (end < 0 || end === state.pos + 1) return false;
+    const inner = src.slice(state.pos + 1, end);
+    if (!inner || /\s/.test(inner) || inner.includes("^")) return false;
+    if (!silent) {
+      state.push("sup_open", "sup", 1);
+      const t = state.push("text", "", 0); t.content = inner;
+      state.push("sup_close", "sup", -1);
+    }
+    state.pos = end + 1;
+    return true;
+  });
+  md.inline.ruler.before("emphasis", "subscript", (state: any, silent: boolean) => {
+    const src = state.src;
+    if (src.charCodeAt(state.pos) !== 0x7e) return false;
+    if (src.charCodeAt(state.pos + 1) === 0x7e) return false;
+    let i = state.pos + 1;
+    while (i < state.posMax && src.charCodeAt(i) !== 0x7e && src.charCodeAt(i) !== 0x20 && src.charCodeAt(i) !== 0x0a) i++;
+    if (i === state.pos + 1 || src.charCodeAt(i) !== 0x7e || src.charCodeAt(i + 1) === 0x7e) return false;
+    const inner = src.slice(state.pos + 1, i);
+    if (!inner) return false;
+    if (!silent) {
+      state.push("sub_open", "sub", 1);
+      const t = state.push("text", "", 0); t.content = inner;
+      state.push("sub_close", "sub", -1);
+    }
+    state.pos = i + 1;
+    return true;
+  });
+  const html = md.inline.ruler.__rules__.find((r: any) => r.name === "html_inline");
+  if (html) {
+    const orig = html.fn;
+    md.inline.ruler.at("html_inline", (state: any, silent: boolean) => {
+      const m = /^<!--([\s\S]*?)-->/.exec(state.src.slice(state.pos));
+      if (m && state.pos + m[0].length <= state.posMax) {
+        if (!silent) {
+          const t = state.push("html_comment", "span", 0);
+          t.content = m[1];
+        }
+        state.pos += m[0].length;
+        return true;
+      }
+      return orig(state, silent);
+    });
+  }
+}
+
 function typoraExtras(md: any) {
   md.core.ruler.push("mdnest_extras", (state) => {
     const t = state.tokens;
@@ -181,7 +250,7 @@ function referencePlugin(md: any) {
 
 export const md = new MarkdownIt("commonmark", { html: true })
   .enable(["table", "strikethrough"])
-  .use(markPlugin).use(mathPlugin).use(frontMatterPlugin).use(footnotePlugin).use(referencePlugin).use(typoraExtras);
+  .use(markPlugin).use(mathPlugin).use(frontMatterPlugin).use(footnotePlugin).use(referencePlugin).use(typoraMarks).use(typoraExtras);
 
 /** markdown-it env holding the link reference definitions found in `doc` (for re-parsing fragments) */
 export function refEnvFor(doc: PMNode): any {
@@ -211,7 +280,15 @@ export const parser = new MarkdownParser(schema, md, {
   toc: { node: "toc" },
   html_block: { node: "html_block", getAttrs: (tok) => ({ html: tok.content }) },
   hr: { node: "horizontal_rule" },
-  image: { node: "image", getAttrs: (tok) => ({ src: tok.attrGet("src"), title: tok.attrGet("title") || null, alt: tok.children?.[0]?.content || null, refType: tok.meta?.refType ?? null, ref: tok.meta?.ref ?? null }) },
+  image: { node: "image", getAttrs: (tok) => {
+    const style = tok.attrGet("style") || "";
+    const zoom = (/width:\s*(\d+)%/.exec(style) || /zoom:\s*(\d+)%/.exec(style) || [])[1] || null;
+    return { src: tok.attrGet("src"), title: tok.attrGet("title") || null, alt: tok.children?.[0]?.content || null, refType: tok.meta?.refType ?? null, ref: tok.meta?.ref ?? null, zoom };
+  } },
+  html_comment: { mark: "comment", noCloseToken: true },
+  sup: { mark: "superscript" },
+  sub: { mark: "subscript" },
+  u: { mark: "underline" },
   footnote_ref: { node: "footnote_ref", getAttrs: (tok) => ({ label: tok.meta.label }) },
   footnote_def: { block: "footnote_def", getAttrs: (tok) => ({ label: tok.meta.label, tight: !!tok.meta.tight }) },
   link_def: { block: "link_def", noCloseToken: true },
@@ -297,6 +374,13 @@ export const serializer = new MarkdownSerializer({
   link_def(state, node) { state.text(node.textContent, false); state.closeBlock(node); },
   image(state, node, parent, index) {
     const a = node.attrs;
+    if (a.zoom && !a.refType) {
+      const alt = state.esc(a.alt || "");
+      const src = a.src || "";
+      const title = a.title ? ` "${String(a.title).replace(/"/g, '\\"')}"` : "";
+      state.write(`<img src="${src}" alt="${alt}"${title ? ` title="${String(a.title).replace(/"/g, "&quot;")}"` : ""} style="width:${a.zoom}%;zoom:${a.zoom}%">`);
+      return;
+    }
     if (!a.refType) return (d.nodes.image as any)(state, node, parent, index);
     state.write("![" + state.esc(a.alt || "") + "]" + (a.refType === "full" ? "[" + a.ref + "]" : a.refType === "collapsed" ? "[]" : ""));
   },
@@ -323,6 +407,10 @@ export const serializer = new MarkdownSerializer({
   ...d.marks,
   strike: { open: "~~", close: "~~", mixable: true, expelEnclosingWhitespace: true },
   highlight: { open: "==", close: "==", mixable: true, expelEnclosingWhitespace: true },
+  underline: { open: "<u>", close: "</u>", mixable: true, expelEnclosingWhitespace: true },
+  superscript: { open: "^", close: "^", mixable: true, expelEnclosingWhitespace: true },
+  subscript: { open: "~", close: "~", mixable: true, expelEnclosingWhitespace: true },
+  comment: { open: "<!--", close: "-->", mixable: true },
   link: {
     open(state, mark, parent, index) {
       if (mark.attrs.refType) { (state as any).inAutolink = false; return "["; }

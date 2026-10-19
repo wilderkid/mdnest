@@ -85,9 +85,20 @@ const nodes: Record<string, NodeSpec> = {
   },
   text: { group: "inline" },
   image: {
-    inline: true, attrs: { src: {}, alt: { default: null }, title: { default: null }, refType: { default: null }, ref: { default: null } }, group: "inline", draggable: true,
-    parseDOM: [{ tag: "img[src]", getAttrs: (d: any) => ({ src: d.getAttribute("src"), title: d.getAttribute("title"), alt: d.getAttribute("alt") }) }],
-    toDOM: (n) => ["span", { "md-inline": "image", class: "md-image" }, ["img", { src: resolveImageSrc(n.attrs.src), alt: n.attrs.alt, title: n.attrs.title }]],
+    inline: true, attrs: {
+      src: {}, alt: { default: null }, title: { default: null }, refType: { default: null }, ref: { default: null },
+      zoom: { default: null },
+    }, group: "inline", draggable: true,
+    parseDOM: [{ tag: "img[src]", getAttrs: (d: any) => {
+      const style = d.getAttribute("style") || "";
+      const zoom = (/width:\s*(\d+)%/.exec(style) || /zoom:\s*(\d+)%/.exec(style) || [])[1] || null;
+      return { src: d.getAttribute("src"), title: d.getAttribute("title"), alt: d.getAttribute("alt"), zoom };
+    } }],
+    toDOM: (n) => {
+      const img: Record<string, string> = { src: resolveImageSrc(n.attrs.src), alt: n.attrs.alt, title: n.attrs.title };
+      if (n.attrs.zoom) img.style = `width:${n.attrs.zoom}%;zoom:${n.attrs.zoom}%`;
+      return ["span", { "md-inline": "image", class: "md-image" }, ["img", img]];
+    },
   },
   inline_math: {
     inline: true, group: "inline", atom: true, attrs: { tex: { default: "" } },
@@ -140,6 +151,14 @@ const marks: Record<string, MarkSpec> = {
   strike: inlineMark("del", "del"),
   highlight: inlineMark("highlight", "mark"),
   code: { ...inlineMark("code", "code"), excludes: "_", code: true } as MarkSpec,
+  underline: inlineMark("underline", "u"),
+  superscript: inlineMark("superscript", "sup"),
+  subscript: inlineMark("subscript", "sub"),
+  // Inline HTML comment, kept as raw text inside the mark so the serializer can emit `<!-- … -->`.
+  comment: {
+    parseDOM: [{ tag: "span.md-comment" }],
+    toDOM: () => ["span", { "md-inline": "comment", class: "md-comment" }, 0] as any,
+  },
   // Raw-markdown region: while the caret is inside a formatted span, the span is replaced by its
   // Markdown source carrying this mark; it is re-parsed into real marks when the caret leaves.
   md_src: { inclusive: true, excludes: "", parseDOM: [], toDOM: () => ["span", { class: "md-expand md-src" }, 0] as any },

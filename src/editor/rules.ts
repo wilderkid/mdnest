@@ -8,6 +8,8 @@ import { goToNextCell, addRowAfter, isInTable } from "prosemirror-tables";
 import { arrowHandler } from "./codeview";
 import { inRawRegion } from "./markers";
 import { EditorState, TextSelection } from "prosemirror-state";
+import { blockEnterRule, taskListFromParagraph } from "./blockenter";
+export { tableCells } from "./blockenter";
 
 /** Ctrl+B etc.: toggle the real mark, or — inside a raw region — wrap/unwrap literal delimiters */
 function fmt(mark: MarkType, delim: string) {
@@ -44,18 +46,14 @@ export function buildInputRules(s: Schema) {
     wrappingInputRule(/^\s*>\s$/, n.blockquote),
     wrappingInputRule(/^(\d+)\.\s$/, n.ordered_list, (mm) => ({ order: +mm[1] }), (mm, node) => node.childCount + node.attrs.order == +mm[1]),
     wrappingInputRule(/^\s*([-+*])\s$/, n.bullet_list, (mm) => ({ bullet: mm[1] })),
-    new InputRule(/^\[( |x)\]\s$/, (state, match, start, end) => {
-      const $s = state.doc.resolve(start);
-      for (let d = $s.depth; d > 0; d--) if ($s.node(d).type === n.list_item) {
-        return state.tr.delete(start, end).setNodeMarkup($s.before(d), undefined, { checked: match[1] === "x" });
-      }
-      return null;
-    }),
+    new InputRule(/^\[([ xX])\]\s$/, taskListFromParagraph),
     textblockTypeInputRule(/^```([^\s`]*)\s$/, n.code_block, (mm) => ({ params: mm[1] })),
     textblockTypeInputRule(/^\$\$\s$/, n.math_block),
     textblockTypeInputRule(/^(#{1,6})\s$/, n.heading, (mm) => ({ level: mm[1].length })),
-    new InputRule(/^(?:---|\*\*\*|___)$/, (state, _m, start, end) => {
+    new InputRule(/^(?:---|\*\*\*|___)$/, (state, match, start) => {
       const $s = state.doc.resolve(start); if ($s.parent.type !== n.paragraph) return null;
+      // First-line `---` waits for Enter so it can become YAML front matter.
+      if (match[0] === "---" && $s.index(0) === 0 && state.doc.firstChild?.type !== n.front_matter) return null;
       return state.tr.replaceRangeWith($s.before(), $s.after(), n.horizontal_rule.create()).scrollIntoView();
     }),
     markRule(/(\*\*|__)([^*_]+)\1$/, m.strong),
@@ -63,9 +61,13 @@ export function buildInputRules(s: Schema) {
     markRule(/(`)([^`]+)`$/, m.code),
     markRule(/(~~)([^~]+)~~$/, m.strike),
     markRule(/(==)([^=]+)==$/, m.highlight),
+    markRule(/(<u>)([^<]+)<\/u>$/, m.underline),
+    markRule(/(\^)([^^\s]+)\^$/, m.superscript),
+    markRule(/(?<!~)(~)([^~\s]+)~(?!~)$/, m.subscript),
     new InputRule(/(?<!\$)\$([^$\s][^$]*)\$$/, (state, match, start, end) => inRawRegion(state) ? null : state.tr.replaceWith(start, end, n.inline_math.create({ tex: match[1] }))),
   ]});
 }
+
 
 export function buildKeymaps(s: Schema, extra: { toggleSource: () => void; save: () => void; saveAs: () => void; open: () => void; openFolder: () => void; palette: () => void; claimed?: (id: string) => boolean }) {
   const n = s.nodes, m = s.marks;
@@ -85,7 +87,8 @@ export function buildKeymaps(s: Schema, extra: { toggleSource: () => void; save:
     "Shift-Mod-]": skip("paragraph.unorderedList", wrapInList(n.bullet_list)),
     "Shift-Mod-[": skip("paragraph.orderedList", wrapInList(n.ordered_list)),
     "Shift-Mod-k": skip("paragraph.codeFence", setBlockType(n.code_block)),
-    Enter: splitListItem(n.list_item), "Mod-[": liftListItem(n.list_item), "Mod-]": sinkListItem(n.list_item),
+    Enter: chainCommands(blockEnterRule, splitListItem(n.list_item)),
+    "Mod-[": liftListItem(n.list_item), "Mod-]": sinkListItem(n.list_item),
     Tab: chainCommands(goToNextCell(1), sinkListItem(n.list_item)), "Shift-Tab": chainCommands(goToNextCell(-1), liftListItem(n.list_item)),
     "Shift-Enter": chainCommands(exitCode, (st: any, d: any) => { d?.(st.tr.replaceSelectionWith(n.hard_break.create()).scrollIntoView()); return true; }),
     ArrowLeft: arrowHandler("left"), ArrowRight: arrowHandler("right"), ArrowUp: arrowHandler("up"), ArrowDown: arrowHandler("down"),

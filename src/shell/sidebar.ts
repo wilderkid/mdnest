@@ -3,6 +3,7 @@ import type { SidebarPanel } from "../plugins/api";
 import { EditorView } from "prosemirror-view";
 import { escapeHtml } from "../editor/render";
 import { osClass } from "./os";
+import { ICONS, iconButton } from "./icons";
 
 const DOC = /\.(md|markdown|mdown|mkd|mdx|txt|text)$/i;
 const SORT_KEY = "mdnest.sidebarSort";
@@ -134,12 +135,12 @@ export class Sidebar {
       </div>
       <div id="sidebar-content"></div>
       <div class="sidebar-footer" id="sidebar-footer">
-        <button type="button" data-act="new-file" title="New File">＋</button>
-        <button type="button" data-act="new-folder" title="New Folder">▣</button>
-        <button type="button" data-act="open-folder" title="Open Folder…">↗</button>
-        <button type="button" data-act="sort" title="Sort" id="sidebar-sort-btn">Sort ▾</button>
-        <button type="button" data-act="search" title="Search">⌕</button>
-        <button type="button" data-act="refresh" title="Refresh">↻</button>
+        ${iconButton("new-file", "New File", ICONS.newFile)}
+        ${iconButton("new-folder", "New Folder", ICONS.newFolder)}
+        ${iconButton("open-folder", "Open Folder…", ICONS.openFolder)}
+        <button type="button" data-act="sort" title="Sort" aria-label="Sort" id="sidebar-sort-btn">${ICONS.sort}<span class="sidebar-sort-label">Sort ▾</span></button>
+        ${iconButton("search", "Search", ICONS.search)}
+        ${iconButton("refresh", "Refresh", ICONS.refresh)}
       </div>`;
     this.tabs = this.el.querySelector(".sidebar-tabs")!;
     this.content = this.el.querySelector("#sidebar-content")!;

@@ -5,6 +5,9 @@
   "windows": ["main", "w-*"],
   "permissions": [
     "core:default",
-    "dialog:default"
+    "dialog:default",
+    "core:window:allow-set-fullscreen",
+    "core:window:allow-set-always-on-top",
+    "core:webview:allow-set-webview-zoom"
   ]
 }

@@ -26,34 +26,18 @@ export interface MenuState {
   inTable: boolean;
   /** Enabled plugin command ids that own a key, so the core item drops its native accelerator. */
   pluginKeyOwners: Set<string>;
+  focusMode?: boolean;
+  typewriter?: boolean;
+  toolbar?: boolean;
+  statusBar?: boolean;
+  fullScreen?: boolean;
+  alwaysOnTop?: boolean;
+  pairBrackets?: boolean;
+  pairMarkdown?: boolean;
 }
 
-const LATER = new Set([
-  "edit.copyMarkdown", "edit.copyHtml", "edit.copyPlain", "edit.pastePlain", "edit.delete",
-  "edit.selectLine", "edit.selectScope", "edit.selectWord", "edit.jumpTop", "edit.jumpBottom",
-  "edit.findNext", "edit.findPrevious",
-  "edit.autoPair.brackets", "edit.autoPair.markdown",
-  "paragraph.increaseHeading", "paragraph.decreaseHeading", "paragraph.tableDialog",
-  "paragraph.table.addRowAbove", "paragraph.table.addRowBelow",
-  "paragraph.table.addColBefore", "paragraph.table.addColAfter",
-  "paragraph.table.deleteRow", "paragraph.table.deleteColumn", "paragraph.table.deleteTable",
-  "paragraph.mathBlock", "paragraph.taskList", "paragraph.indent", "paragraph.outdent",
-  "paragraph.insertBefore", "paragraph.insertAfter", "paragraph.linkRef", "paragraph.footnote",
-  "paragraph.hr", "paragraph.toc", "paragraph.frontMatter",
-  "paragraph.alert.note", "paragraph.alert.tip", "paragraph.alert.important",
-  "paragraph.alert.warning", "paragraph.alert.caution",
-  "paragraph.mermaid", "paragraph.deleteBlock",
-  "format.underline", "format.highlight", "format.inlineMath", "format.superscript",
-  "format.subscript", "format.comment", "format.link", "format.image",
-  "format.image.zoom50", "format.image.zoom100", "format.image.zoom200", "format.clear",
-  "view.focus", "view.typewriter",
-  "view.toolbar", "view.statusBar", "view.wordCount", "view.fullScreen", "view.alwaysOnTop",
-  "view.actualSize", "view.zoomIn", "view.zoomOut",
-]);
-
-export function laterPart(id: string): 2 | 3 | null {
-  if (!LATER.has(id)) return null;
-  return 3;
+export function laterPart(_id: string): 2 | 3 | null {
+  return null;
 }
 
 function item(id: string, label: string, accel?: string, extra?: Partial<MenuNode>): MenuNode {
@@ -123,8 +107,8 @@ export function menuTemplate(mac: boolean): MenuNode[] {
       item("edit.replace", "Replace…", "CmdOrCtrl+H"),
       sep(),
       { id: "edit.autoPair", label: "Auto Pair", submenu: [
-        item("edit.autoPair.brackets", "Brackets and Quotes", undefined, { checked: true }),
-        item("edit.autoPair.markdown", "Markdown Syntax", undefined, { checked: false }),
+        item("edit.autoPair.brackets", "Brackets and Quotes"),
+        item("edit.autoPair.markdown", "Markdown Syntax"),
       ] },
     ],
   };
@@ -275,6 +259,14 @@ function applyState(node: MenuNode, state: MenuState, commands: Command[], occup
   if (node.id === "view.source") return { ...node, enabled, checked: state.sourceMode, accel: accelFor(node, occupied) };
   if (node.id === "view.sidebar") return { ...node, enabled, checked: state.sidebar, accel: accelFor(node, occupied) };
   if (node.id === "view.outline") return { ...node, enabled, checked: state.outline, accel: accelFor(node, occupied) };
+  if (node.id === "view.focus") return { ...node, enabled, checked: !!state.focusMode, accel: accelFor(node, occupied) };
+  if (node.id === "view.typewriter") return { ...node, enabled, checked: !!state.typewriter, accel: accelFor(node, occupied) };
+  if (node.id === "view.toolbar") return { ...node, enabled, checked: !!state.toolbar, accel: accelFor(node, occupied) };
+  if (node.id === "view.statusBar") return { ...node, enabled, checked: state.statusBar !== false, accel: accelFor(node, occupied) };
+  if (node.id === "view.fullScreen") return { ...node, enabled, checked: !!state.fullScreen, accel: accelFor(node, occupied) };
+  if (node.id === "view.alwaysOnTop") return { ...node, enabled, checked: !!state.alwaysOnTop, accel: accelFor(node, occupied) };
+  if (node.id === "edit.autoPair.brackets") return { ...node, enabled, checked: state.pairBrackets !== false };
+  if (node.id === "edit.autoPair.markdown") return { ...node, enabled, checked: !!state.pairMarkdown };
   let accel = node.accel;
   if (node.id && occupied.has(normalizeKey(node.accel))) accel = undefined;
   else accel = accelFor(node, occupied);

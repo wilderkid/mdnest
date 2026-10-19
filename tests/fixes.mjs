@@ -125,13 +125,13 @@ try {
   m = await md(); ok(!m.includes("\\["), "no escaped brackets in output", m.match(/.{0,20}\\\[.{0,20}/)?.[0] ?? "");
   // --no-restore equivalent in the browser: ?restore=0 with no file → welcome page
   await page.goto(base + "?restore=0"); await page.waitForSelector("body.mdn-ready"); await page.waitForTimeout(300);
-  ok((await page.locator("#write h1").first().innerText()).includes("Welcome"), "?restore=0 starts on the welcome page");
+  ok(await page.locator("#mdn-welcome h1").innerText().then((t) => t.includes("MD Nest")) && (await page.locator("#footer-word-count").innerText()) === "0 words", "?restore=0 starts on the welcome page");
   await page.evaluate(() => localStorage.setItem("mdnest.lastFile", "/workspace/mdnest/dev-data/workspace/sample.md"));
   await page.goto(base); await page.waitForSelector("body.mdn-ready"); await page.waitForTimeout(300);
   ok((await page.locator("#write h1").first().innerText()).includes("Feature Tour"), "default: last file reopened");
   await page.evaluate(() => localStorage.setItem("mdnest.reopenLast", "0"));
   await page.goto(base); await page.waitForSelector("body.mdn-ready"); await page.waitForTimeout(300);
-  ok((await page.locator("#write h1").first().innerText()).includes("Welcome"), "setting 'Reopen last file' off → welcome page");
+  ok(await page.locator("#mdn-welcome").isVisible() && (await page.locator("#footer-word-count").innerText()) === "0 words", "setting 'Reopen last file' off → welcome page");
   await page.evaluate(() => { localStorage.removeItem("mdnest.reopenLast"); localStorage.removeItem("mdnest.lastFile"); });
 } catch (e) { ok(false, "exception", e.message); }
 ok(errors.length === 0, "no page errors", errors.join(" | "));

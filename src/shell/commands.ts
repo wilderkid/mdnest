@@ -272,7 +272,8 @@ export function isPageChromeKey(e: KeyboardEvent): boolean {
   if (key === "r" || key === "R") return true;
   // Ctrl+P is Quick Open. Leave it for the command dispatcher (WebView2 print is already off).
   if (key === "p" || key === "P") return false;
-  if (!e.altKey && PAGE_KEYS.has(key)) return true;
+  // Ctrl+Shift+=/−/0 is the app zoom. Bare Ctrl+=/−/0 stays a browser zoom and is swallowed.
+  if (!e.altKey && !e.shiftKey && PAGE_KEYS.has(key)) return true;
   return false;
 }
 

@@ -14,6 +14,7 @@ import { searchPlugin } from "./search";
 import { nodeViews, tocViews } from "./views";
 import { collectImages, imagesFromPastedHtml, pastedHtmlIsOnlyImages, type ImageItem } from "../shell/images";
 import { buildInputRules, buildKeymaps } from "./rules";
+import { autoPairPlugin } from "./autopair";
 import type { Command, DecorationProvider } from "../plugins/api";
 import { suggestPlugin } from "./suggest";
 import { slashPlugin } from "./slash";
@@ -54,7 +55,7 @@ export function createEditor(mount: HTMLElement, markdown: string, hooks: Editor
     slashPlugin(),
     liveCommandKeymap(() => hooks.commands?.() ?? []),
     defsPlugin(), defsKeymap(),
-    buildInputRules(schema), ...buildKeymaps(schema, hooks.keys), history(), dropCursor(), gapCursor(),
+    autoPairPlugin(), buildInputRules(schema), ...buildKeymaps(schema, hooks.keys), history(), dropCursor(), gapCursor(),
     columnResizing(), tableEditing(), revealPlugin(), tableToolbarPlugin(), searchPlugin(), externalDecorations(hooks),
   ];
   const mkState = (md: string) => {

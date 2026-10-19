@@ -25,10 +25,20 @@ import { EditorSearch } from "./editor/search";
 import { insertImageFiles, IMAGE_FOLDER_KEY, imageFolderPattern } from "./shell/images";
 import { buildExportHtml, printHtml } from "./shell/export";
 import { insertTable } from "./editor/tabletools";
+import { addColumnAfter, addColumnBefore, addRowAfter, addRowBefore, deleteColumn, deleteRow, deleteTable, isInTable } from "prosemirror-tables";
 import { setBlockType, toggleMark, wrapIn } from "prosemirror-commands";
-import { wrapInList } from "prosemirror-schema-list";
+import { wrapInList, liftListItem, sinkListItem } from "prosemirror-schema-list";
 import { undo, redo } from "prosemirror-history";
 import { schema } from "./editor/schema";
+import { registerCoreSlash, insertAlert, insertFootnote, insertFrontMatter, insertHr, insertLinkRef, insertMermaid, insertTask, insertToc } from "./editor/slash-core";
+import {
+  clearFormat, copyMarkdownText, copyPlainText, decreaseHeading, deleteBlock, deleteImage, deleteSelection,
+  imageSelection, increaseHeading, insertParagraphAfter, insertParagraphBefore, jumpBottom, jumpTop,
+  linkAt, selectLine, selectStyledScope, selectWord, selectionHtml, setImageZoom, toggleTaskList,
+} from "./editor/editops";
+import { pairBracketsOn, pairMarkdownOn, PAIR_BRACKETS_KEY, PAIR_MARKDOWN_KEY } from "./editor/autopair";
+import { openContextMenu, type ContextItem } from "./shell/sidebar";
+import { APP_VERSION } from "./version";
 import {
   installKeyboardDispatcher, installPageKeyGuard, installContextMenuGuard, runFocusAware, commandEnabled,
 } from "./shell/commands";
@@ -36,7 +46,8 @@ import { buildMenuSpec, renderMenuBar, menuBarVisible, type MenuState } from "./
 import { applyOsClass, osClass } from "./shell/os";
 import { handleNativeDrop, pathsFromUriList, type NativeDrop } from "./shell/drop";
 
-const WELCOME = `# Welcome to MD Nest\n\nOpen a file (Ctrl+O) or a folder (Ctrl+Shift+O). Toggle source mode with Ctrl+/ and the command palette with Ctrl+Shift+P.\n`;
+/** Untitled empty document shown under the welcome page. Word count stays 0 while it is visible. */
+const EMPTY_DOC = "";
 
 const state = { path: null as string | null, dirty: false, lastSaved: "", mtime: null as number | null, conflict: false };
 const commands: Command[] = [];
@@ -67,7 +78,7 @@ let changeTimer: any;
 // (installed below) does not run the same shortcut a second time.
 let claimedUntil = 0;
 let claimedId = "";
-const editor: Editor = createEditor(writeEl, WELCOME, {
+const editor: Editor = createEditor(writeEl, EMPTY_DOC, {
   decorationProviders,
   onChange: () => {
     // dirty = serialized Markdown differs from what is on disk (marker expand/collapse alone is not an edit)
@@ -88,7 +99,7 @@ const editor: Editor = createEditor(writeEl, WELCOME, {
     palette: () => { if (Date.now() < claimedUntil && claimedId === "view.palette") return; openPalette(commands); },
     claimed: (id: string) => Date.now() < claimedUntil && claimedId === id,
   },
-  onSelect: () => sidebar.highlightOutline(editor.view),
+  onSelect: () => { sidebar.highlightOutline(editor.view); paintToolbar(); if (document.body.classList.contains("ty-on-typewriter-mode")) centerCaret(); },
   commands: () => commands,
 });
 editor.view.dom.id = "write";
@@ -109,7 +120,7 @@ function toggleSource() {
   else source.show(editor.getMarkdown());
   findBar.refresh();
 }
-function afterLoad() { sidebar.updateOutline(editor.view); updateCount(); syncWelcome(); }
+function afterLoad() { sidebar.updateOutline(editor.view); updateCount(); syncWelcome(); try { paintToolbar(); } catch { /* boot */ } }
 
 const CLOSED_KEY = "mdnest.closed";
 const closedStack = (): string[] => { try { return JSON.parse(localStorage.getItem(CLOSED_KEY) ?? "[]"); } catch { return []; } };
@@ -214,8 +225,8 @@ async function newUntitled() {
   state.path = null;
   state.lastSaved = "";
   setDirty(false);
-  if (source.active) source.show(WELCOME);
-  editor.setMarkdown(WELCOME);
+  if (source.active) source.show(EMPTY_DOC);
+  editor.setMarkdown(EMPTY_DOC);
   state.lastSaved = editor.getMarkdown();
   setTitle();
   afterLoad();
@@ -233,8 +244,8 @@ async function closeDoc() {
   state.path = null;
   state.lastSaved = "";
   setDirty(false);
-  if (source.active) source.show(WELCOME);
-  editor.setMarkdown(WELCOME);
+  if (source.active) source.show(EMPTY_DOC);
+  editor.setMarkdown(EMPTY_DOC);
   state.lastSaved = editor.getMarkdown();
   setDirty(false);
   setTitle();
@@ -430,7 +441,7 @@ const plugins = new PluginManager({
   { id: "view.outline", title: "View: Show Outline", run: () => { document.body.classList.add("pin-outline"); sidebar.select("outline"); } },
   { id: "edit.find", title: "Edit: Find…", key: "Ctrl+F", run: () => openFind(false) },
   { id: "edit.replace", title: "Edit: Replace…", key: "Ctrl+H", run: () => openFind(true) },
-  { id: "insert.table", title: "Insert: Table (3×3)", key: "Ctrl+T", run: () => { insertTable(3, 3)(editor.view.state, editor.view.dispatch); editor.view.focus(); } },
+  { id: "insert.table", title: "Insert: Table…", key: "Ctrl+T", run: () => openTableDialog() },
   { id: "file.exportHtml", title: "File: Export HTML…", run: () => exportHtml() },
   { id: "file.exportPdf", title: "File: Export PDF…", run: () => exportPdf() },
   { id: "file.reload", title: "File: Reload from Disk", run: () => reloadFromDisk(true) },
@@ -440,79 +451,7 @@ const plugins = new PluginManager({
 ].forEach(addCmd);
 
 const MAC = /Mac|iPhone|iPad|iPod/.test(navigator.platform + navigator.userAgent);
-const later = (part: 2 | 3) => () => notify("Coming in part " + part);
-function stub(id: string, title: string, key: string | undefined, part: 2 | 3) {
-  if (commands.some((c) => c.id === id)) return;
-  addCmd({ id, title, ...(key ? { key } : {}), run: later(part) });
-}
-// Items whose features land in later parts. The id stays; only `run` is replaced.
-const PART2: [string, string, string?][] = [];
-const PART3: [string, string, string?][] = [
-  ["edit.copyMarkdown", "Edit: Copy as Markdown", "CmdOrCtrl+Shift+C"],
-  ["edit.copyHtml", "Edit: Copy as HTML Code"],
-  ["edit.copyPlain", "Edit: Copy as Plain Text"],
-  ["edit.pastePlain", "Edit: Paste as Plain Text", "CmdOrCtrl+Shift+V"],
-  ["edit.delete", "Edit: Delete"],
-  ["edit.selectLine", "Edit: Select Line/Sentence", "CmdOrCtrl+L"],
-  ["edit.selectScope", "Edit: Select Styled Scope", "CmdOrCtrl+E"],
-  ["edit.selectWord", "Edit: Select Word", "CmdOrCtrl+D"],
-  ["edit.jumpTop", "Edit: Jump to Top", "CmdOrCtrl+Home"],
-  ["edit.jumpBottom", "Edit: Jump to Bottom", "CmdOrCtrl+End"],
-  ["edit.findNext", "Edit: Find Next", "F3"],
-  ["edit.findPrevious", "Edit: Find Previous", "Shift+F3"],
-  ["edit.autoPair.brackets", "Edit: Auto Pair Brackets and Quotes"],
-  ["edit.autoPair.markdown", "Edit: Auto Pair Markdown Syntax"],
-  ["paragraph.increaseHeading", "Paragraph: Increase Heading Level", "CmdOrCtrl+="],
-  ["paragraph.decreaseHeading", "Paragraph: Decrease Heading Level", "CmdOrCtrl+-"],
 
-  ["paragraph.table.addRowAbove", "Table: Add Row Above"],
-  ["paragraph.table.addRowBelow", "Table: Add Row Below"],
-  ["paragraph.table.addColBefore", "Table: Add Column Before"],
-  ["paragraph.table.addColAfter", "Table: Add Column After"],
-  ["paragraph.table.deleteRow", "Table: Delete Row"],
-  ["paragraph.table.deleteColumn", "Table: Delete Column"],
-  ["paragraph.table.deleteTable", "Table: Delete Table"],
-  ["paragraph.mathBlock", "Paragraph: Math Block", "CmdOrCtrl+Shift+M"],
-  ["paragraph.taskList", "Paragraph: Task List", "CmdOrCtrl+Shift+X"],
-  ["paragraph.indent", "Paragraph: Indent", "CmdOrCtrl+]"],
-  ["paragraph.outdent", "Paragraph: Outdent", "CmdOrCtrl+["],
-  ["paragraph.insertBefore", "Paragraph: Insert Paragraph Before"],
-  ["paragraph.insertAfter", "Paragraph: Insert Paragraph After"],
-  ["paragraph.linkRef", "Paragraph: Link Reference"],
-  ["paragraph.footnote", "Paragraph: Footnote"],
-  ["paragraph.hr", "Paragraph: Horizontal Line"],
-  ["paragraph.toc", "Paragraph: Table of Contents"],
-  ["paragraph.frontMatter", "Paragraph: YAML Front Matter"],
-  ["paragraph.alert.note", "Alert: Note"],
-  ["paragraph.alert.tip", "Alert: Tip"],
-  ["paragraph.alert.important", "Alert: Important"],
-  ["paragraph.alert.warning", "Alert: Warning"],
-  ["paragraph.alert.caution", "Alert: Caution"],
-  ["paragraph.mermaid", "Paragraph: Mermaid Diagram"],
-  ["paragraph.deleteBlock", "Paragraph: Delete Block"],
-  ["format.underline", "Format: Underline", "CmdOrCtrl+U"],
-  ["format.highlight", "Format: Highlight"],
-  ["format.inlineMath", "Format: Inline Math"],
-  ["format.superscript", "Format: Superscript"],
-  ["format.subscript", "Format: Subscript"],
-  ["format.comment", "Format: Comment"],
-  ["format.link", "Format: Hyperlink", "CmdOrCtrl+K"],
-  ["format.image", "Format: Insert Local Image…", "CmdOrCtrl+Shift+I"],
-  ["format.image.zoom50", "Image: Zoom 50%"],
-  ["format.image.zoom100", "Image: Zoom 100%"],
-  ["format.image.zoom200", "Image: Zoom 200%"],
-  ["format.clear", "Format: Clear Format", "CmdOrCtrl+\\"],
-  ["view.focus", "View: Focus Mode", "F8"],
-  ["view.typewriter", "View: Typewriter Mode", "F9"],
-  ["view.toolbar", "View: Formatting Toolbar"],
-  ["view.statusBar", "View: Status Bar"],
-  ["view.wordCount", "View: Word Count"],
-  ["view.fullScreen", "View: Full Screen", "F11"],
-  ["view.alwaysOnTop", "View: Always on Top"],
-  ["view.actualSize", "View: Actual Size", "CmdOrCtrl+Shift+0"],
-  ["view.zoomIn", "View: Zoom In", "CmdOrCtrl+Shift+="],
-  ["view.zoomOut", "View: Zoom Out", "CmdOrCtrl+Shift+-"],
-];
 async function uniqueNewName(dir: string, stem: string, ext: string): Promise<string> {
   let i = 0;
   for (;;) {
@@ -608,7 +547,7 @@ async function trashPath(path: string) {
     if (state.path === path || (state.path && (state.path.startsWith(path + "/") || state.path.startsWith(path + "\\")))) {
       pushClosed(state.path);
       state.path = null; state.lastSaved = ""; setDirty(false);
-      editor.setMarkdown(WELCOME); state.lastSaved = editor.getMarkdown(); setTitle(); afterLoad(); sidebar.markActive(null);
+      editor.setMarkdown(EMPTY_DOC); state.lastSaved = editor.getMarkdown(); setTitle(); afterLoad(); sidebar.markActive(null);
       localStorage.removeItem("mdnest.lastFile");
       showWelcome();
     }
@@ -745,13 +684,187 @@ sidebar.setActions({
   notify,
 });
 
-for (const [id, title, key] of PART2) stub(id, title, key, 2);
-for (const [id, title, key] of PART3) stub(id, title, key, 3);
-
 function pmRun(fn: (state: any, dispatch?: any, view?: any) => boolean) {
   const v = editor.view;
   fn(v.state, v.dispatch, v);
   v.focus();
+}
+function inTableNow() {
+  try { return isInTable(editor.view.state); } catch { return false; }
+}
+function aiOwnsHyperlink() {
+  const ai = commands.find((c) => c.id === "ai.rewrite" || c.id === "rewrite");
+  return !!(ai && commandEnabled(ai));
+}
+function togglePair(key: string, _defaultOn: boolean) {
+  const on = key === PAIR_BRACKETS_KEY ? pairBracketsOn() : pairMarkdownOn();
+  localStorage.setItem(key, on ? "0" : "1");
+  const now = key === PAIR_BRACKETS_KEY ? pairBracketsOn() : pairMarkdownOn();
+  notify((key === PAIR_BRACKETS_KEY ? "Auto-pair brackets" : "Auto-pair Markdown") + " " + (now ? "on" : "off"));
+  scheduleMenu();
+}
+async function copyAs(kind: "markdown" | "html" | "plain") {
+  const st = editor.view.state;
+  const text = kind === "markdown" ? copyMarkdownText(st) : kind === "html" ? selectionHtml(st) : copyPlainText(st);
+  try { await navigator.clipboard.writeText(text); notify(kind === "markdown" ? "Copied Markdown" : kind === "html" ? "Copied HTML" : "Copied plain text"); }
+  catch { notify(text.slice(0, 80)); }
+}
+async function pastePlain() {
+  let text = "";
+  try { text = await navigator.clipboard.readText(); } catch { text = ""; }
+  if (!text) { notify("Clipboard is empty"); return; }
+  const v = editor.view;
+  v.dispatch(v.state.tr.insertText(text).scrollIntoView());
+  v.focus();
+}
+function findStep(dir: 1 | -1) {
+  if (!findBar.visible) openFind(false);
+  const searcher = source.active ? sourceSearch : editorSearch;
+  searcher.go(dir);
+}
+function insertInlineMath() {
+  const v = editor.view;
+  const { from, to, empty } = v.state.selection;
+  const tex = empty ? "x" : v.state.doc.textBetween(from, to);
+  const node = schema.nodes.inline_math.create({ tex });
+  v.dispatch(v.state.tr.replaceSelectionWith(node).scrollIntoView());
+  v.focus();
+}
+function wrapComment() {
+  const v = editor.view;
+  const { from, to, empty } = v.state.selection;
+  if (empty) {
+    const text = schema.text("comment", [schema.marks.comment.create()]);
+    v.dispatch(v.state.tr.replaceSelectionWith(text, false).scrollIntoView());
+  } else {
+    pmRun(toggleMark(schema.marks.comment));
+    return;
+  }
+  v.focus();
+}
+async function promptHyperlink() {
+  if (aiOwnsHyperlink()) return;
+  const v = editor.view;
+  const existing = linkAt(v.state);
+  const url = await openPrompt(v, { placeholder: "https://", value: existing?.href || "https://" });
+  if (url == null) return;
+  const { from, to, empty } = v.state.selection;
+  const mark = schema.marks.link.create({ href: url });
+  if (empty && !existing) {
+    const text = schema.text(url.replace(/^https?:\/\//, "") || "link", [mark]);
+    v.dispatch(v.state.tr.replaceSelectionWith(text, false).scrollIntoView());
+  } else if (v.state.doc.rangeHasMark(from, to, schema.marks.link) || existing) {
+    const a = existing?.from ?? from, b = existing?.to ?? to;
+    let tr = v.state.tr.removeMark(a, b, schema.marks.link);
+    if (url) tr = tr.addMark(a, b, mark);
+    v.dispatch(tr);
+  } else {
+    v.dispatch(v.state.tr.addMark(from, to, mark));
+  }
+  v.focus();
+}
+async function insertLocalImage() {
+  const path = await host.pickFile();
+  if (!path) return;
+  if (!/\.(png|jpe?g|gif|webp|svg|bmp|avif|ico|tiff?)$/i.test(path)) { notify("Not an image"); return; }
+  await insertImageFiles(editor.view, host, state.path, [{ path }], editor.view.state.selection.from, notify);
+}
+function openTableDialog() {
+  document.getElementById("table-insert-dialog")?.remove();
+  const back = document.createElement("div");
+  back.className = "modal-backdrop";
+  back.id = "table-insert-dialog";
+  back.innerHTML = `<div class="modal" role="dialog" aria-modal="true">
+    <h3>Insert table</h3>
+    <p><label>Rows <input id="table-rows" type="number" min="1" max="50" value="3" style="width:4em"></label>
+       <label>Columns <input id="table-cols" type="number" min="1" max="20" value="3" style="width:4em"></label></p>
+    <div class="modal-actions">
+      <button type="button" class="btn" data-c="cancel">Cancel</button>
+      <button type="button" class="btn btn-primary" data-c="ok">Insert</button>
+    </div>
+  </div>`;
+  document.body.appendChild(back);
+  const rows = back.querySelector("#table-rows") as HTMLInputElement;
+  const cols = back.querySelector("#table-cols") as HTMLInputElement;
+  const close = () => back.remove();
+  const go = () => {
+    const r = Math.max(1, Math.min(50, +rows.value || 3));
+    const c = Math.max(1, Math.min(20, +cols.value || 3));
+    close();
+    insertTable(r, c)(editor.view.state, editor.view.dispatch);
+    editor.view.focus();
+  };
+  back.querySelector("[data-c=cancel]")!.addEventListener("click", close);
+  back.querySelector("[data-c=ok]")!.addEventListener("click", go);
+  back.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") { e.preventDefault(); close(); }
+    else if (e.key === "Enter") { e.preventDefault(); go(); }
+  });
+  rows.focus(); rows.select();
+}
+function toggleBodyClass(cls: string) {
+  document.body.classList.toggle(cls);
+  scheduleMenu();
+  if (cls === "ty-on-typewriter-mode") centerCaret();
+}
+function toggleToolbar() {
+  const on = localStorage.getItem(TOOLBAR_KEY) === "1";
+  localStorage.setItem(TOOLBAR_KEY, on ? "0" : "1");
+  syncToolbar();
+  scheduleMenu();
+}
+function toggleStatusBar() {
+  const on = localStorage.getItem(STATUS_KEY) !== "0";
+  localStorage.setItem(STATUS_KEY, on ? "0" : "1");
+  syncStatusBar();
+  scheduleMenu();
+}
+const ZOOM_KEY = "mdnest.zoom";
+function zoomLevel() {
+  const n = +(localStorage.getItem(ZOOM_KEY) || "1");
+  return n > 0.4 && n < 3 ? n : 1;
+}
+function setZoom(n: number) {
+  const z = Math.round(Math.max(0.5, Math.min(2.5, n)) * 100) / 100;
+  localStorage.setItem(ZOOM_KEY, String(z));
+  document.documentElement.style.setProperty("--zoom", String(z));
+  content.style.zoom = String(z);
+  if (host.kind === "tauri") {
+    void import("@tauri-apps/api/webview").then((m) => m.getCurrentWebview().setZoom(z)).catch(() => {});
+  }
+  notify(Math.round(z * 100) + "%");
+}
+let fullScreen = false;
+let alwaysOnTop = false;
+async function toggleFullScreen() {
+  fullScreen = !fullScreen;
+  document.body.classList.toggle("mdn-fullscreen", fullScreen);
+  if (host.kind === "tauri") {
+    try {
+      const { getCurrentWindow } = await import("@tauri-apps/api/window");
+      await getCurrentWindow().setFullscreen(fullScreen);
+    } catch (e: any) { notify(String(e?.message ?? e)); }
+  }
+  scheduleMenu();
+}
+async function toggleAlwaysOnTop() {
+  alwaysOnTop = !alwaysOnTop;
+  if (host.kind === "tauri") {
+    try {
+      const { getCurrentWindow } = await import("@tauri-apps/api/window");
+      await getCurrentWindow().setAlwaysOnTop(alwaysOnTop);
+    } catch (e: any) { notify(String(e?.message ?? e)); }
+  } else notify("Always on top " + (alwaysOnTop ? "on" : "off"));
+  scheduleMenu();
+}
+function centerCaret() {
+  if (!document.body.classList.contains("ty-on-typewriter-mode")) return;
+  try {
+    const coords = editor.view.coordsAtPos(editor.view.state.selection.head);
+    const box = content.getBoundingClientRect();
+    const delta = coords.top - (box.top + box.height / 2);
+    content.scrollTop += delta;
+  } catch { /* empty doc */ }
 }
 const headingCmd = (level: number) => () => pmRun(setBlockType(schema.nodes.heading, { level }));
 const markCmd = (name: string) => () => pmRun(toggleMark(schema.marks[name]));
@@ -775,14 +888,77 @@ const markCmd = (name: string) => () => pmRun(toggleMark(schema.marks[name]));
   { id: "paragraph.orderedList", title: "Paragraph: Ordered List", key: "CmdOrCtrl+Shift+[", run: () => pmRun(wrapInList(schema.nodes.ordered_list)) },
   { id: "paragraph.unorderedList", title: "Paragraph: Unordered List", key: "CmdOrCtrl+Shift+]", run: () => pmRun(wrapInList(schema.nodes.bullet_list)) },
   { id: "paragraph.codeFence", title: "Paragraph: Code Fences", key: "CmdOrCtrl+Shift+K", run: () => pmRun(setBlockType(schema.nodes.code_block)) },
-  { id: "paragraph.tableDialog", title: "Paragraph: Table…", key: "CmdOrCtrl+T", run: () => { insertTable(3, 3)(editor.view.state, editor.view.dispatch); editor.view.focus(); } },
+  { id: "paragraph.tableDialog", title: "Paragraph: Table…", key: "CmdOrCtrl+T", run: () => openTableDialog() },
   { id: "format.strong", title: "Format: Strong", key: "CmdOrCtrl+B", run: markCmd("strong") },
   { id: "format.emphasis", title: "Format: Emphasis", key: "CmdOrCtrl+I", run: markCmd("em") },
   { id: "format.code", title: "Format: Code", key: "CmdOrCtrl+Shift+`", run: markCmd("code") },
   { id: "format.strike", title: "Format: Strike", key: "Alt+Shift+5", run: markCmd("strike") },
   { id: "file.preferences", title: "File: Preferences…", key: "CmdOrCtrl+,", run: () => { document.body.classList.add("pin-outline"); sidebar.select("settings"); } },
-  { id: "help.about", title: "Help: About MD Nest", run: () => notify("MD Nest 0.1.1") },
+  { id: "help.about", title: "Help: About MD Nest", run: () => notify("MD Nest " + APP_VERSION) },
   { id: "view.palette", title: "View: Command Palette", key: "CmdOrCtrl+Shift+P", run: () => openPalette(commands) },
+  { id: "edit.copyMarkdown", title: "Edit: Copy as Markdown", key: "CmdOrCtrl+Shift+C", run: () => copyAs("markdown") },
+  { id: "edit.copyHtml", title: "Edit: Copy as HTML Code", run: () => copyAs("html") },
+  { id: "edit.copyPlain", title: "Edit: Copy as Plain Text", run: () => copyAs("plain") },
+  { id: "edit.pastePlain", title: "Edit: Paste as Plain Text", key: "CmdOrCtrl+Shift+V", run: () => pastePlain() },
+  { id: "edit.delete", title: "Edit: Delete", run: () => pmRun(deleteSelection()) },
+  { id: "edit.selectLine", title: "Edit: Select Line/Sentence", key: "CmdOrCtrl+L", run: () => pmRun(selectLine()) },
+  { id: "edit.selectScope", title: "Edit: Select Styled Scope", key: "CmdOrCtrl+E", run: () => pmRun(selectStyledScope()) },
+  { id: "edit.selectWord", title: "Edit: Select Word", key: "CmdOrCtrl+D", run: () => pmRun(selectWord()) },
+  { id: "edit.jumpTop", title: "Edit: Jump to Top", key: "CmdOrCtrl+Home", run: () => pmRun(jumpTop()) },
+  { id: "edit.jumpBottom", title: "Edit: Jump to Bottom", key: "CmdOrCtrl+End", run: () => pmRun(jumpBottom()) },
+  { id: "edit.findNext", title: "Edit: Find Next", key: "F3", run: () => findStep(1) },
+  { id: "edit.findPrevious", title: "Edit: Find Previous", key: "Shift+F3", run: () => findStep(-1) },
+  { id: "edit.autoPair.brackets", title: "Edit: Auto Pair Brackets and Quotes", run: () => togglePair(PAIR_BRACKETS_KEY, true) },
+  { id: "edit.autoPair.markdown", title: "Edit: Auto Pair Markdown Syntax", run: () => togglePair(PAIR_MARKDOWN_KEY, false) },
+  { id: "paragraph.increaseHeading", title: "Paragraph: Increase Heading Level", key: "CmdOrCtrl+=", run: () => pmRun(increaseHeading()) },
+  { id: "paragraph.decreaseHeading", title: "Paragraph: Decrease Heading Level", key: "CmdOrCtrl+-", run: () => pmRun(decreaseHeading()) },
+  { id: "paragraph.table.addRowAbove", title: "Table: Add Row Above", when: () => inTableNow(), run: () => pmRun(addRowBefore) },
+  { id: "paragraph.table.addRowBelow", title: "Table: Add Row Below", when: () => inTableNow(), run: () => pmRun(addRowAfter) },
+  { id: "paragraph.table.addColBefore", title: "Table: Add Column Before", when: () => inTableNow(), run: () => pmRun(addColumnBefore) },
+  { id: "paragraph.table.addColAfter", title: "Table: Add Column After", when: () => inTableNow(), run: () => pmRun(addColumnAfter) },
+  { id: "paragraph.table.deleteRow", title: "Table: Delete Row", when: () => inTableNow(), run: () => pmRun(deleteRow) },
+  { id: "paragraph.table.deleteColumn", title: "Table: Delete Column", when: () => inTableNow(), run: () => pmRun(deleteColumn) },
+  { id: "paragraph.table.deleteTable", title: "Table: Delete Table", when: () => inTableNow(), run: () => pmRun(deleteTable) },
+  { id: "paragraph.mathBlock", title: "Paragraph: Math Block", key: "CmdOrCtrl+Shift+M", run: () => pmRun(setBlockType(schema.nodes.math_block)) },
+  { id: "paragraph.taskList", title: "Paragraph: Task List", key: "CmdOrCtrl+Shift+X", run: () => pmRun(toggleTaskList()) },
+  { id: "paragraph.indent", title: "Paragraph: Indent", key: "CmdOrCtrl+]", run: () => pmRun(sinkListItem(schema.nodes.list_item)) },
+  { id: "paragraph.outdent", title: "Paragraph: Outdent", key: "CmdOrCtrl+[", run: () => pmRun(liftListItem(schema.nodes.list_item)) },
+  { id: "paragraph.insertBefore", title: "Paragraph: Insert Paragraph Before", run: () => pmRun(insertParagraphBefore()) },
+  { id: "paragraph.insertAfter", title: "Paragraph: Insert Paragraph After", run: () => pmRun(insertParagraphAfter()) },
+  { id: "paragraph.linkRef", title: "Paragraph: Link Reference", run: () => insertLinkRef(editor.view) },
+  { id: "paragraph.footnote", title: "Paragraph: Footnote", run: () => insertFootnote(editor.view) },
+  { id: "paragraph.hr", title: "Paragraph: Horizontal Line", run: () => insertHr(editor.view) },
+  { id: "paragraph.toc", title: "Paragraph: Table of Contents", run: () => insertToc(editor.view) },
+  { id: "paragraph.frontMatter", title: "Paragraph: YAML Front Matter", run: () => insertFrontMatter(editor.view) },
+  { id: "paragraph.alert.note", title: "Alert: Note", run: () => insertAlert(editor.view, "NOTE") },
+  { id: "paragraph.alert.tip", title: "Alert: Tip", run: () => insertAlert(editor.view, "TIP") },
+  { id: "paragraph.alert.important", title: "Alert: Important", run: () => insertAlert(editor.view, "IMPORTANT") },
+  { id: "paragraph.alert.warning", title: "Alert: Warning", run: () => insertAlert(editor.view, "WARNING") },
+  { id: "paragraph.alert.caution", title: "Alert: Caution", run: () => insertAlert(editor.view, "CAUTION") },
+  { id: "paragraph.mermaid", title: "Paragraph: Mermaid Diagram", run: () => insertMermaid(editor.view) },
+  { id: "paragraph.deleteBlock", title: "Paragraph: Delete Block", run: () => pmRun(deleteBlock()) },
+  { id: "format.underline", title: "Format: Underline", key: "CmdOrCtrl+U", run: markCmd("underline") },
+  { id: "format.highlight", title: "Format: Highlight", run: markCmd("highlight") },
+  { id: "format.inlineMath", title: "Format: Inline Math", run: () => insertInlineMath() },
+  { id: "format.superscript", title: "Format: Superscript", run: markCmd("superscript") },
+  { id: "format.subscript", title: "Format: Subscript", run: markCmd("subscript") },
+  { id: "format.comment", title: "Format: Comment", run: () => wrapComment() },
+  { id: "format.link", title: "Format: Hyperlink", key: "CmdOrCtrl+K", when: () => !aiOwnsHyperlink(), run: () => promptHyperlink() },
+  { id: "format.image", title: "Format: Insert Local Image…", key: "CmdOrCtrl+Shift+I", run: () => insertLocalImage() },
+  { id: "format.image.zoom50", title: "Image: Zoom 50%", when: () => !!imageSelection(editor.view.state), run: () => pmRun(setImageZoom(50)) },
+  { id: "format.image.zoom100", title: "Image: Zoom 100%", when: () => !!imageSelection(editor.view.state), run: () => pmRun(setImageZoom(100)) },
+  { id: "format.image.zoom200", title: "Image: Zoom 200%", when: () => !!imageSelection(editor.view.state), run: () => pmRun(setImageZoom(200)) },
+  { id: "format.clear", title: "Format: Clear Format", key: "CmdOrCtrl+\\", run: () => pmRun(clearFormat()) },
+  { id: "view.focus", title: "View: Focus Mode", key: "F8", run: () => toggleBodyClass("on-focus-mode") },
+  { id: "view.typewriter", title: "View: Typewriter Mode", key: "F9", run: () => toggleBodyClass("ty-on-typewriter-mode") },
+  { id: "view.toolbar", title: "View: Formatting Toolbar", run: () => toggleToolbar() },
+  { id: "view.statusBar", title: "View: Status Bar", run: () => toggleStatusBar() },
+  { id: "view.wordCount", title: "View: Word Count", run: () => toggleWordPopover() },
+  { id: "view.fullScreen", title: "View: Full Screen", key: "F11", run: () => toggleFullScreen() },
+  { id: "view.alwaysOnTop", title: "View: Always on Top", run: () => toggleAlwaysOnTop() },
+  { id: "view.actualSize", title: "View: Actual Size", key: "CmdOrCtrl+Shift+0", run: () => setZoom(1) },
+  { id: "view.zoomIn", title: "View: Zoom In", key: "CmdOrCtrl+Shift+=", run: () => setZoom(zoomLevel() * 1.1) },
+  { id: "view.zoomOut", title: "View: Zoom Out", key: "CmdOrCtrl+Shift+-", run: () => setZoom(zoomLevel() / 1.1) },
 ].forEach(addCmd);
 // Recent-file slots. `run` is replaced whenever the recent list changes.
 for (let i = 0; i < 12; i++) addCmd({ id: "file.recent." + i, title: "File: Recent", run: () => {} });
@@ -823,6 +999,14 @@ function menuState(): MenuState {
     hasPath: !!state.path,
     inTable,
     pluginKeyOwners: new Set(),
+    focusMode: document.body.classList.contains("on-focus-mode"),
+    typewriter: document.body.classList.contains("ty-on-typewriter-mode"),
+    toolbar: localStorage.getItem(TOOLBAR_KEY) === "1",
+    statusBar: localStorage.getItem(STATUS_KEY) !== "0",
+    fullScreen,
+    alwaysOnTop,
+    pairBrackets: pairBracketsOn(),
+    pairMarkdown: pairMarkdownOn(),
   };
 }
 
@@ -881,6 +1065,159 @@ if (menuBarVisible(host.kind)) {
   document.body.insertBefore(menuEl, document.body.firstChild);
 }
 
+const TOOLBAR_KEY = "mdnest.formatToolbar";
+const STATUS_KEY = "mdnest.statusBar";
+const formatBar = document.createElement("div");
+formatBar.id = "mdn-format-toolbar";
+formatBar.hidden = true;
+const TOOL_BUTTONS: { label: string; title: string; cmd: string; mark?: string }[] = [
+  { label: "H1", title: "Heading 1", cmd: "paragraph.heading.1" },
+  { label: "H2", title: "Heading 2", cmd: "paragraph.heading.2" },
+  { label: "H3", title: "Heading 3", cmd: "paragraph.heading.3" },
+  { label: "B", title: "Strong", cmd: "format.strong", mark: "strong" },
+  { label: "I", title: "Emphasis", cmd: "format.emphasis", mark: "em" },
+  { label: "U", title: "Underline", cmd: "format.underline", mark: "underline" },
+  { label: "S", title: "Strike", cmd: "format.strike", mark: "strike" },
+  { label: "</>", title: "Code", cmd: "format.code", mark: "code" },
+  { label: "Link", title: "Hyperlink", cmd: "format.link" },
+  { label: "Img", title: "Insert image", cmd: "format.image" },
+  { label: "❝", title: "Quote", cmd: "paragraph.quote" },
+  { label: "•", title: "Bullet list", cmd: "paragraph.unorderedList" },
+  { label: "1.", title: "Numbered list", cmd: "paragraph.orderedList" },
+  { label: "☑", title: "Task list", cmd: "paragraph.taskList" },
+  { label: "Tbl", title: "Table", cmd: "paragraph.tableDialog" },
+  { label: "{ }", title: "Code block", cmd: "paragraph.codeFence" },
+  { label: "∑", title: "Math block", cmd: "paragraph.mathBlock" },
+  { label: "—", title: "Horizontal line", cmd: "paragraph.hr" },
+];
+formatBar.innerHTML = TOOL_BUTTONS.map((b) => `<button type="button" data-cmd="${b.cmd}" data-mark="${b.mark ?? ""}" title="${b.title}" aria-label="${b.title}">${b.label}</button>`).join("");
+content.insertBefore(formatBar, content.firstChild);
+formatBar.addEventListener("mousedown", (e) => {
+  const btn = (e.target as HTMLElement).closest("button");
+  if (!btn) return;
+  e.preventDefault();
+  runCommand(btn.dataset.cmd || "");
+});
+function syncToolbar() {
+  const on = localStorage.getItem(TOOLBAR_KEY) === "1";
+  formatBar.hidden = !on;
+  document.body.classList.toggle("mdn-toolbar-on", on);
+  paintToolbar();
+}
+function paintToolbar() {
+  if (formatBar.hidden) return;
+  let marks: string[] = [];
+  let heading = 0;
+  try {
+    const sel = editor.view.state.selection;
+    marks = sel.$from.marks().map((m) => m.type.name);
+    if (sel.$from.parent.type.name === "heading") heading = sel.$from.parent.attrs.level;
+  } catch { /* boot */ }
+  formatBar.querySelectorAll<HTMLButtonElement>("button").forEach((b) => {
+    const mark = b.dataset.mark;
+    const cmd = b.dataset.cmd || "";
+    const active = (mark && marks.includes(mark))
+      || (cmd === "paragraph.heading.1" && heading === 1)
+      || (cmd === "paragraph.heading.2" && heading === 2)
+      || (cmd === "paragraph.heading.3" && heading === 3);
+    b.classList.toggle("active", !!active);
+  });
+}
+function syncStatusBar() {
+  const on = localStorage.getItem(STATUS_KEY) !== "0";
+  footer.hidden = !on;
+  document.body.classList.toggle("mdn-statusbar-off", !on);
+}
+const wordPop = document.createElement("div");
+wordPop.id = "mdn-word-popover";
+wordPop.hidden = true;
+document.body.appendChild(wordPop);
+function wordStatsNow() {
+  const st = editor.view.state;
+  const { from, to, empty } = st.selection;
+  const text = empty ? st.doc.textBetween(0, st.doc.content.size, "\n", " ") : st.doc.textBetween(from, to, "\n", " ");
+  const { words, chars } = countWords(text);
+  const lines = text ? text.split("\n").length : 0;
+  const minutes = Math.max(words ? 1 : 0, Math.round(words / 230));
+  return { words, chars, lines, minutes, selection: !empty };
+}
+function toggleWordPopover() {
+  if (!wordPop.hidden) { wordPop.hidden = true; return; }
+  const s = wordStatsNow();
+  wordPop.innerHTML = `<div><b>${s.selection ? "Selection" : "Document"}</b></div>
+    <div>${s.words} words</div><div>${s.chars} characters</div><div>${s.lines} lines</div><div>~${s.minutes} min read</div>`;
+  const anchor = document.getElementById("footer-word-count")!.getBoundingClientRect();
+  wordPop.hidden = false;
+  wordPop.style.left = Math.max(8, anchor.right - 180) + "px";
+  wordPop.style.top = Math.max(8, anchor.top - 120) + "px";
+}
+function editorContextMenu(e: MouseEvent) {
+  const t = e.target as HTMLElement;
+  if (!t.closest("#write")) return;
+  const st = editor.view.state;
+  const link = linkAt(st);
+  const img = imageSelection(st);
+  const items: ContextItem[] = [
+    { id: "cut", label: "Cut" },
+    { id: "copy", label: "Copy" },
+    { id: "paste", label: "Paste" },
+    { id: "edit.copyMarkdown", label: "Copy as Markdown" },
+    { id: "edit.pastePlain", label: "Paste as Plain Text" },
+    { id: "paragraph", label: "Paragraph ▸" },
+    { id: "format", label: "Format ▸" },
+    { id: "insert", label: "Insert ▸" },
+  ];
+  if (inTableNow()) items.push({ id: "table", label: "Table ▸" });
+  if (link) {
+    items.push({ id: "link.open", label: "Open Link" });
+    items.push({ id: "link.copy", label: "Copy Link Address" });
+  }
+  if (img) {
+    items.push({ id: "image.open", label: "Open Image Location" });
+    items.push({ id: "image.delete", label: "Delete Image" });
+  }
+  items.push({ id: "edit.selectAll", label: "Select All" });
+  openContextMenu(e.clientX, e.clientY, items, (id) => {
+    if (id === "cut") document.execCommand("cut");
+    else if (id === "copy") document.execCommand("copy");
+    else if (id === "paste") document.execCommand("paste");
+    else if (id === "paragraph") openSubmenu(e.clientX + 180, e.clientY, [
+      ["paragraph.heading.1", "Heading 1"], ["paragraph.paragraph", "Paragraph"],
+      ["paragraph.quote", "Quote"], ["paragraph.taskList", "Task List"],
+      ["paragraph.insertBefore", "Insert Paragraph Before"], ["paragraph.insertAfter", "Insert Paragraph After"],
+      ["paragraph.deleteBlock", "Delete Block"],
+    ]);
+    else if (id === "format") openSubmenu(e.clientX + 180, e.clientY, [
+      ["format.strong", "Strong"], ["format.emphasis", "Emphasis"], ["format.underline", "Underline"],
+      ["format.code", "Code"], ["format.strike", "Strike"], ["format.clear", "Clear Format"],
+    ]);
+    else if (id === "insert") openSubmenu(e.clientX + 180, e.clientY, [
+      ["format.link", "Hyperlink"], ["format.image", "Image…"], ["paragraph.hr", "Horizontal Line"],
+      ["paragraph.footnote", "Footnote"], ["paragraph.toc", "Table of Contents"], ["paragraph.tableDialog", "Table…"],
+    ]);
+    else if (id === "table") openSubmenu(e.clientX + 180, e.clientY, [
+      ["paragraph.table.addRowAbove", "Add Row Above"], ["paragraph.table.addRowBelow", "Add Row Below"],
+      ["paragraph.table.deleteRow", "Delete Row"], ["paragraph.table.deleteTable", "Delete Table"],
+    ]);
+    else if (id === "link.open" && link) window.open(link.href, "_blank");
+    else if (id === "link.copy" && link) void navigator.clipboard.writeText(link.href);
+    else if (id === "image.open" && img) window.open(img.src, "_blank");
+    else if (id === "image.delete") pmRun(deleteImage());
+    else runCommand(id);
+  });
+}
+function openSubmenu(x: number, y: number, rows: [string, string][]) {
+  openContextMenu(x, y, rows.map(([id, label]) => ({ id, label })), (id) => runCommand(id));
+}
+editor.view.dom.addEventListener("contextmenu", (e) => editorContextMenu(e));
+document.getElementById("footer-word-count")!.addEventListener("click", () => toggleWordPopover());
+document.addEventListener("mousedown", (e) => {
+  if (!wordPop.hidden && !wordPop.contains(e.target as Node) && (e.target as HTMLElement).id !== "footer-word-count") wordPop.hidden = true;
+});
+syncToolbar();
+syncStatusBar();
+setZoom(zoomLevel());
+
 document.getElementById("sidebar-toggle")!.onclick = () => { document.body.classList.toggle("pin-outline"); scheduleMenu(); };
 document.getElementById("source-toggle")!.onclick = () => { toggleSource(); scheduleMenu(); };
 document.addEventListener("keydown", (e) => {
@@ -893,11 +1230,17 @@ document.addEventListener("keydown", (e) => {
 }, true);
 
 plugins.activateAll([readingGoal, wordStats, ai, library]); // order irrelevant: topo-sorted by depends
+registerCoreSlash(editor.view, {
+  insertImage: () => { void insertLocalImage(); },
+  promptLink: () => { void promptHyperlink(); },
+});
 sidebar.addTab("settings", "⚙", undefined, {
   id: "settings", title: "Settings", render: (el) => {
     const folder = imageFolderPattern();
     const core = `<h4>Editor</h4><label><input type="checkbox" id="set-autosave" ${localStorage.getItem(AUTOSAVE_KEY) === "1" ? "checked" : ""}> Autosave (1.5 s after edits)</label>
       <label><input type="checkbox" id="set-reopen" ${localStorage.getItem(REOPEN_KEY) !== "0" ? "checked" : ""}> Reopen last file on startup</label>
+      <label><input type="checkbox" id="set-pair-brackets" ${pairBracketsOn() ? "checked" : ""}> Auto-pair brackets and quotes</label>
+      <label><input type="checkbox" id="set-pair-md" ${pairMarkdownOn() ? "checked" : ""}> Auto-pair Markdown syntax</label>
       <h4>Images</h4><label>When pasting / dropping images, copy them to<br><select id="set-imgfolder">
       ${["./assets", "./${filename}.assets"].map((o) => `<option value="${o}" ${o === folder ? "selected" : ""}>${o}</option>`).join("")}
       <option value="custom" ${["./assets", "./${filename}.assets"].includes(folder) ? "" : "selected"}>custom…</option></select>
@@ -905,6 +1248,8 @@ sidebar.addTab("settings", "⚙", undefined, {
     el.innerHTML = `<div class="mdn-settings">` + core + settingSpecs.map(({ owner, specs }) => `<h4>${escapeHtml(owner)}</h4>` + specs.map((s) => renderSetting(owner, s)).join("")).join("") + (plugins.errors.length ? `<h4>Plugin errors</h4>` + plugins.errors.map((e) => `<div>${escapeHtml(e.id)}: ${escapeHtml(e.error)}</div>`).join("") : "") + `</div>`;
     (el.querySelector("#set-autosave") as HTMLInputElement).onchange = (e) => localStorage.setItem(AUTOSAVE_KEY, (e.target as HTMLInputElement).checked ? "1" : "0");
     (el.querySelector("#set-reopen") as HTMLInputElement).onchange = (e) => localStorage.setItem(REOPEN_KEY, (e.target as HTMLInputElement).checked ? "1" : "0");
+    (el.querySelector("#set-pair-brackets") as HTMLInputElement).onchange = (e) => { localStorage.setItem(PAIR_BRACKETS_KEY, (e.target as HTMLInputElement).checked ? "1" : "0"); scheduleMenu(); };
+    (el.querySelector("#set-pair-md") as HTMLInputElement).onchange = (e) => { localStorage.setItem(PAIR_MARKDOWN_KEY, (e.target as HTMLInputElement).checked ? "1" : "0"); scheduleMenu(); };
     const fsel = el.querySelector("#set-imgfolder") as HTMLSelectElement, fcus = el.querySelector("#set-imgfolder-custom") as HTMLInputElement;
     fsel.onchange = () => { if (fsel.value !== "custom") { localStorage.setItem(IMAGE_FOLDER_KEY, fsel.value); fcus.value = fsel.value; } else fcus.focus(); };
     fcus.onchange = () => { localStorage.setItem(IMAGE_FOLDER_KEY, fcus.value.trim() || "./assets"); fsel.value = ["./assets", "./${filename}.assets"].includes(fcus.value) ? fcus.value : "custom"; };
@@ -1008,7 +1353,7 @@ window.addEventListener("beforeunload", (e) => { if (state.dirty && host.kind ==
   const ws = q.get("folder") ?? (cli ? cli.replace(/[\\/][^\\/]*$/, "") : null) ?? (restore ? localStorage.getItem("mdnest.lastFolder") : null) ?? (await host.defaultWorkspace());
   if (ws) { await sidebar.openFolder(ws).catch(() => {}); if (sidebar.root) plugins.emit("workspace-changed", sidebar.root); }
   const f = cli ?? q.get("file") ?? (restore ? localStorage.getItem("mdnest.lastFile") : null) ?? (restore && ws && host.kind === "browser" && !q.has("welcome") ? ws + "/sample.md" : null);
-  if (f) await openFile(f); else { editor.setMarkdown(WELCOME); state.lastSaved = editor.getMarkdown(); setDirty(false); afterLoad(); showWelcome(); }
+  if (f) await openFile(f); else { editor.setMarkdown(EMPTY_DOC); state.lastSaved = editor.getMarkdown(); setDirty(false); afterLoad(); showWelcome(); }
   if (q.get("sidebar") === "0") document.body.classList.remove("pin-outline");
   document.body.classList.add("mdn-ready");
   await refreshMenu();
