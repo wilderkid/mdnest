@@ -1,10 +1,11 @@
 import { chromium } from "playwright";
-const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 1280, height: 900 } });
+import path from "node:path";
+const WS = path.resolve("dev-data/workspace"), DOC = path.join(WS, "sample.md");
+const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 1280, height: 860 } });
 p.on("pageerror", e => console.log("ERR", e.message));
-await p.goto("http://127.0.0.1:4173/?theme=mdnest"); await p.waitForSelector("body.mdn-ready"); await p.waitForTimeout(800);
-const para = () => p.evaluate(() => window.mdnest.editor.view.state.selection.$from.parent.toString().slice(0, 160));
-await p.locator("#write p strong").first().click(); await p.waitForTimeout(200);
-console.log("after click:", await para());
-await p.screenshot({ path: "screenshots/phase2/_dbg.png", clip: { x: 260, y: 300, width: 1000, height: 150 } });
-await p.keyboard.type("XY"); console.log("typed:", await para());
+await p.goto(`http://127.0.0.1:4173/?file=${encodeURIComponent(DOC)}&folder=${encodeURIComponent(WS)}`); await p.waitForSelector("body.mdn-ready"); await p.waitForTimeout(700);
+const par = () => p.evaluate(() => { const s = window.mdnest.editor.view.state; return s.selection.$from.parent.toString().slice(0, 50); });
+await p.locator("#write p span[md-inline=link] a").first().click();
+await p.locator("#write h2:text('Image')").click(); await p.keyboard.press("End"); await p.keyboard.press("Enter"); await p.keyboard.type("after");
+console.log(await par(), await p.evaluate(() => window.mdnest.editor.getMarkdown().match(/## Image\n\n[^\n]*/)[0]));
 await b.close();

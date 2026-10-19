@@ -78,7 +78,10 @@ export class FindBar {
   open(replace: boolean, seed?: string) {
     this.el.style.display = "block"; this.el.classList.toggle("with-replace", replace);
     if (seed && !seed.includes("\n")) this.find.value = seed;
-    this.find.focus(); this.find.select(); this.update();
+    this.update();
+    this.find.focus(); this.find.select();
+    // CodeMirror may grab focus back during its own keydown handling: re-focus (without re-selecting)
+    setTimeout(() => { if (document.activeElement !== this.find) this.find.focus(); }, 0);
   }
   close() { this.el.style.display = "none"; this.pick().selectCurrent?.(); this.pick().clear(); }
   update() {

@@ -93,7 +93,11 @@ const nodes: Record<string, NodeSpec> = {
 // add mdtype attributes to table nodes for theme compatibility
 const wrap = (name: string, mdtype: string, cls?: string) => {
   const orig = nodes[name].toDOM!;
-  nodes[name] = { ...nodes[name], toDOM: (n: any) => { const r: any = orig(n); if (Array.isArray(r) && typeof r[1] === "object") { r[1] = { ...r[1], mdtype, ...(cls ? { class: cls } : {}) }; } return r; } };
+  nodes[name] = { ...nodes[name], toDOM: (n: any) => { const r: any = orig(n); if (Array.isArray(r)) {
+      const extra = { mdtype, ...(cls ? { class: cls } : {}) };
+      // spec is [tag, attrs?, ...children]: attrs is a plain object, children are arrays or 0
+      if (r[1] && typeof r[1] === "object" && !Array.isArray(r[1])) r[1] = { ...r[1], ...extra }; else r.splice(1, 0, extra);
+    } return r; } };
 };
 wrap("table", "table", "md-table");
 wrap("table_row", "table_row");

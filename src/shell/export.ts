@@ -84,6 +84,11 @@ export async function renderExportBody(doc: PMNode, opts: { keepRelativeImages: 
     const tex = m.textContent || ""; m.innerHTML = `<div class="mathjax-block md-math-preview">${await renderTex(tex, true)}</div>`;
   }
   for (const m of [...root.querySelectorAll<HTMLElement>("span.md-inline-math")]) m.innerHTML = await renderTex(m.textContent || "", false);
+  // header row → <thead> (as in Typora exports; some themes style `thead`)
+  root.querySelectorAll("table").forEach((t) => {
+    const first = t.querySelector("tr"); if (!first || t.tHead) return;
+    const th = document.createElement("thead"); th.appendChild(first); t.insertBefore(th, t.firstChild);
+  });
   root.querySelectorAll("input[type=checkbox]").forEach((i) => i.setAttribute("disabled", ""));
   root.querySelectorAll(".md-meta-block").forEach((e) => e.remove()); // front matter is metadata, not content
   return root.innerHTML;

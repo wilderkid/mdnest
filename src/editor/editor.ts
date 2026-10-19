@@ -9,6 +9,7 @@ import { parseMarkdown, serializeMarkdown } from "./markdown";
 import { revealPlugin } from "./reveal";
 import { markersPlugin, collapseAll } from "./markers";
 import { tableToolbarPlugin } from "./tabletools";
+import { searchPlugin } from "./search";
 import { nodeViews, tocViews } from "./views";
 import { buildInputRules, buildKeymaps } from "./rules";
 import type { DecorationProvider } from "../plugins/api";
@@ -39,8 +40,9 @@ function externalDecorations(hooks: EditorHooks) {
 
 export function createEditor(mount: HTMLElement, markdown: string, hooks: EditorHooks) {
   const plugins = [
+    markersPlugin(), // first: its keydown hook syncs a stale post-click selection before keymaps run
     buildInputRules(schema), ...buildKeymaps(schema, hooks.keys), history(), dropCursor(), gapCursor(),
-    columnResizing(), tableEditing(), markersPlugin(), revealPlugin(), tableToolbarPlugin(), externalDecorations(hooks),
+    columnResizing(), tableEditing(), revealPlugin(), tableToolbarPlugin(), searchPlugin(), externalDecorations(hooks),
   ];
   const mkState = (md: string) => {
     const doc = parseMarkdown(md);

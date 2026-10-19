@@ -44,9 +44,12 @@ let changeTimer: any;
 const editor: Editor = createEditor(writeEl, WELCOME, {
   decorationProviders,
   onChange: () => {
-    setDirty(true); scheduleAutosave();
+    // dirty = serialized Markdown differs from what is on disk (marker expand/collapse alone is not an edit)
     clearTimeout(changeTimer);
-    changeTimer = setTimeout(() => { sidebar.updateOutline(editor.view); updateCount(); plugins.emit("doc-changed"); }, 150);
+    changeTimer = setTimeout(() => {
+      const d = editor.getMarkdown() !== state.lastSaved; setDirty(d); if (d) scheduleAutosave();
+      sidebar.updateOutline(editor.view); updateCount(); plugins.emit("doc-changed");
+    }, 150);
   },
   onImageFiles: (files, pos) => { insertImageFiles(editor.view, host, state.path, files, pos, notify); return true; },
   keys: { toggleSource, save: () => save(false), saveAs: () => save(true), open: pickAndOpen, openFolder: pickFolder, palette: () => openPalette(commands) },
@@ -74,7 +77,7 @@ async function openFile(path: string) {
     state.path = path; const dir = path.replace(/[\\/][^\\/]*$/, "");
     setImageBase(host.fileUrl(dir + "/"));
     if (source.active) source.show(text); editor.setMarkdown(text);
-    state.lastSaved = text; setDirty(false); setTitle(); afterLoad(); sidebar.markActive(path);
+    state.lastSaved = editor.getMarkdown(); setDirty(false); setTitle(); afterLoad(); sidebar.markActive(path);
     state.mtime = await host.mtime(path).catch(() => null); state.conflict = false; addRecent(path);
     localStorage.setItem("mdnest.lastFile", path); plugins.emit("file-opened", path);
   } catch (e: any) { notify("Open failed: " + (e.message ?? e)); }
@@ -213,8 +216,8 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "/" ) { e.preventDefault(); toggleSource(); }
   else if (e.key.toLowerCase() === "s" && source.active) { e.preventDefault(); save(e.shiftKey); }
   else if (e.key.toLowerCase() === "p" && e.shiftKey) { e.preventDefault(); openPalette(commands); }
-  else if (e.key.toLowerCase() === "f" && !e.shiftKey) { e.preventDefault(); openFind(false); }
-  else if (e.key.toLowerCase() === "h" && !e.shiftKey) { e.preventDefault(); openFind(true); }
+  else if (e.key.toLowerCase() === "f" && !e.shiftKey) { e.preventDefault(); e.stopPropagation(); openFind(false); }
+  else if (e.key.toLowerCase() === "h" && !e.shiftKey) { e.preventDefault(); e.stopPropagation(); openFind(true); }
   else if (e.key.toLowerCase() === "t" && !e.shiftKey && !source.active) { e.preventDefault(); insertTable(3, 3)(editor.view.state, editor.view.dispatch); }
 }, true);
 

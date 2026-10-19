@@ -154,6 +154,29 @@ function expandable(doc: PMNode, pos: number) {
 }
 
 export const markersKey = new PluginKey<{ pointerDown: boolean }>("md-markers");
+const pointer = { down: false };
+/**
+ * Bring ProseMirror's selection in line with the DOM selection *now*. After a click the browser moves
+ * the caret natively and ProseMirror only learns about it on the (async) selectionchange event; a key
+ * pressed, or a paste, before that event would act on the stale selection. Called on mouseup (+30 ms),
+ * before every keydown and before paste/drop.
+ */
+export function syncSelectionFromDOM(view: EditorView, force = false): boolean {
+  const dom = view.dom.ownerDocument.getSelection();
+  if (!dom || !dom.anchorNode || !dom.focusNode || !view.dom.contains(dom.anchorNode) || !view.dom.contains(dom.focusNode)) return false;
+  const inCM = (n: Node) => (n.nodeType === 1 ? (n as Element) : n.parentElement)?.closest(".CodeMirror, [contenteditable=false]");
+  if (inCM(dom.anchorNode) || inCM(dom.focusNode)) return false;
+  let anchor: number, head: number;
+  try { anchor = view.posAtDOM(dom.anchorNode, dom.anchorOffset); head = view.posAtDOM(dom.focusNode, dom.focusOffset); } catch { return false; }
+  const sel = view.state.selection;
+  if (!force && anchor === sel.anchor && head === sel.head) return false;
+  try {
+    const $a = view.state.doc.resolve(anchor), $h = view.state.doc.resolve(head);
+    if (!$a.parent.inlineContent || !$h.parent.inlineContent) return false;
+    view.dispatch(view.state.tr.setSelection(TextSelection.between($a, $h)).setMeta(markersKey, { pointerDown: false }));
+    return true;
+  } catch { return false; }
+}
 
 function expandAt(tr: Transaction) {
   const sel = tr.selection;
@@ -167,7 +190,8 @@ function expandAt(tr: Transaction) {
   if (!text) return;
   tr.replaceWith(r.from, r.to, schema.text(text, [src.create()]));
   tr.setSelection(TextSelection.create(tr.doc, r.from + caret));
-  tr.setStoredMarks([src.create()]);
+  // (no stored marks: they would go stale and leak md_src into text typed elsewhere after a click;
+  //  text typed at the very start of a raw region is attached in appendTransaction instead)
 }
 
 export function markersPlugin() {
@@ -179,7 +203,7 @@ export function markersPlugin() {
     },
     appendTransaction(trs, _old, state) {
       if (trs.some((t) => t.getMeta("md-markers-internal"))) return null;
-      const pointerDown = markersKey.getState(state)!.pointerDown;
+      const pointerDown = pointer.down;
       if (!trs.some((t) => t.docChanged || t.selectionSet || t.getMeta(markersKey))) return null;
       const tr = state.tr.setMeta("md-markers-internal", true);
       // 1) literally typed / pasted Markdown punctuation becomes raw source (md_src)
@@ -199,7 +223,9 @@ export function markersPlugin() {
           if (!n.isText || !parent || !parent.isTextblock || parent.type.spec.code) return;
           if (n.marks.some((m) => m.type === src || m.type.spec.code)) return;
           const f = Math.max(a, pos), t2 = Math.min(b, pos + n.nodeSize);
-          if (SPECIAL.test(tr.doc.textBetween(f, t2))) tr.addMark(f, t2, src.create());
+          const after = tr.doc.resolve(t2).nodeAfter;
+          const touchesRaw = !!after && after.isText && !!src.isInSet(after.marks) && t2 === pos + n.nodeSize;
+          if (touchesRaw || SPECIAL.test(tr.doc.textBetween(f, t2))) tr.addMark(f, t2, src.create());
         });
       }
       if (pointerDown) return tr.docChanged ? tr : null;
@@ -236,16 +262,24 @@ export function markersPlugin() {
         return decos.length ? DecorationSet.create(state.doc, decos) : null;
       },
       handleDOMEvents: {
+        // While the mouse button is down (click / drag-select) nothing is expanded or collapsed, so the
+        // DOM doesn't shift under the pointer. No transaction is dispatched here: dispatching before
+        // ProseMirror has read the click's DOM selection would write the *old* selection back (this was
+        // the Phase 1 click-then-type misplacement). The flag is cleared in a capture-phase mouseup that
+        // runs before ProseMirror's own mouseup handler, whose selection transaction then expands.
         mousedown(view) {
-          view.dispatch(view.state.tr.setMeta(markersKey, { pointerDown: true }));
+          pointer.down = true;
           const up = () => {
             window.removeEventListener("mouseup", up, true);
-            // let the browser settle the DOM selection, then expand/collapse once
-            setTimeout(() => { if (!view.isDestroyed) view.dispatch(view.state.tr.setMeta(markersKey, { pointerDown: false })); }, 0);
+            pointer.down = false;
+            // fallback for clicks that don't produce a selection transaction (same position)
+            setTimeout(() => { if (!view.isDestroyed && !pointer.down && view.hasFocus()) { if (!syncSelectionFromDOM(view)) view.dispatch(view.state.tr.setMeta(markersKey, { pointerDown: false })); } }, 30);
           };
           window.addEventListener("mouseup", up, true);
           return false;
         },
+        keydown(view) { if (!pointer.down) syncSelectionFromDOM(view); return false; },
+        paste(view) { syncSelectionFromDOM(view); return false; },
       },
     },
   });
