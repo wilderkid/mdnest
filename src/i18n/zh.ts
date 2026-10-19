@@ -110,6 +110,19 @@ export const ZH: Record<string, string> = {
   // toasts
   Readonly: "只读", Editable: "可编辑", "Copied table": "已复制表格", "Enter a value to store": "请输入要保存的值",
 
+  // AI / library / stats panels
+  "Include current document": "包含当前文档", "Ask about this document, or type {hint} to cite your notes…": "问问这篇文档，或输入 {hint} 引用知识库…",
+  "Ask about this document…": "问问这篇文档…", Send: "发送", Stop: "停止", "Insert at cursor": "插入到光标", You: "我", Assistant: "助手",
+  "Sent to the selected provider · excluded folders never are": "内容会发送到所选服务 · 排除的文件夹不会发送", "no model": "未设置模型",
+  "AI is off": "AI 已关闭", "AI is off. Nothing is sent.": "AI 已关闭，不会发送任何内容。", "Loading AI…": "正在加载 AI…",
+  "No messages yet. History stays in memory for this session.": "还没有消息。对话只保存在本次会话的内存中。",
+  "New chat (clear)": "新对话（清空）", "AI settings": "AI 设置", "Inserted at cursor": "已插入到光标处", Copied: "已复制", "Copy failed": "复制失败",
+  "Re-index": "重新索引", "Library settings": "知识库设置", "The library is off. Nothing is indexed.": "知识库已关闭，不会建立索引。", "Index this folder": "为此文件夹建立索引",
+  "Search notes (keywords + meaning)…": "搜索笔记（关键词 + 语义）…", Keyword: "关键词", Meaning: "语义", keyword: "关键词", meaning: "语义",
+  "Related to this note": "与本文相关", "No matches.": "没有匹配项。", "Nothing related yet.": "暂无相关笔记。", "Needs embeddings.": "需要向量模型。",
+  Pause: "暂停", "Resume vectors": "继续生成向量", "{files} files · {chunks} chunks · {embedded}/{chunks} vectors": "已索引 {files} 篇 · {chunks} 段 · 向量 {embedded}/{chunks}",
+  Sentences: "句子",
+
   // dialogs
   Cancel: "取消", OK: "确定", "Don't Save": "不保存", "Pandoc not found": "未找到 Pandoc", "Install Pandoc": "安装 Pandoc", "Re-check": "重新检测",
   "These formats need Pandoc. Built-in Word, HTML, and PDF still work.": "这些格式需要安装 Pandoc。内置的 Word、HTML 和 PDF 导出不受影响。",

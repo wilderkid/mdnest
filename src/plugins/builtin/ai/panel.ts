@@ -4,6 +4,8 @@ import { docSnippet } from "./context";
 import type { AiProvider, ChatMessage } from "./provider";
 import { citeSegments, findMentions, LIBRARY_RULES, mentions, sourcesBlock, type Source } from "./mentions";
 import "./ai.css";
+import { t } from "../../../i18n";
+import { icon } from "../../../shell/icons";
 
 interface Turn { role: "user" | "assistant"; content: string; sources?: Source[] }
 
@@ -16,44 +18,82 @@ export function mountChat(el: HTMLElement, ctx: PluginContext, provider: AiProvi
   const root = document.createElement("div");
   root.className = "mdn-ai";
 
+  // header bar: model chip + usage
+  const bar = document.createElement("div");
+  bar.className = "mdn-ai-bar";
   const status = document.createElement("div");
-  status.className = "mdn-ai-status";
+  status.className = "mdn-ai-status chip";
+  const usageEl = document.createElement("div");
+  usageEl.className = "mdn-ai-usage";
+  bar.append(status, usageEl);
 
   const list = document.createElement("div");
   list.className = "mdn-ai-log";
 
+  // composer: context chips, input with send/stop, privacy line
+  const compose = document.createElement("div");
+  compose.className = "mdn-ai-compose";
+  const chips = document.createElement("div");
+  chips.className = "mdn-ai-chips";
   const include = document.createElement("label");
-  include.className = "mdn-ai-include";
+  include.className = "mdn-ai-include chip" + (includeDoc ? " on" : "");
   const box = document.createElement("input");
   box.type = "checkbox";
   box.checked = includeDoc;
-  box.onchange = () => { includeDoc = box.checked; };
-  include.append(box, document.createTextNode(" Include current document"));
+  box.onchange = () => { includeDoc = box.checked; include.classList.toggle("on", includeDoc); };
+  const incText = document.createElement("span");
+  incText.textContent = t("Include current document");
+  include.append(box, incText);
+  chips.appendChild(include);
+  for (const m of mentions()) {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "chip mdn-ai-mention";
+    chip.innerHTML = icon("at", 13);
+    chip.append(document.createTextNode(t(m.trigger === "@library" ? "Library" : m.trigger)));
+    chip.title = m.trigger;
+    chip.onclick = () => {
+      if (!ta.value.includes(m.trigger)) ta.value = (m.trigger + " " + ta.value).trimEnd() + (ta.value ? "" : " ");
+      ta.focus();
+    };
+    chips.appendChild(chip);
+  }
 
+  const inputBox = document.createElement("div");
+  inputBox.className = "mdn-ai-inputbox";
   const ta = document.createElement("textarea");
   ta.className = "mdn-ai-input";
-  ta.rows = 3;
+  ta.rows = 2;
   const hint = mentions().map((m) => m.trigger).join(", ");
-  ta.placeholder = hint ? `Ask about this document… (${hint} searches your notes)` : "Ask about this document…";
+  ta.placeholder = hint ? t("Ask about this document, or type {hint} to cite your notes…", { hint }) : t("Ask about this document…");
 
   const row = document.createElement("div");
   row.className = "mdn-ai-actions";
-  const send = button("Send", () => { void submit(); });
-  const stop = button("Stop", () => inflight?.abort());
+  const send = button("Send", () => { void submit(); }, "send", "mdn-ai-send");
+  const stop = button("Stop", () => inflight?.abort(), "stop", "mdn-ai-stop");
   stop.disabled = true;
-  const clear = button("Clear", () => { history.length = 0; paint(); });
-  row.append(send, stop, clear);
+  stop.hidden = true;
+  row.append(send, stop);
+  inputBox.append(ta, row);
+  const note = document.createElement("div");
+  note.className = "mdn-ai-note";
+  note.textContent = t("Sent to the selected provider · excluded folders never are");
+  compose.append(chips, inputBox, note);
 
-  const usageEl = document.createElement("div");
-  usageEl.className = "mdn-ai-usage";
-  root.append(status, usageEl, list, include, ta, row);
+  root.append(bar, list, compose);
   el.appendChild(root);
+  const clearAll = () => { if (inflight) inflight.abort(); history.length = 0; paint(); };
+  window.addEventListener("mdn-ai-clear", clearAll);
 
   const paintStatus = () => {
     const info = provider.info();
-    status.textContent = info.enabled
-      ? `${info.preset} · ${info.model || "no model"}`
-      : "AI is off";
+    status.replaceChildren();
+    const dot = document.createElement("span");
+    dot.className = "mdn-ai-dot" + (info.enabled ? " ok" : "");
+    const label = document.createElement("span");
+    label.textContent = info.enabled ? `${info.preset} · ${info.model || t("no model")}` : t("AI is off");
+    status.append(dot, label);
+    status.title = label.textContent;
     usageEl.textContent = info.enabled ? provider.usageSummary() : "";
   };
 
@@ -62,7 +102,8 @@ export function mountChat(el: HTMLElement, ctx: PluginContext, provider: AiProvi
     if (!history.length) {
       const empty = document.createElement("p");
       empty.className = "mdn-ai-empty";
-      empty.textContent = "No messages yet. History stays in memory for this session.";
+      empty.innerHTML = icon("ai", 26, 1.4);
+      empty.append(document.createTextNode(t("No messages yet. History stays in memory for this session.")));
       list.appendChild(empty);
       return;
     }
@@ -71,7 +112,8 @@ export function mountChat(el: HTMLElement, ctx: PluginContext, provider: AiProvi
       item.className = "mdn-ai-msg mdn-ai-" + turn.role;
       const who = document.createElement("div");
       who.className = "mdn-ai-who";
-      who.textContent = turn.role === "user" ? "You" : "Assistant";
+      who.innerHTML = turn.role === "user" ? "" : icon("ai", 13, 1.8);
+      who.append(document.createTextNode(t(turn.role === "user" ? "You" : "Assistant")));
       const body = document.createElement("pre");
       body.className = "mdn-ai-body";
       const srcs = turn.sources ?? [];
@@ -95,6 +137,8 @@ export function mountChat(el: HTMLElement, ctx: PluginContext, provider: AiProvi
           const a = document.createElement("button");
           // one line: the label is cut with an ellipsis, "· line N" never wraps; full text on hover
           a.type = "button"; a.className = "mdn-ai-source"; a.title = `${s.label} · line ${s.line}`;
+          const num = document.createElement("b"); num.className = "mdn-ai-source-n"; num.textContent = String(s.n ?? ol.childElementCount + 1);
+          a.appendChild(num);
           const lab = document.createElement("span"); lab.className = "mdn-ai-source-label"; lab.textContent = s.label;
           const ln = document.createElement("span"); ln.className = "mdn-ai-source-line"; ln.textContent = `· line ${s.line}`;
           a.append(lab, ln);
@@ -110,13 +154,13 @@ export function mountChat(el: HTMLElement, ctx: PluginContext, provider: AiProvi
           button("Insert at cursor", () => {
             ctx.editor.insertMarkdown(turn.content);
             ctx.ui.notify("Inserted at cursor");
-          }),
+          }, "insert"),
           button("Copy", () => {
             void navigator.clipboard?.writeText(turn.content).then(
               () => ctx.ui.notify("Copied"),
               () => ctx.ui.notify("Copy failed"),
             );
-          }),
+          }, "copy"),
         );
         item.appendChild(acts);
       }
@@ -141,6 +185,8 @@ export function mountChat(el: HTMLElement, ctx: PluginContext, provider: AiProvi
     inflight = ac;
     stop.disabled = false;
     send.disabled = true;
+    stop.hidden = false;
+    send.hidden = true;
     try {
       // @mentions (e.g. @library) resolve into numbered sources before the model is called
       const { used, rest } = findMentions(text);
@@ -177,6 +223,8 @@ export function mountChat(el: HTMLElement, ctx: PluginContext, provider: AiProvi
       if (inflight === ac) inflight = null;
       stop.disabled = true;
       send.disabled = false;
+      stop.hidden = true;
+      send.hidden = false;
       paintStatus();
     }
   }
@@ -206,14 +254,23 @@ export function mountChat(el: HTMLElement, ctx: PluginContext, provider: AiProvi
 
   return () => {
     window.removeEventListener("mdn-ai-ask", onAsk);
+    window.removeEventListener("mdn-ai-clear", clearAll);
     inflight?.abort();
   };
 }
 
-function button(label: string, fn: () => void): HTMLButtonElement {
+/** Button with an optional icon. The label stays in the DOM (as text, or visually hidden for icon-only buttons). */
+function button(label: string, fn: () => void, ic = "", cls = ""): HTMLButtonElement {
   const b = document.createElement("button");
   b.type = "button";
-  b.textContent = label;
+  if (cls) b.className = cls;
+  if (ic) b.innerHTML = icon(ic, 14, 1.8);
+  const span = document.createElement("span");
+  span.textContent = label;
+  span.className = cls ? "sr-label" : "btn-label";
+  b.appendChild(span);
+  b.title = t(label);
+  if (!cls) span.textContent = t(label);
   b.onclick = fn;
   return b;
 }

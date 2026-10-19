@@ -1,5 +1,7 @@
-import { createUsage, type UsageLog } from "./usage";
 // AI assistant. Heavy UI and prompts stay in a separate chunk until the user turns AI on.
+import { createUsage, type UsageLog } from "./usage";
+import { t } from "../../../i18n";
+import { icon } from "../../../shell/icons";
 import type { EditorPlugin, PluginContext, SettingSpec } from "../../api";
 import {
   PRESETS, applyPresetChange, createProvider, presetOf, type AiProvider, type PresetId,
@@ -135,7 +137,12 @@ const plugin: EditorPlugin = {
 
     ctx.ui.registerSidebarPanel({
       id: "ai",
-      title: "AI",
+      title: "AI Assistant",
+      icon: "ai",
+      actions: [
+        { id: "new-chat", title: "New chat (clear)", icon: "newChat", run: () => window.dispatchEvent(new CustomEvent("mdn-ai-clear")) },
+        { id: "ai-settings", title: "AI settings", icon: "settings", run: () => openSettingsFor("AI") },
+      ],
       render: (el) => {
         let disposed = false;
         let cleanup: (() => void) | void;
@@ -143,11 +150,16 @@ const plugin: EditorPlugin = {
           el.replaceChildren();
           const box = document.createElement("div");
           box.className = "mdn-ai mdn-ai-off";
+          const art = document.createElement("div");
+          art.className = "mdn-off-art";
+          art.innerHTML = icon("ai", 30, 1.4);
           const p = document.createElement("p");
-          p.textContent = "AI is off. Nothing is sent.";
+          p.textContent = t("AI is off. Nothing is sent.");
           const btn = document.createElement("button");
           btn.type = "button";
-          btn.textContent = "Enable AI";
+          btn.className = "mdn-primary-btn";
+          btn.textContent = t("Enable AI");
+          box.append(art);
           btn.onclick = () => { void enableAi(ctx, load); };
           box.append(p, btn);
           el.appendChild(box);
@@ -159,7 +171,7 @@ const plugin: EditorPlugin = {
           el.replaceChildren();
           const holder = document.createElement("div");
           holder.className = "mdn-ai mdn-ai-loading";
-          holder.textContent = "Loading AI…";
+          holder.textContent = t("Loading AI…");
           el.appendChild(holder);
           void load().then((mod) => {
             if (disposed) return;
@@ -269,3 +281,11 @@ function enableAi(ctx: PluginContext, load: () => Promise<typeof import("./runti
 export default plugin;
 
 export type { PresetId };
+
+/** Show the settings panel filtered to one group (builtin plugins only). */
+export function openSettingsFor(query: string) {
+  document.body.classList.add("pin-outline");
+  (document.querySelector('#typora-sidebar .sidebar-tab[data-id="settings"]') as HTMLElement | null)?.click();
+  const input = document.getElementById("settings-search") as HTMLInputElement | null;
+  if (input) { input.value = query; input.dispatchEvent(new Event("input")); }
+}

@@ -1,5 +1,8 @@
 // Library runtime (lazy): scan → embed loop, watcher, hybrid search panel, related notes, @library.
 import type { PluginContext } from "../../api";
+import { t as tr } from "../../../i18n";
+import { icon } from "../../../shell/icons";
+import { markHit } from "../../../shell/sidebar";
 import type { AiProvider } from "../ai/provider";
 import type { Source } from "../ai/mentions";
 
@@ -191,62 +194,100 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: 
   const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e;
 }
 
+type LibMode = "all" | "fts" | "vec";
+let libMode: LibMode = "all";
+
 export function mountPanel(host: HTMLElement) {
   host.replaceChildren();
   const root = el("div", "mdn-lib");
   const statusEl = el("div", "mdn-lib-status");
+  const dot = el("span", "mdn-lib-dot");
+  const statusText = el("span", "mdn-lib-status-text");
+  statusEl.append(dot, statusText);
   const bar = el("div", "mdn-lib-progress"); const fill = el("div"); bar.appendChild(fill);
   const actions = el("div", "mdn-lib-actions");
-  const btn = (t: string, f: () => void) => { const b = el("button", "", t); b.type = "button"; b.onclick = f; return b; };
+  const btn = (label: string, f: () => void) => { const b = el("button", "", tr(label)); b.type = "button"; b.onclick = f; return b; };
   const pauseBtn = btn("Pause", () => { if (status.phase === "embedding") pause(); else void serial(() => embedPending()); });
-  actions.append(btn("Re-index", () => void reindex(false)), pauseBtn);
-  const input = el("input", "mdn-lib-q") as HTMLInputElement; input.type = "search"; input.placeholder = "Search notes (keywords + meaning)…";
+  const reBtn = btn("Re-index", () => void reindex(false));
+  reBtn.className = "mdn-lib-reindex";
+  actions.append(reBtn, pauseBtn);
+  const box = el("label", "sb-search mdn-lib-search");
+  box.innerHTML = icon("search", 14);
+  const input = el("input", "mdn-lib-q") as HTMLInputElement; input.type = "search"; input.placeholder = tr("Search notes (keywords + meaning)…");
+  box.appendChild(input);
+  const seg = el("div", "seg mdn-lib-seg");
+  for (const [m, label] of [["all", "All"], ["fts", "Keyword"], ["vec", "Meaning"]] as [LibMode, string][]) {
+    const b = el("button", m === libMode ? "on" : "", tr(label)) as HTMLButtonElement;
+    b.type = "button"; b.dataset.mode = m;
+    b.onclick = () => { libMode = m; seg.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b)); run(); };
+    seg.appendChild(b);
+  }
+  const count = el("div", "mdn-lib-count");
   const results = el("div", "mdn-lib-results");
-  const relHead = el("div", "mdn-lib-h", "Related to this note");
+  const relSec = el("section", "sb-sec mdn-lib-rel");
+  const relHead = el("div", "mdn-lib-h sb-sec-head");
+  relHead.innerHTML = icon("link", 12, 2);
+  relHead.append(el("span", "", tr("Related to this note")));
+  const relCount = el("span", "sec-count", "0");
+  relHead.appendChild(relCount);
   const related = el("div", "mdn-lib-results mdn-lib-related");
-  root.append(statusEl, bar, actions, input, results, relHead, related);
+  relSec.append(relHead, related);
+  root.append(statusEl, bar, actions, box, seg, count, results, relSec);
   host.appendChild(root);
 
-  const hitView = (h: Hit) => {
+  const hitView = (h: Hit, q = "", top = 0) => {
     const item = el("button", "mdn-lib-hit"); item.type = "button";
-    const top = el("div", "mdn-lib-hit-top");
+    const head = el("div", "mdn-lib-hit-top");
     item.title = `${label(h)} · line ${h.lineStart}`;
-    top.append(el("span", "mdn-lib-hit-title", label(h)), el("span", "mdn-lib-hit-line", `:${h.lineStart}`));
-    for (const v of h.via) top.appendChild(el("span", "mdn-lib-via mdn-lib-via-" + v, v === "fts" ? "keyword" : "meaning"));
+    const ic = el("span", "mdn-lib-hit-icon"); ic.innerHTML = icon("md", 14);
+    head.append(ic, el("span", "mdn-lib-hit-title", label(h)), el("span", "mdn-lib-hit-line", `:${h.lineStart}`));
+    for (const v of h.via) head.appendChild(el("span", "mdn-lib-via mdn-lib-via-" + v, tr(v === "fts" ? "keyword" : "meaning")));
     const snip = h.text.replace(/^#{1,6} .*\n+/, "").replace(/\s+/g, " ").slice(0, 160);
-    item.append(top, el("div", "mdn-lib-hit-snip", snip));
+    const snipEl = el("div", "mdn-lib-hit-snip");
+    snipEl.innerHTML = markHit(snip, q);
+    item.append(head, snipEl);
+    if (top > 0) {
+      const sc = el("div", "mdn-lib-score"); const i = el("i"); i.style.width = Math.max(8, Math.round((100 * h.score) / top)) + "%"; sc.appendChild(i);
+      item.appendChild(sc);
+    }
     item.onclick = () => { void ctx.workspace.openAt(h.path, h.lineStart); };
     return item;
   };
   const paintStatus = async () => {
     const st = await ctx.index.call<Stats>("stats").catch(() => null);
-    const base = st ? `${st.files} files · ${st.chunks} chunks · ${st.embedded}/${st.chunks} vectors${st.model ? " (" + st.model + ")" : ""}` : "No folder open";
-    statusEl.textContent = base + (status.message ? " — " + status.message : "");
+    const base = st ? tr("{files} files · {chunks} chunks · {embedded}/{chunks} vectors", { files: st.files, chunks: st.chunks, embedded: st.embedded }) + (st.model ? " (" + st.model + ")" : "") : tr("No folder open");
+    statusText.textContent = base + (status.message ? " — " + status.message : "");
+    dot.className = "mdn-lib-dot" + (status.phase === "error" ? " err" : status.phase === "idle" && st ? " ok" : " busy");
     const pct = status.phase === "embedding" && status.total ? Math.round((100 * status.done) / status.total) : 0;
     bar.style.display = status.phase === "embedding" ? "" : "none";
     fill.style.width = pct + "%";
     const missing = !!st && st.embedded < st.chunks;
-    pauseBtn.textContent = status.phase === "embedding" ? "Pause" : "Resume vectors";
+    pauseBtn.textContent = tr(status.phase === "embedding" ? "Pause" : "Resume vectors");
     pauseBtn.style.display = status.phase === "embedding" || missing ? "" : "none";
     pauseBtn.disabled = !vectorsWanted() || status.phase === "scanning";
+    actions.style.display = pauseBtn.style.display === "none" ? "none" : "";
     root.dataset.phase = status.phase;
   };
-  let t: any, ac: AbortController | null = null;
+  let timer: any, ac: AbortController | null = null;
   const run = () => {
-    clearTimeout(t);
-    t = setTimeout(async () => {
+    clearTimeout(timer);
+    timer = setTimeout(async () => {
       ac?.abort(); ac = new AbortController(); const mine = ac;
       const q = input.value;
       const hits = await search(q, 10, mine.signal).catch((e) => { results.replaceChildren(el("p", "mdn-lib-empty", String(e?.message ?? e))); return null; });
       if (!hits || mine.signal.aborted) return;
-      results.replaceChildren(...(hits.length ? hits.map(hitView) : q.trim() ? [el("p", "mdn-lib-empty", "No matches.")] : []));
+      const shown = libMode === "all" ? hits : hits.filter((h) => h.via.includes(libMode));
+      const top = Math.max(0, ...shown.map((h) => h.score || 0));
+      count.textContent = q.trim() ? tr("{n} results", { n: shown.length }) : "";
+      results.replaceChildren(...(shown.length ? shown.map((h) => hitView(h, q, top)) : q.trim() ? [el("p", "mdn-lib-empty", tr("No matches."))] : []));
     }, 250);
   };
   input.addEventListener("input", run);
   const paintRelated = async () => {
     const p = ctx.editor.getFilePath();
     const hits = p ? await ctx.index.call<Hit[]>("related", { path: p, k: 5 }).catch(() => []) : [];
-    related.replaceChildren(...(hits.length ? hits.map(hitView) : [el("p", "mdn-lib-empty", vectorsWanted() ? "Nothing related yet." : "Needs embeddings.")]));
+    relCount.textContent = String(hits.length);
+    related.replaceChildren(...(hits.length ? hits.map((h) => hitView(h)) : [el("p", "mdn-lib-empty", tr(vectorsWanted() ? "Nothing related yet." : "Needs embeddings."))]));
   };
   const onChange = () => { void paintStatus(); if (status.phase === "idle") void paintRelated(); };
   listeners.add(onChange);

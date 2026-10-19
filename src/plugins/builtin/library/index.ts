@@ -3,6 +3,9 @@
 // "@library" questions in the AI chat with clickable citations. Off by default; the indexing and
 // panel code are loaded only when enabled.
 import type { EditorPlugin, PluginContext, SettingSpec } from "../../api";
+import { t } from "../../../i18n";
+import { icon } from "../../../shell/icons";
+import { openSettingsFor } from "../ai/index";
 import type { AiProvider } from "../ai/provider";
 import "./library.css";
 
@@ -41,15 +44,20 @@ const plugin: EditorPlugin = {
     ctx.commands.add({ id: "rebuild", title: "Library: Rebuild index", when: on, run: () => load().then((m) => m.reindex(true)) });
     ctx.commands.add({ id: "search", title: "Library: Search", when: on, run: () => ctx.ui.revealPanel("library") });
     ctx.ui.registerSidebarPanel({
-      id: "library", title: "Library",
+      id: "library", title: "Library", icon: "library",
+      actions: [
+        { id: "reindex", title: "Re-index", icon: "refresh", run: () => { if (on()) void load().then((m) => m.reindex(false)); else ctx.settings.set("enabled", true); } },
+        { id: "lib-settings", title: "Library settings", icon: "settings", run: () => openSettingsFor(t("Library")) },
+      ],
       render: (el) => {
         if (!on()) {
           el.replaceChildren();
           const box = document.createElement("div"); box.className = "mdn-lib mdn-lib-off";
-          const p = document.createElement("p"); p.textContent = "The library is off. Nothing is indexed.";
-          const b = document.createElement("button"); b.type = "button"; b.textContent = "Index this folder";
+          const art = document.createElement("div"); art.className = "mdn-off-art"; art.innerHTML = icon("library", 30, 1.4);
+          const p = document.createElement("p"); p.textContent = t("The library is off. Nothing is indexed.");
+          const b = document.createElement("button"); b.type = "button"; b.className = "mdn-primary-btn"; b.textContent = t("Index this folder");
           b.onclick = () => ctx.settings.set("enabled", true);
-          box.append(p, b); el.appendChild(box);
+          box.append(art, p, b); el.appendChild(box);
           const again = (owner?: string, key?: string) => { if (owner === "library" && key === "enabled" && on()) void load().then((m) => m.mountPanel(el)); };
           ctx.events.on("settings-changed", again);
           return;

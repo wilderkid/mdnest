@@ -345,3 +345,22 @@ body.shell-b .mdn-settings .set-btn { border: 1px solid var(--sh-line); backgrou
 body.shell-b .mdn-settings .set-btn:hover { background: var(--sh-hover); }
 body.shell-b .mdn-settings .set-btn[data-secret="set"] { background: var(--sh-accent); color: var(--sh-on-accent); border-color: transparent; }
 body.shell-b .mdn-settings .set-error { color: var(--sh-danger); }
+
+/* ---------- writing stats ---------- */
+.mdn-sb-v2 .ws-panel { padding: 0 12px 10px; color: var(--sh-fg); }
+.ws-panel h3 { font-size: 11.5px; font-weight: 600; color: var(--sh-muted); margin: 0 2px 8px; }
+.ws-hero { border-radius: 14px; padding: 14px 16px; background: linear-gradient(135deg, var(--sh-tint), color-mix(in srgb, #38bdf8 10%, var(--sh-card))); margin-bottom: 10px; }
+.ws-big { font-size: 30px; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; color: var(--sh-accent-ink); font-variant-numeric: tabular-nums; }
+.ws-cap { font-size: 12px; color: var(--sh-muted); margin-top: 2px; }
+.ws-goal { margin-bottom: 10px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--sh-line); }
+.ws-goal-top { display: flex; justify-content: space-between; font-size: 12px; color: var(--sh-muted); margin-bottom: 7px; gap: 8px; }
+.ws-goal-top span:first-child { display: inline-flex; align-items: center; gap: 5px; color: var(--sh-fg); font-weight: 550; }
+.ws-goal-top svg { color: var(--sh-accent); }
+.ws-bar { height: 6px; border-radius: 6px; background: var(--sh-hover); overflow: hidden; }
+.ws-bar i { display: block; height: 100%; border-radius: 6px; background: linear-gradient(90deg, var(--sh-accent), #38bdf8); }
+.ws-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.ws-card { display: flex; align-items: center; gap: 9px; padding: 9px 10px; border-radius: 12px; background: color-mix(in srgb, var(--sh-fg) 3%, var(--sh-card)); }
+.ws-card > svg { color: var(--sh-accent); flex: none; }
+.ws-val { font-size: 15px; font-weight: 650; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.ws-lab { font-size: 11px; color: var(--sh-muted); }
+.ws-sel { margin-top: 10px; font-size: 12px; color: var(--sh-accent-ink); background: var(--sh-tint); border-radius: 9px; padding: 6px 10px; }
