@@ -1,4 +1,4 @@
-import type { Host, DirEntry, StreamEvent, StreamRequest } from "./types";
+import type { Host, DirEntry, ListedFile, SearchHit, StreamEvent, StreamRequest } from "./types";
 import { invoke, Channel } from "@tauri-apps/api/core";
 // Custom URI schemes registered in src-tauri: "mdtheme" (theme folder) and "mdfile" (local files).
 const isWin = navigator.userAgent.includes("Windows");
@@ -24,6 +24,19 @@ export const tauriHost: Host = {
   mtime: (path) => invoke<number | null>("file_mtime", { path }),
   exportPdf: (html, out) => invoke<void>("export_pdf", { html, out }),
   quit: (code = 0) => invoke<void>("quit_app", { code }),
+  createFile: (path) => invoke<void>("create_file", { path }),
+  createDir: (path) => invoke<void>("create_dir", { path }),
+  renamePath: (from, to) => invoke<void>("rename_path", { from, to }),
+  duplicatePath: (path) => invoke<string>("duplicate_path", { path }),
+  trashPath: (path) => invoke<void>("trash_path", { path }),
+  revealPath: (path) => invoke<void>("reveal_path", { path }),
+  listFiles: (root, max) => invoke<ListedFile[]>("list_files", { root, max: max ?? 5000 }),
+  fileExcerpt: (path) => invoke<string>("file_excerpt", { path }),
+  pathKind: (path) => invoke<string>("path_kind", { path }),
+  searchFiles: (root, query, max) => invoke<SearchHit[]>("search_files", { root, query, max: max ?? 80 }),
+  openWindow: (file) => invoke<string>("open_window", { file: file ?? null }),
+  closeWindow: () => invoke<void>("close_window"),
+  windowLabel: () => invoke<string>("window_label"),
   secrets: {
     set: (id, value) => invoke<void>("secret_set", { id, value }),
     has: (id) => invoke<boolean>("secret_has", { id }),

@@ -29,10 +29,6 @@ export interface MenuState {
 }
 
 const LATER = new Set([
-  "file.new", "file.newWindow", "file.quickOpen", "file.reopenClosed",
-  "file.moveTo", "file.rename", "file.duplicate", "file.reveal", "file.revealSidebar",
-  "file.openLocation", "file.print", "file.close", "file.quit", "file.clearRecent",
-  "file.exportHtmlPlain",
   "edit.copyMarkdown", "edit.copyHtml", "edit.copyPlain", "edit.pastePlain", "edit.delete",
   "edit.selectLine", "edit.selectScope", "edit.selectWord", "edit.jumpTop", "edit.jumpBottom",
   "edit.findNext", "edit.findPrevious",
@@ -50,20 +46,13 @@ const LATER = new Set([
   "format.underline", "format.highlight", "format.inlineMath", "format.superscript",
   "format.subscript", "format.comment", "format.link", "format.image",
   "format.image.zoom50", "format.image.zoom100", "format.image.zoom200", "format.clear",
-  "view.focus", "view.typewriter", "view.articles", "view.fileTree", "view.searchFolder",
+  "view.focus", "view.typewriter",
   "view.toolbar", "view.statusBar", "view.wordCount", "view.fullScreen", "view.alwaysOnTop",
   "view.actualSize", "view.zoomIn", "view.zoomOut",
-  "themes.openFolder", "help.markdown", "help.shortcuts", "help.dataFolder",
 ]);
 
 export function laterPart(id: string): 2 | 3 | null {
   if (!LATER.has(id)) return null;
-  // Part 2 is file handling + sidebar. Part 3 is insert/editing chrome.
-  if (id.startsWith("file.") || id.startsWith("view.articles") || id.startsWith("view.fileTree")
-    || id === "view.searchFolder" || id.startsWith("themes.") || id.startsWith("help.") && id !== "help.about") {
-    if (id.startsWith("file.") || id === "view.articles" || id === "view.fileTree" || id === "view.searchFolder") return 2;
-  }
-  if (id.startsWith("help.")) return 2;
   return 3;
 }
 

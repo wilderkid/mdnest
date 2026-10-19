@@ -1,4 +1,4 @@
-import type { Host, DirEntry, StreamEvent, StreamRequest } from "./types";
+import type { Host, DirEntry, ListedFile, SearchHit, StreamEvent, StreamRequest } from "./types";
 const j = async (r: Response) => { if (!r.ok) throw new Error(await r.text()); return r.json(); };
 export const browserHost: Host = {
   kind: "browser",
@@ -22,6 +22,25 @@ export const browserHost: Host = {
   async mtime(path) { return (await j(await fetch("/api/mtime?path=" + encodeURIComponent(path)))).mtime; },
   async exportPdf() { throw new Error("unsupported"); },
   async quit() { window.close(); },
+  async createFile(path) { await j(await fetch("/api/create-file", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path }) })); },
+  async createDir(path) { await j(await fetch("/api/create-dir", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path }) })); },
+  async renamePath(from, to) { await j(await fetch("/api/rename", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ from, to }) })); },
+  async duplicatePath(path) { return (await j(await fetch("/api/duplicate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path }) }))).path; },
+  async trashPath(path) { await j(await fetch("/api/trash", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path }) })); },
+  async revealPath(path) { await j(await fetch("/api/reveal?path=" + encodeURIComponent(path))); },
+  async listFiles(root, max = 5000): Promise<ListedFile[]> { return (await j(await fetch("/api/list-files?root=" + encodeURIComponent(root) + "&max=" + max))).files; },
+  async fileExcerpt(path) { return (await j(await fetch("/api/excerpt?path=" + encodeURIComponent(path)))).excerpt; },
+  async pathKind(path) { return (await j(await fetch("/api/kind?path=" + encodeURIComponent(path)))).kind; },
+  async searchFiles(root, query, max = 80): Promise<SearchHit[]> { return (await j(await fetch("/api/search?root=" + encodeURIComponent(root) + "&q=" + encodeURIComponent(query) + "&max=" + max))).hits; },
+  async openWindow(file?: string | null) {
+    const q = new URLSearchParams(location.search);
+    q.set("restore", "0");
+    if (file) { q.set("file", file); q.delete("folder"); }
+    window.open(location.pathname + "?" + q.toString(), "_blank", "noopener");
+    return "browser";
+  },
+  async closeWindow() { window.close(); },
+  async windowLabel() { return "browser"; },
   async defaultWorkspace() { return (await j(await fetch("/api/workspace"))).path; },
   index: {
     async call(req) {

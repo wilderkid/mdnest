@@ -95,20 +95,22 @@ export async function renderExportBody(doc: PMNode, opts: { keepRelativeImages: 
   return root.innerHTML;
 }
 
-export async function buildExportHtml(doc: PMNode, host: Host, o: { theme: string; themeFiles: string[]; title: string; baseHref?: string; keepRelativeImages: boolean }) {
+export async function buildExportHtml(doc: PMNode, host: Host, o: { theme: string; themeFiles: string[]; title: string; baseHref?: string; keepRelativeImages: boolean; styles?: boolean }) {
   const body = await renderExportBody(doc, { keepRelativeImages: o.keepRelativeImages });
-  const sheets = [o.theme + ".css", "base.user.css", o.theme + ".user.css"].filter((f) => o.themeFiles.includes(f));
+  const withStyles = o.styles !== false;
+  const sheets = withStyles ? [o.theme + ".css", "base.user.css", o.theme + ".user.css"].filter((f) => o.themeFiles.includes(f)) : [];
   let themeCss = "";
   for (const f of sheets) themeCss += `/* ${f} */\n` + (await inlineCss(host.themeUrl(f))) + "\n";
   let mjCss = "";
-  try { const MJ = await loadMathJax(); const st = MJ.svgStylesheet?.(); if (st) mjCss = st.textContent || st.innerHTML || ""; } catch {}
+  if (withStyles) { try { const MJ = await loadMathJax(); const st = MJ.svgStylesheet?.(); if (st) mjCss = st.textContent || st.innerHTML || ""; } catch { /* no math css */ } }
   const bodyClass = ["typora-export", osClass(), ...["mdn-dark", "mdn-cm-fallback"].filter((c) => document.body.classList.contains(c))].join(" ");
+  const styles = withStyles
+    ? `<style id="mdnest-base">${baseCss}</style>\n<style id="mdnest-theme">${themeCss}</style>\n<style id="mdnest-export">${EXPORT_CSS}${mjCss}</style>`
+    : "";
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="generator" content="MD Nest"><title>${esc(o.title)}</title>${o.baseHref ? `<base href="${esc(o.baseHref)}">` : ""}
-<style id="mdnest-base">${baseCss}</style>
-<style id="mdnest-theme">${themeCss}</style>
-<style id="mdnest-export">${EXPORT_CSS}${mjCss}</style>
+${styles}
 </head><body class="${bodyClass}"><div class="typora-export-content"><div id="write" class="">${body}</div></div></body></html>`;
 }
 

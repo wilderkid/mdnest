@@ -27,6 +27,8 @@ export interface EditorHooks {
   commands?: () => Command[];
   /** pasted / dropped image files; return true when handled */
   onImageFiles?: (files: ImageItem[], pos: number | null) => boolean;
+  /** Caret moved (selection-only transaction). */
+  onSelect?: () => void;
 }
 
 const extKey = new PluginKey("ext-decos");
@@ -72,6 +74,7 @@ export function createEditor(mount: HTMLElement, markdown: string, hooks: Editor
       const st = view.state.apply(tr);
       view.updateState(st);
       if (tr.docChanged) { tocViews.forEach((t) => (t.dom.isConnected ? t.refresh(st.doc) : tocViews.delete(t))); hooks.onChange(); }
+      else if (tr.selectionSet) hooks.onSelect?.();
     },
     handleClickOn(view, _pos, node, nodePos, event) {
       const t = event.target as HTMLElement;

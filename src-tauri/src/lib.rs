@@ -1,4 +1,5 @@
 mod commands;
+mod files;
 #[cfg(feature = "library")]
 pub mod kb;
 mod menu;
@@ -78,14 +79,20 @@ pub fn run() {
                 seed_missing(&bundled, &themes).map_err(|e| e.to_string())?;
             }
             let handle = app.handle().clone();
+            // App-menu activations (macOS) go to the focused window, else main.
             app.on_menu_event(move |app, event| {
-                menu::emit_menu_event(app, &event.id().0);
+                let label = app
+                    .webview_windows()
+                    .into_iter()
+                    .find(|(_, w)| w.is_focused().unwrap_or(false))
+                    .map(|(l, _)| l)
+                    .unwrap_or_else(|| "main".into());
+                menu::emit_menu_event(app, &label, &event.id().0);
             });
-            // Window menu (Linux/Windows) also reports through the window handler.
             if let Some(win) = handle.get_webview_window("main") {
                 let h2 = handle.clone();
-                win.on_menu_event(move |_win, event| {
-                    menu::emit_menu_event(&h2, &event.id().0);
+                win.on_menu_event(move |win, event| {
+                    menu::emit_menu_event(&h2, win.label(), &event.id().0);
                 });
                 disable_webview_chrome(&win);
             }
@@ -116,6 +123,19 @@ pub fn run() {
             commands::kb_watch,
             commands::kb_unwatch,
             menu::set_app_menu,
+            commands::create_file,
+            commands::create_dir,
+            commands::rename_path,
+            commands::duplicate_path,
+            commands::trash_path,
+            commands::reveal_path,
+            commands::list_files,
+            commands::file_excerpt,
+            commands::path_kind,
+            commands::search_files,
+            commands::open_window,
+            commands::window_label,
+            commands::close_window,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -124,7 +144,7 @@ pub fn run() {
 /// WebView2 still ships browser accelerators (Ctrl+R, F5, Ctrl+P, page zoom) and Edge's
 /// default context menu. Turn both off. The frontend also swallows those keys.
 #[cfg(windows)]
-fn disable_webview_chrome(win: &tauri::WebviewWindow) {
+pub fn disable_webview_chrome(win: &tauri::WebviewWindow) {
     let _ = win.with_webview(|webview| {
         use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Settings3;
         use windows::core::Interface;
@@ -140,4 +160,4 @@ fn disable_webview_chrome(win: &tauri::WebviewWindow) {
 }
 
 #[cfg(not(windows))]
-fn disable_webview_chrome(_win: &tauri::WebviewWindow) {}
+pub fn disable_webview_chrome(_win: &tauri::WebviewWindow) {}

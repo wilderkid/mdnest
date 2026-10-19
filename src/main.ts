@@ -71,6 +71,7 @@ const editor: Editor = createEditor(writeEl, WELCOME, {
   decorationProviders,
   onChange: () => {
     // dirty = serialized Markdown differs from what is on disk (marker expand/collapse alone is not an edit)
+    if (welcomeVisible() && !state.path) hideWelcome();
     clearTimeout(changeTimer);
     changeTimer = setTimeout(() => {
       const d = editor.getMarkdown() !== state.lastSaved; setDirty(d); if (d) scheduleAutosave();
@@ -87,9 +88,11 @@ const editor: Editor = createEditor(writeEl, WELCOME, {
     palette: () => { if (Date.now() < claimedUntil && claimedId === "view.palette") return; openPalette(commands); },
     claimed: (id: string) => Date.now() < claimedUntil && claimedId === id,
   },
+  onSelect: () => sidebar.highlightOutline(editor.view),
   commands: () => commands,
 });
 editor.view.dom.id = "write";
+editor.view.dom.addEventListener("pointerdown", () => { if (welcomeVisible() && !state.path) hideWelcome(); });
 
 function setDirty(d: boolean) { state.dirty = d; document.getElementById("file-title")!.classList.toggle("dirty", d); }
 function updateCount() { const t = editor.view.state.doc.textContent; const { words } = countWords(t); document.getElementById("footer-word-count")!.textContent = `${words} words`; }
@@ -106,7 +109,148 @@ function toggleSource() {
   else source.show(editor.getMarkdown());
   findBar.refresh();
 }
-function afterLoad() { sidebar.updateOutline(editor.view); updateCount(); }
+function afterLoad() { sidebar.updateOutline(editor.view); updateCount(); syncWelcome(); }
+
+const CLOSED_KEY = "mdnest.closed";
+const closedStack = (): string[] => { try { return JSON.parse(localStorage.getItem(CLOSED_KEY) ?? "[]"); } catch { return []; } };
+function pushClosed(p: string | null) {
+  if (!p) return;
+  const list = [p, ...closedStack().filter((x) => x !== p)].slice(0, 20);
+  localStorage.setItem(CLOSED_KEY, JSON.stringify(list));
+}
+function popClosed(): string | null {
+  const list = closedStack();
+  const p = list.shift() ?? null;
+  localStorage.setItem(CLOSED_KEY, JSON.stringify(list));
+  return p;
+}
+
+let welcomeEl: HTMLElement | null = null;
+function welcomeVisible() { return !!welcomeEl && !welcomeEl.hidden; }
+function syncWelcome() {
+  const show = !state.path;
+  if (show) showWelcome(); else hideWelcome();
+}
+function showWelcome() {
+  if (!welcomeEl) {
+    welcomeEl = document.createElement("div");
+    welcomeEl.id = "mdn-welcome";
+    content.appendChild(welcomeEl);
+  }
+  welcomeEl.hidden = false;
+  const list = recent();
+  welcomeEl.innerHTML = `<div class="mdn-welcome-card">
+    <h1>MD Nest</h1>
+    <p>A live-preview Markdown editor.</p>
+    <div class="mdn-welcome-actions">
+      <button type="button" class="btn btn-primary" data-act="new">New File</button>
+      <button type="button" class="btn" data-act="open">Open File…</button>
+      <button type="button" class="btn" data-act="folder">Open Folder…</button>
+    </div>
+    <div class="mdn-recent">${list.length ? list.map((p) => `<button type="button" data-path="${escapeHtml(p)}"><span>${escapeHtml(p.split(/[\\/]/).pop() || p)}</span></button>`).join("") : `<div style="opacity:.6">No recent files</div>`}</div>
+    <div class="mdn-welcome-hints">Ctrl+N new · Ctrl+O open · Ctrl+Shift+O folder · Ctrl+P quick open · Ctrl+Shift+P command palette</div>
+  </div>`;
+  welcomeEl.querySelectorAll<HTMLButtonElement>("[data-act]").forEach((b) => {
+    b.onclick = () => {
+      if (b.dataset.act === "new") void newUntitled();
+      else if (b.dataset.act === "open") void pickAndOpen();
+      else void pickFolder();
+    };
+  });
+  welcomeEl.querySelectorAll<HTMLButtonElement>("[data-path]").forEach((b) => {
+    b.onclick = () => openFile(b.dataset.path!);
+  });
+}
+function hideWelcome() { if (welcomeEl) welcomeEl.hidden = true; }
+
+type GuardChoice = "save" | "discard" | "cancel";
+function confirmDirty(action: string): Promise<GuardChoice> {
+  if (!state.dirty) return Promise.resolve("discard");
+  return new Promise((resolve) => {
+    const back = document.createElement("div");
+    back.className = "modal-backdrop";
+    const name = state.path ? state.path.split(/[\\/]/).pop() : "Untitled";
+    back.innerHTML = `<div class="modal" role="dialog" aria-modal="true">
+      <h3>Save changes?</h3>
+      <p>${escapeHtml(name!)} has unsaved changes. Save before ${escapeHtml(action)}?</p>
+      <div class="modal-actions">
+        <button type="button" class="btn" data-c="cancel">Cancel</button>
+        <button type="button" class="btn" data-c="discard">Don't Save</button>
+        <button type="button" class="btn btn-primary" data-c="save">Save</button>
+      </div>
+    </div>`;
+    document.body.appendChild(back);
+    const done = (c: GuardChoice) => { back.remove(); resolve(c); };
+    back.querySelectorAll<HTMLButtonElement>("[data-c]").forEach((b) => b.onclick = () => done(b.dataset.c as GuardChoice));
+    back.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") { e.preventDefault(); done("cancel"); }
+      else if (e.key === "Enter") { e.preventDefault(); done("save"); }
+    });
+    (back.querySelector("[data-c=save]") as HTMLButtonElement).focus();
+  });
+}
+async function guard(action: string): Promise<boolean> {
+  const c = await confirmDirty(action);
+  if (c === "cancel") return false;
+  if (c === "save") {
+    const before = state.path;
+    await save(false);
+    if (state.dirty || (!before && !state.path)) return false;
+  }
+  return true;
+}
+
+function joinPath(dir: string, name: string): string {
+  const sep = dir.includes("\\") && !dir.includes("/") ? "\\" : "/";
+  return dir.replace(/[\\/]+$/, "") + sep + name;
+}
+function parentDir(p: string): string { return p.replace(/[\\/][^\\/]*$/, ""); }
+function baseName(p: string): string { return p.split(/[\\/]/).pop() || p; }
+
+async function newUntitled() {
+  if (!(await guard("creating a new file"))) return;
+  if (state.path) pushClosed(state.path);
+  cancelPendingSuggestions(editor.view);
+  state.path = null;
+  state.lastSaved = "";
+  setDirty(false);
+  if (source.active) source.show(WELCOME);
+  editor.setMarkdown(WELCOME);
+  state.lastSaved = editor.getMarkdown();
+  setTitle();
+  afterLoad();
+  sidebar.markActive(null);
+  localStorage.removeItem("mdnest.lastFile");
+  hideWelcome();
+  editor.view.focus();
+  scheduleMenu();
+}
+
+async function closeDoc() {
+  if (!(await guard("closing"))) return;
+  pushClosed(state.path);
+  cancelPendingSuggestions(editor.view);
+  state.path = null;
+  state.lastSaved = "";
+  setDirty(false);
+  if (source.active) source.show(WELCOME);
+  editor.setMarkdown(WELCOME);
+  state.lastSaved = editor.getMarkdown();
+  setDirty(false);
+  setTitle();
+  afterLoad();
+  sidebar.markActive(null);
+  localStorage.removeItem("mdnest.lastFile");
+  showWelcome();
+  scheduleMenu();
+}
+
+async function reopenClosed() {
+  const p = popClosed();
+  if (!p) { notify("No closed file to reopen"); return; }
+  if (!(await guard("reopening a file"))) { pushClosed(p); return; }
+  await openFile(p);
+}
 
 async function openFile(path: string) {
   try {
@@ -115,7 +259,7 @@ async function openFile(path: string) {
     state.path = path; const dir = path.replace(/[\\/][^\\/]*$/, "");
     setImageBase(host.fileUrl(dir + "/"));
     if (source.active) source.show(text); editor.setMarkdown(text);
-    state.lastSaved = editor.getMarkdown(); setDirty(false); setTitle(); afterLoad(); sidebar.markActive(path);
+    state.lastSaved = editor.getMarkdown(); setDirty(false); setTitle(); afterLoad(); sidebar.markActive(path); hideWelcome();
     state.mtime = await host.mtime(path).catch(() => null); state.conflict = false; addRecent(path);
     localStorage.setItem("mdnest.lastFile", path); plugins.emit("file-opened", path);
   } catch (e: any) { notify("Open failed: " + (e.message ?? e)); }
@@ -141,7 +285,7 @@ async function openAt(path: string, line?: number) {
   const mine = citeFlash;
   setTimeout(() => { if (citeFlash === mine) { citeFlash = null; editor.view.dispatch(editor.view.state.tr.setMeta("addToHistory", false)); } }, 1800);
 }
-async function pickAndOpen() { const p = await host.pickFile(); if (p) openFile(p); }
+async function pickAndOpen() { if (!(await guard("opening a file"))) return; const p = await host.pickFile(); if (p) await openFile(p); }
 async function pickFolderPath(p: string) { await sidebar.openFolder(p); localStorage.setItem("mdnest.lastFolder", p); plugins.emit("workspace-changed", p); }
 async function pickFolder() { const p = await host.pickFolder(); if (p) await pickFolderPath(p); }
 let quietSave = false;
@@ -173,6 +317,12 @@ const recent = (): string[] => JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[
 function addRecent(p: string) {
   const list = [p, ...recent().filter((x) => x !== p)].slice(0, 12);
   localStorage.setItem(RECENT_KEY, JSON.stringify(list)); renderRecent();
+  try { scheduleMenu(); } catch { /* boot */ }
+}
+function clearRecent() {
+  localStorage.setItem(RECENT_KEY, "[]"); renderRecent();
+  try { scheduleMenu(); } catch { /* boot */ }
+  if (welcomeVisible()) showWelcome();
 }
 let recentEl: HTMLElement | null = null;
 function renderRecent() {
@@ -204,18 +354,19 @@ function openFind(replace: boolean) {
 // ---------- export ----------
 const docStem = () => (state.path ? state.path.replace(/^.*[\\/]/, "").replace(/\.[^.]+$/, "") : "untitled");
 const docDir = () => (state.path ? state.path.replace(/[\\/][^\\/]*$/, "") : null);
-async function exportHtmlString(forPrint: boolean) {
+async function exportHtmlString(forPrint: boolean, styles = true) {
   if (source.active) editor.setMarkdown(source.value());
   const dir = docDir();
   return buildExportHtml(editor.getDoc(), host, {
     theme: themes.current, themeFiles: themes.files, title: docStem(), keepRelativeImages: !forPrint,
     baseHref: forPrint && dir ? new URL(host.fileUrl(dir + "/"), location.href).href : undefined,
+    styles,
   });
 }
-async function exportHtml(out?: string) {
+async function exportHtml(out?: string, styles = true) {
   const p = out ?? (await host.pickSavePath(docStem() + ".html", "html")); if (!p) return;
   notify("Exporting HTML…");
-  const html = await exportHtmlString(false);
+  const html = await exportHtmlString(false, styles);
   await host.writeFile(p, html); notify("Exported " + p); return p;
 }
 async function exportPdf(out?: string) {
@@ -295,29 +446,7 @@ function stub(id: string, title: string, key: string | undefined, part: 2 | 3) {
   addCmd({ id, title, ...(key ? { key } : {}), run: later(part) });
 }
 // Items whose features land in later parts. The id stays; only `run` is replaced.
-const PART2: [string, string, string?][] = [
-  ["file.new", "File: New", "CmdOrCtrl+N"],
-  ["file.newWindow", "File: New Window", "CmdOrCtrl+Shift+N"],
-  ["file.quickOpen", "File: Open Quickly…", "CmdOrCtrl+P"],
-  ["file.reopenClosed", "File: Reopen Closed File", "CmdOrCtrl+Shift+T"],
-  ["file.moveTo", "File: Move To…"],
-  ["file.rename", "File: Rename…"],
-  ["file.duplicate", "File: Duplicate"],
-  ["file.openLocation", "File: Open File Location"],
-  ["file.revealSidebar", "File: Reveal in Sidebar"],
-  ["file.print", "File: Print…", "CmdOrCtrl+Alt+P"],
-  ["file.close", "File: Close", "CmdOrCtrl+W"],
-  ["file.quit", "File: Quit", "CmdOrCtrl+Q"],
-  ["file.clearRecent", "File: Clear Recent Items"],
-  ["file.exportHtmlPlain", "File: Export HTML (without styles)"],
-  ["view.articles", "View: Articles", "CmdOrCtrl+Shift+2"],
-  ["view.fileTree", "View: File Tree", "CmdOrCtrl+Shift+3"],
-  ["view.searchFolder", "View: Search in Folder", "CmdOrCtrl+Shift+F"],
-  ["themes.openFolder", "Themes: Open Theme Folder"],
-  ["help.markdown", "Help: Markdown Reference"],
-  ["help.shortcuts", "Help: Keyboard Shortcuts"],
-  ["help.dataFolder", "Help: Open Data Folder"],
-];
+const PART2: [string, string, string?][] = [];
 const PART3: [string, string, string?][] = [
   ["edit.copyMarkdown", "Edit: Copy as Markdown", "CmdOrCtrl+Shift+C"],
   ["edit.copyHtml", "Edit: Copy as HTML Code"],
@@ -384,6 +513,238 @@ const PART3: [string, string, string?][] = [
   ["view.zoomIn", "View: Zoom In", "CmdOrCtrl+Shift+="],
   ["view.zoomOut", "View: Zoom Out", "CmdOrCtrl+Shift+-"],
 ];
+async function uniqueNewName(dir: string, stem: string, ext: string): Promise<string> {
+  let i = 0;
+  for (;;) {
+    const name = (i === 0 ? stem : stem + " " + i) + ext;
+    const kind = await host.pathKind(joinPath(dir, name));
+    if (kind === "missing") return name;
+    i++;
+    if (i > 200) return name;
+  }
+}
+async function createIn(dir: string, kind: "file" | "dir") {
+  if (!dir) { notify("Open a folder first"); return; }
+  const name = kind === "file" ? await uniqueNewName(dir, "Untitled", ".md") : await uniqueNewName(dir, "Untitled folder", "");
+  const path = joinPath(dir, name);
+  try {
+    if (kind === "file") { await host.createFile(path); await openFile(path); }
+    else await host.createDir(path);
+    sidebar.expandedAdd(dir);
+    await sidebar.refresh();
+    sidebar.startRename(path);
+  } catch (e: any) { notify((kind === "file" ? "New file" : "New folder") + " failed: " + (e.message ?? e)); }
+}
+async function renameTo(from: string, name: string) {
+  const to = joinPath(parentDir(from), name);
+  if (to === from) return;
+  try {
+    await host.renamePath(from, to);
+    if (state.path === from || (state.path && state.path.startsWith(from + "/") || state.path?.startsWith(from + "\\"))) {
+      const next = state.path === from ? to : to + state.path.slice(from.length);
+      state.path = next;
+      setTitle();
+      addRecent(next);
+      localStorage.setItem("mdnest.lastFile", next);
+    }
+    remapRecent(from, to);
+    await sidebar.refresh();
+    sidebar.markActive(state.path);
+    scheduleMenu();
+  } catch (e: any) { notify("Rename failed: " + (e.message ?? e)); await sidebar.refresh(); }
+}
+function remapRecent(from: string, to: string) {
+  const list = recent().map((p) => p === from ? to : (p.startsWith(from + "/") || p.startsWith(from + "\\") ? to + p.slice(from.length) : p));
+  localStorage.setItem(RECENT_KEY, JSON.stringify(list));
+  renderRecent();
+}
+async function moveCurrent() {
+  if (!state.path) return;
+  const destDir = await host.pickFolder();
+  if (!destDir) return;
+  const to = joinPath(destDir, baseName(state.path));
+  try {
+    await host.renamePath(state.path, to);
+    remapRecent(state.path, to);
+    state.path = to; setTitle(); addRecent(to);
+    localStorage.setItem("mdnest.lastFile", to);
+    const dir = parentDir(to);
+    if (sidebar.root && (dir.startsWith(sidebar.root) || sidebar.root.startsWith(dir))) await sidebar.refresh();
+    else await sidebar.openFolder(dir);
+    sidebar.markActive(to);
+    notify("Moved to " + to);
+  } catch (e: any) { notify("Move failed: " + (e.message ?? e)); }
+}
+async function renameCurrent() {
+  if (!state.path) return;
+  const name = await openPrompt(editor.view, { placeholder: "New name", value: baseName(state.path) });
+  if (!name || name === baseName(state.path)) return;
+  await renameTo(state.path, name.trim());
+}
+async function duplicateCurrent(path = state.path) {
+  if (!path) return;
+  try {
+    const created = await host.duplicatePath(path);
+    await sidebar.refresh();
+    if (/\.(md|markdown|mdown|mkd|mdx|txt|text)$/i.test(created)) await openFile(created);
+    notify("Duplicated " + baseName(created));
+  } catch (e: any) { notify("Duplicate failed: " + (e.message ?? e)); }
+}
+async function trashPath(path: string) {
+  const name = baseName(path);
+  const ok = await new Promise<boolean>((resolve) => {
+    const back = document.createElement("div");
+    back.className = "modal-backdrop";
+    back.innerHTML = `<div class="modal" role="dialog"><h3>Delete ${escapeHtml(name)}?</h3><p>Move to the trash?</p>
+      <div class="modal-actions"><button type="button" class="btn" data-c="no">Cancel</button><button type="button" class="btn btn-primary" data-c="yes">Delete</button></div></div>`;
+    document.body.appendChild(back);
+    const done = (v: boolean) => { back.remove(); resolve(v); };
+    back.querySelector("[data-c=no]")!.addEventListener("click", () => done(false));
+    back.querySelector("[data-c=yes]")!.addEventListener("click", () => done(true));
+  });
+  if (!ok) return;
+  try {
+    await host.trashPath(path);
+    if (state.path === path || (state.path && (state.path.startsWith(path + "/") || state.path.startsWith(path + "\\")))) {
+      pushClosed(state.path);
+      state.path = null; state.lastSaved = ""; setDirty(false);
+      editor.setMarkdown(WELCOME); state.lastSaved = editor.getMarkdown(); setTitle(); afterLoad(); sidebar.markActive(null);
+      localStorage.removeItem("mdnest.lastFile");
+      showWelcome();
+    }
+    await sidebar.refresh();
+    notify("Moved to trash");
+  } catch (e: any) { notify("Delete failed: " + (e.message ?? e)); }
+}
+function copyPath(path: string) {
+  void navigator.clipboard?.writeText(path).then(() => notify("Copied path")).catch(() => notify(path));
+}
+async function openNewWindow(file?: string) {
+  try { await host.openWindow(file ?? null); }
+  catch (e: any) { notify("New window failed: " + (e.message ?? e)); }
+}
+async function printDoc() {
+  const html = await exportHtmlString(true);
+  printHtml(html);
+}
+function fuzzyScore(name: string, q: string): number {
+  const n = name.toLowerCase(); const query = q.toLowerCase();
+  if (!query) return 1;
+  if (n.includes(query)) return 100 - n.indexOf(query);
+  let i = 0; let score = 0;
+  for (const ch of n) { if (ch === query[i]) { score++; i++; if (i === query.length) return score; } }
+  return i === query.length ? score : 0;
+}
+async function quickOpen() {
+  document.querySelector("#typora-quick-open")?.remove();
+  const box = document.createElement("div");
+  box.id = "typora-quick-open";
+  box.innerHTML = `<input id="typora-quick-open-input" type="text" placeholder="Open quickly…" autocomplete="off"><div class="typora-quick-open-list"></div>`;
+  document.body.appendChild(box);
+  const input = box.querySelector("input") as HTMLInputElement;
+  const listEl = box.querySelector(".typora-quick-open-list") as HTMLElement;
+  let items: { path: string; name: string; recent: boolean }[] = [];
+  let active = 0;
+  const files = sidebar.root ? await host.listFiles(sidebar.root, 5000).catch(() => []) : [];
+  const render = () => {
+    const q = input.value.trim();
+    const rec = recent().map((p) => ({ path: p, name: baseName(p), recent: true }));
+    const rest = files.map((f) => ({ path: f.path, name: f.name, recent: false })).filter((f) => !rec.some((r) => r.path === f.path));
+    const pool = [...rec, ...rest];
+    items = (q ? pool.map((it) => ({ it, s: fuzzyScore(it.name, q) })).filter((x) => x.s > 0).sort((a, b) => b.s - a.s).map((x) => x.it) : pool).slice(0, 40);
+    if (active >= items.length) active = 0;
+    listEl.innerHTML = items.map((it, i) => `<div class="typora-quick-open-item${i === active ? " active" : ""}" data-i="${i}"><span>${escapeHtml(it.name)}</span><span class="typora-quick-open-item-path">${escapeHtml(it.path)}</span></div>`).join("")
+      || `<div class="typora-quick-open-item" style="opacity:.6">No matches</div>`;
+    listEl.querySelectorAll<HTMLElement>(".typora-quick-open-item[data-i]").forEach((n) => {
+      n.onmouseenter = () => { active = +n.dataset.i!; render(); };
+      n.onclick = () => { void pick(items[+n.dataset.i!].path); };
+    });
+  };
+  const close = () => box.remove();
+  const pick = async (path: string) => { close(); if (!(await guard("opening a file"))) return; await openFile(path); };
+  input.addEventListener("input", render);
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); close(); }
+    else if (e.key === "ArrowDown") { e.preventDefault(); active = Math.min(items.length - 1, active + 1); render(); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); active = Math.max(0, active - 1); render(); }
+    else if (e.key === "Enter" && items[active]) { e.preventDefault(); void pick(items[active].path); }
+  });
+  input.focus();
+  render();
+}
+const MARKDOWN_REF = `# Markdown reference\n\n# Heading\n\n**bold** *italic* ~~strike~~ \`code\`\n\n- list\n- [ ] task\n\n> quote\n\n\`\`\`\ncode\n\`\`\`\n\n[link](https://example.com)\n\n| a | b |\n|---|---|\n| 1 | 2 |\n`;
+function showHelp(title: string, body: string) {
+  const back = document.createElement("div");
+  back.className = "modal-backdrop";
+  const pre = document.createElement("pre");
+  pre.style.cssText = "white-space:pre-wrap;max-height:50vh;overflow:auto;font:13px var(--monospace)";
+  pre.textContent = body;
+  back.innerHTML = `<div class="modal" role="dialog" style="max-width:560px"><h3></h3><div class="mdn-help-body"></div><div class="modal-actions"><button type="button" class="btn btn-primary">Close</button></div></div>`;
+  back.querySelector("h3")!.textContent = title;
+  back.querySelector(".mdn-help-body")!.appendChild(pre);
+  document.body.appendChild(back);
+  back.querySelector("button")!.onclick = () => back.remove();
+}
+function shortcutHelp(): string {
+  return commands.filter((c) => c.key).map((c) => `${c.key}  ${c.title}`).join("\n");
+}
+
+[
+  { id: "file.new", title: "File: New", key: "CmdOrCtrl+N", run: () => newUntitled() },
+  { id: "file.newWindow", title: "File: New Window", key: "CmdOrCtrl+Shift+N", run: () => openNewWindow(state.path ?? undefined) },
+  { id: "file.quickOpen", title: "File: Open Quickly…", key: "CmdOrCtrl+P", run: () => quickOpen() },
+  { id: "file.reopenClosed", title: "File: Reopen Closed File", key: "CmdOrCtrl+Shift+T", run: () => reopenClosed() },
+  { id: "file.moveTo", title: "File: Move To…", when: () => !!state.path, run: () => moveCurrent() },
+  { id: "file.rename", title: "File: Rename…", when: () => !!state.path, run: () => renameCurrent() },
+  { id: "file.duplicate", title: "File: Duplicate", when: () => !!state.path, run: () => duplicateCurrent() },
+  { id: "file.openLocation", title: "File: Open File Location", when: () => !!state.path, run: () => state.path && host.revealPath(state.path).catch((e) => notify(String(e?.message ?? e))) },
+  { id: "file.revealSidebar", title: "File: Reveal in Sidebar", when: () => !!state.path, run: () => state.path && sidebar.revealPath(state.path) },
+  { id: "file.print", title: "File: Print…", key: "CmdOrCtrl+Alt+P", run: () => printDoc() },
+  { id: "file.close", title: "File: Close", key: "CmdOrCtrl+W", run: () => closeWindow() },
+  { id: "file.quit", title: "File: Quit", key: "CmdOrCtrl+Q", run: () => quitApp() },
+  { id: "file.clearRecent", title: "File: Clear Recent Items", when: () => recent().length > 0, run: () => clearRecent() },
+  { id: "file.exportHtmlPlain", title: "File: Export HTML (without styles)", run: () => exportHtml(undefined, false) },
+  { id: "view.articles", title: "View: Articles", key: "CmdOrCtrl+Shift+2", run: () => sidebar.showList() },
+  { id: "view.fileTree", title: "View: File Tree", key: "CmdOrCtrl+Shift+3", run: () => sidebar.showTree() },
+  { id: "view.searchFolder", title: "View: Search in Folder", key: "CmdOrCtrl+Shift+F", run: () => sidebar.focusSearch() },
+  { id: "themes.openFolder", title: "Themes: Open Theme Folder", run: async () => {
+    if (host.kind === "browser") { notify("Themes: " + (location.origin + "/themes/")); return; }
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const { appConfigDir } = await import("@tauri-apps/api/path");
+      const dir = (await appConfigDir()) + "themes";
+      await invoke("reveal_path", { path: dir });
+    } catch (e: any) { notify("Theme folder: " + (e?.message ?? e)); }
+  } },
+  { id: "help.markdown", title: "Help: Markdown Reference", run: () => showHelp("Markdown reference", MARKDOWN_REF) },
+  { id: "help.shortcuts", title: "Help: Keyboard Shortcuts", run: () => showHelp("Keyboard shortcuts", shortcutHelp()) },
+  { id: "help.dataFolder", title: "Help: Open Data Folder", run: () => notify("App data lives in the platform config directory") },
+].forEach(addCmd);
+
+async function closeWindow() {
+  if (!(await guard("closing"))) return;
+  if (host.kind === "tauri") { await host.closeWindow().catch((e) => notify(String(e?.message ?? e))); return; }
+  await closeDoc();
+}
+async function quitApp() {
+  if (!(await guard("quitting"))) return;
+  await host.quit(0);
+}
+
+sidebar.setActions({
+  openFile: (p) => { void openFile(p); },
+  newFile: (dir) => createIn(dir, "file"),
+  newFolder: (dir) => createIn(dir, "dir"),
+  rename: (path, name) => renameTo(path, name),
+  duplicate: (path) => duplicateCurrent(path),
+  trash: (path) => trashPath(path),
+  reveal: (path) => host.revealPath(path).catch((e) => notify(String(e?.message ?? e))),
+  openFolder: () => pickFolder(),
+  openWindow: (path) => openNewWindow(path),
+  copyPath: (path) => copyPath(path),
+  notify,
+});
+
 for (const [id, title, key] of PART2) stub(id, title, key, 2);
 for (const [id, title, key] of PART3) stub(id, title, key, 3);
 
@@ -632,7 +993,7 @@ function onNativeDrop(drop: NativeDrop) {
     notify,
   });
 }
-(window as any).mdnest = { editor, host, notify, exportHtmlString, findBar, state, openAt, commands, runCommand, refreshMenu, dispatcher, handleNativeDrop: onNativeDrop };
+(window as any).mdnest = { editor, host, notify, exportHtmlString, findBar, state, openAt, commands, runCommand, refreshMenu, dispatcher, handleNativeDrop: onNativeDrop, sidebar, confirmDirty, guard };
 
 window.addEventListener("beforeunload", (e) => { if (state.dirty && host.kind === "browser") e.preventDefault(); });
 
@@ -646,8 +1007,8 @@ window.addEventListener("beforeunload", (e) => { if (state.dirty && host.kind ==
   const restore = !args.includes("--no-restore") && q.get("restore") !== "0" && localStorage.getItem(REOPEN_KEY) !== "0";
   const ws = q.get("folder") ?? (cli ? cli.replace(/[\\/][^\\/]*$/, "") : null) ?? (restore ? localStorage.getItem("mdnest.lastFolder") : null) ?? (await host.defaultWorkspace());
   if (ws) { await sidebar.openFolder(ws).catch(() => {}); if (sidebar.root) plugins.emit("workspace-changed", sidebar.root); }
-  const f = cli ?? q.get("file") ?? (restore ? localStorage.getItem("mdnest.lastFile") : null) ?? (restore && ws && host.kind === "browser" ? ws + "/sample.md" : null);
-  if (f) await openFile(f); else afterLoad();
+  const f = cli ?? q.get("file") ?? (restore ? localStorage.getItem("mdnest.lastFile") : null) ?? (restore && ws && host.kind === "browser" && !q.has("welcome") ? ws + "/sample.md" : null);
+  if (f) await openFile(f); else { editor.setMarkdown(WELCOME); state.lastSaved = editor.getMarkdown(); setDirty(false); afterLoad(); showWelcome(); }
   if (q.get("sidebar") === "0") document.body.classList.remove("pin-outline");
   document.body.classList.add("mdn-ready");
   await refreshMenu();
@@ -660,12 +1021,20 @@ window.addEventListener("beforeunload", (e) => { if (state.dirty && host.kind ==
         dispatcher.note(id);
         runCommand(id);
       });
+      const { getCurrentWindow } = await import("@tauri-apps/api/window");
+      await getCurrentWindow().onCloseRequested(async (ev) => {
+        ev.preventDefault();
+        if (!(await guard("closing"))) return;
+        await host.closeWindow();
+      });
+      await listen("tauri://focus", () => { void sidebar.refreshExpanded(); });
       await listen<{ paths?: string[]; position?: { x: number; y: number } }>("tauri://drag-drop", (ev) => {
         const paths = ev.payload?.paths ?? [];
         if (paths.length) void onNativeDrop({ paths, position: ev.payload?.position });
       });
     } catch (e) { console.error(e); }
   }
+  window.addEventListener("focus", () => { void sidebar.refreshExpanded(); });
   document.addEventListener("drop", (e) => {
     const dt = e.dataTransfer;
     if (!dt) return;

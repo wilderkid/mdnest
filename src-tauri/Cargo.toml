@@ -56,13 +56,13 @@ reqwest = { version = "0.12", default-features = false, features = ["native-tls"
 
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.39"
-windows = "0.62"
+windows = { version = "0.62", features = ["Win32_UI_Shell", "Win32_Foundation"] }
 reqwest = { version = "0.12", default-features = false, features = ["native-tls", "stream"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 reqwest = { version = "0.12", default-features = false, features = ["native-tls", "stream"] }
 objc2 = "0.6"
-objc2-foundation = { version = "0.3", features = ["NSString", "NSURL", "NSDictionary", "NSGeometry", "NSObject"] }
+objc2-foundation = { version = "0.3", features = ["NSString", "NSURL", "NSDictionary", "NSGeometry", "NSObject", "NSError", "NSFileManager"] }
 objc2-app-kit = { version = "0.3", features = ["NSPrintInfo", "NSPrintOperation", "NSView", "NSResponder", "NSWindow", "NSGraphics"] }
 objc2-web-kit = { version = "0.3", features = ["WKWebView", "objc2-app-kit"] }
 

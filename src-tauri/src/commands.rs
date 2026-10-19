@@ -1,11 +1,14 @@
 use std::fs;
 use std::io::Write;
 use std::path::Path;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 use serde::Serialize;
 use tauri_plugin_dialog::{DialogExt, FilePath};
 
 use crate::themes_dir;
+
+static WINDOW_SEQ: AtomicU32 = AtomicU32::new(1);
 
 #[derive(Serialize)]
 pub struct DirEntry {
@@ -311,6 +314,141 @@ pub async fn kb_watch(id: String, root: String, on_change: tauri::ipc::Channel<V
     { crate::kb::watch::start(&id, std::path::Path::new(&root), std::time::Duration::from_millis(1500), move |b| { let _ = on_change.send(b); }) }
     #[cfg(not(feature = "library"))]
     { let _ = (id, root, on_change); Err("library support not built".into()) }
+}
+
+// ---------- file tree (plan section 5) ----------
+
+#[tauri::command]
+pub async fn create_file(path: String) -> Result<(), String> {
+    let path = path.clone();
+    tauri::async_runtime::spawn_blocking(move || crate::files::create_file(Path::new(&path)))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn create_dir(path: String) -> Result<(), String> {
+    let path = path.clone();
+    tauri::async_runtime::spawn_blocking(move || crate::files::create_dir(Path::new(&path)))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn rename_path(from: String, to: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || crate::files::rename_path(Path::new(&from), Path::new(&to)))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn duplicate_path(path: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || crate::files::duplicate_path(Path::new(&path)))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn trash_path(path: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || crate::files::trash_path(Path::new(&path), None))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn reveal_path(path: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || crate::files::reveal_path(Path::new(&path)))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn list_files(root: String, max: Option<usize>) -> Result<Vec<crate::files::ListedFile>, String> {
+    let max = max.unwrap_or(5000);
+    tauri::async_runtime::spawn_blocking(move || crate::files::list_files(Path::new(&root), max))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn file_excerpt(path: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || crate::files::file_excerpt(Path::new(&path)))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn path_kind(path: String) -> String {
+    let path = path.clone();
+    tauri::async_runtime::spawn_blocking(move || crate::files::path_kind(Path::new(&path)).to_string())
+        .await
+        .unwrap_or_else(|_| "missing".into())
+}
+
+#[tauri::command]
+pub async fn search_files(root: String, query: String, max: Option<usize>) -> Result<Vec<crate::files::SearchHit>, String> {
+    let max = max.unwrap_or(80);
+    tauri::async_runtime::spawn_blocking(move || crate::files::search_files(Path::new(&root), &query, max))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Label of the webview that invoked the command (`main`, `w-1`, …).
+#[tauri::command]
+pub async fn window_label(window: tauri::WebviewWindow) -> String {
+    window.label().to_string()
+}
+
+/// Close the calling window. The frontend asks first when the document is dirty.
+#[tauri::command]
+pub async fn close_window(window: tauri::WebviewWindow) -> Result<(), String> {
+    window.destroy().map_err(|e| e.to_string())
+}
+
+/// Open another editor window (`w-<n>`). Optional `file` is passed as a query so that window opens it.
+#[tauri::command]
+pub async fn open_window(app: tauri::AppHandle, file: Option<String>) -> Result<String, String> {
+    let n = WINDOW_SEQ.fetch_add(1, Ordering::Relaxed);
+    let label = format!("w-{n}");
+    let mut url = "index.html".to_string();
+    let mut query = vec!["restore=0".to_string()];
+    if let Some(f) = file {
+        if !f.is_empty() {
+            query.push(format!("file={}", urlencoding_min(&f)));
+            let dir = Path::new(&f).parent().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
+            if !dir.is_empty() {
+                query.push(format!("folder={}", urlencoding_min(&dir)));
+            }
+        }
+    }
+    url.push('?');
+    url.push_str(&query.join("&"));
+    let label2 = label.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let win = tauri::WebviewWindowBuilder::new(&app, &label2, tauri::WebviewUrl::App(url.into()))
+            .title("MD Nest")
+            .inner_size(1200.0, 800.0)
+            .resizable(true)
+            .build()
+            .map_err(|e| e.to_string())?;
+        crate::disable_webview_chrome(&win);
+        Ok::<(), String>(())
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    Ok(label)
+}
+
+fn urlencoding_min(s: &str) -> String {
+    let mut out = String::new();
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' | b'/' => out.push(b as char),
+            b'\\' => out.push('/'),
+            _ => out.push_str(&format!("%{b:02X}")),
+        }
+    }
+    out
 }
 
 #[tauri::command]

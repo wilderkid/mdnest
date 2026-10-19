@@ -2,7 +2,7 @@
 //! Activating an item emits `"mdn-menu"` with the item id. macOS also gets an app menu.
 use serde::Deserialize;
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
-use tauri::{AppHandle, Emitter, Manager, Runtime};
+use tauri::{AppHandle, Emitter, Runtime};
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -114,24 +114,28 @@ fn build_menu(app: &AppHandle, spec: &[MenuNode]) -> Result<Menu<tauri::Wry>, St
     Ok(menu)
 }
 
-/// Replace the application menu (macOS) or the main window menu (other platforms).
+/// Replace the menu on the calling window. macOS also sets the application menu.
+/// Extra windows created later call this themselves, so each window keeps its own menu.
 #[tauri::command]
-pub fn set_app_menu(app: AppHandle, spec: Vec<MenuNode>) -> Result<(), String> {
+pub fn set_app_menu(app: AppHandle, window: tauri::WebviewWindow, spec: Vec<MenuNode>) -> Result<(), String> {
     let menu = build_menu(&app, &spec)?;
     if cfg!(target_os = "macos") {
-        app.set_menu(menu).map_err(|e| e.to_string())?;
-    } else if let Some(win) = app.get_webview_window("main") {
-        win.set_menu(menu).map_err(|e| e.to_string())?;
-    } else {
-        app.set_menu(menu).map_err(|e| e.to_string())?;
+        let _ = app.set_menu(menu.clone());
     }
+    window.set_menu(menu).map_err(|e| e.to_string())?;
+    // Deliver activations of this window's menu to this window only.
+    let label = window.label().to_string();
+    let handle = app.clone();
+    window.on_menu_event(move |_win, event| {
+        emit_menu_event(&handle, &label, &event.id().0);
+    });
     Ok(())
 }
 
-/// Emit `"mdn-menu"` with the activated item id so the webview runs the command.
-pub fn emit_menu_event(app: &AppHandle, id: &str) {
+/// Emit `"mdn-menu"` to one window so a click in window A does not run in window B.
+pub fn emit_menu_event(app: &AppHandle, label: &str, id: &str) {
     if id.is_empty() {
         return;
     }
-    let _ = app.emit("mdn-menu", id);
+    let _ = app.emit_to(label, "mdn-menu", id);
 }
