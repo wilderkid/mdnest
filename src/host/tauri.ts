@@ -1,4 +1,4 @@
-import type { Host, DirEntry, ListedFile, SearchHit, StreamEvent, StreamRequest } from "./types";
+import type { Host, DirEntry, ListedFile, SearchHit, StreamEvent, StreamRequest, FilePreview } from "./types";
 import { invoke, Channel } from "@tauri-apps/api/core";
 // Custom URI schemes registered in src-tauri: "mdtheme" (theme folder) and "mdfile" (local files).
 const isWin = navigator.userAgent.includes("Windows");
@@ -38,6 +38,7 @@ export const tauriHost: Host = {
   setSpellcheck: (enabled) => invoke<void>("set_spellcheck", { enabled }),
   listFiles: (root, max) => invoke<ListedFile[]>("list_files", { root, max: max ?? 5000 }),
   fileExcerpt: (path) => invoke<string>("file_excerpt", { path }),
+  recentPreviews: (paths) => invoke<FilePreview[]>("recent_previews", { paths }),
   pathKind: (path) => invoke<string>("path_kind", { path }),
   searchFiles: (root, query, max) => invoke<SearchHit[]>("search_files", { root, query, max: max ?? 80 }),
   openWindow: (file) => invoke<string>("open_window", { file: file ?? null }),

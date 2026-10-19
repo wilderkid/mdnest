@@ -522,8 +522,216 @@ fn show_items_dbus(path: &Path) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+// ---------- welcome page: recent file previews ----------
+
+/// Card data for one recent file on the welcome page.
+#[derive(Debug, Serialize, Clone, PartialEq)]
+pub struct Preview {
+    pub path: String,
+    pub exists: bool,
+    pub title: String,
+    pub excerpt: String,
+    pub words: u64,
+    pub mtime: u64,
+}
+
+/// Bytes read per file. Enough for the excerpt and an honest word count of typical notes.
+const PREVIEW_READ: usize = 512 * 1024;
+const PREVIEW_CACHE_MAX: usize = 64;
+
+fn preview_cache() -> &'static std::sync::Mutex<std::collections::HashMap<String, (u64, u64, Preview)>> {
+    static CACHE: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<String, (u64, u64, Preview)>>> = std::sync::OnceLock::new();
+    CACHE.get_or_init(Default::default)
+}
+
+fn is_cjk(c: char) -> bool {
+    matches!(c as u32, 0x3040..=0x30ff | 0x3400..=0x9fff | 0xac00..=0xd7af)
+}
+
+/// Same rule as the editor's word count: each CJK character is a word, other words are runs of
+/// letters, digits, apostrophes and hyphens.
+pub fn count_words(text: &str) -> u64 {
+    let mut n = 0u64;
+    let mut in_word = false;
+    for c in text.chars() {
+        if is_cjk(c) {
+            n += 1;
+            in_word = false;
+        } else if c.is_alphanumeric() || c == '\'' || c == '\u{2019}' || c == '-' {
+            if !in_word {
+                n += 1;
+                in_word = true;
+            }
+        } else {
+            in_word = false;
+        }
+    }
+    n
+}
+
+/// Title = first ATX heading (any level) in the first lines, else the file stem.
+/// Excerpt = the text after it with Markdown markers dropped.
+pub fn preview_of(path: &Path, text: &str) -> (String, String) {
+    let body = strip_front_matter(text);
+    let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+    let mut title = String::new();
+    let mut rest = body;
+    for (i, line) in body.lines().enumerate().take(12) {
+        let t = line.trim_start();
+        if t.starts_with('#') {
+            let h = t.trim_start_matches('#');
+            if h.starts_with(' ') || h.is_empty() {
+                title = h.trim().trim_end_matches('#').trim().to_string();
+                let skip: usize = body.lines().take(i + 1).map(|l| l.len() + 1).sum();
+                rest = body.get(skip.min(body.len())..).unwrap_or("");
+                break;
+            }
+        }
+        if !t.is_empty() && i > 0 {
+            break;
+        }
+    }
+    if title.is_empty() {
+        title = stem;
+    }
+    // Drop code fences, math blocks and table rules; keep prose.
+    let mut fenced = false;
+    let mut kept: Vec<&str> = Vec::new();
+    for l in rest.lines() {
+        let t = l.trim_start();
+        if t.starts_with("```") || t.starts_with("~~~") || t.starts_with("$$") {
+            fenced = !fenced;
+            continue;
+        }
+        if fenced || t.starts_with("|-") || t.starts_with("| -") || t.starts_with("<!--") {
+            continue;
+        }
+        kept.push(t.trim_start_matches(['#', '>']).trim_start());
+    }
+    let cleaned = strip_inline(&kept.join(" "));
+    (title, excerpt_of(&cleaned))
+}
+
+/// Drop inline Markdown markers so excerpts read as prose: emphasis, strike, highlight, code
+/// ticks, math dollars, image bangs, link brackets and link targets.
+pub fn strip_inline(s: &str) -> String {
+    let chars: Vec<char> = s.chars().collect();
+    let mut out = String::with_capacity(s.len());
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        let next = chars.get(i + 1).copied();
+        match c {
+            '*' | '`' | '$' => {}
+            '_' if next == Some('_') => i += 1,
+            '~' if next == Some('~') => i += 1,
+            '=' if next == Some('=') => i += 1,
+            '!' if next == Some('[') => {}
+            '[' => {}
+            ']' if next == Some('(') => {
+                // skip the link target
+                let mut depth = 0;
+                i += 1;
+                while i < chars.len() {
+                    match chars[i] {
+                        '(' => depth += 1,
+                        ')' => {
+                            depth -= 1;
+                            if depth == 0 {
+                                break;
+                            }
+                        }
+                        _ => {}
+                    }
+                    i += 1;
+                }
+            }
+            ']' => {}
+            _ => out.push(c),
+        }
+        i += 1;
+    }
+    out
+}
+
+fn preview_uncached(path: &Path) -> Preview {
+    let p = path.to_string_lossy().into_owned();
+    let mut buf = Vec::new();
+    let ok = fs::File::open(path).and_then(|f| f.take(PREVIEW_READ as u64).read_to_end(&mut buf)).is_ok();
+    if !ok {
+        return Preview { path: p, exists: false, title: path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default(), excerpt: String::new(), words: 0, mtime: 0 };
+    }
+    let text = String::from_utf8_lossy(&buf);
+    let (title, excerpt) = preview_of(path, &text);
+    let mtime = fs::metadata(path).ok().and_then(|m| m.modified().ok()).and_then(millis).unwrap_or(0);
+    Preview { path: p, exists: true, title, excerpt, words: count_words(strip_front_matter(&text)), mtime }
+}
+
+/// Previews for the welcome page. Cached by (mtime, size), so reopening the welcome page reads
+/// nothing that has not changed.
+pub fn recent_previews(paths: &[String]) -> Vec<Preview> {
+    paths
+        .iter()
+        .take(24)
+        .map(|p| {
+            let path = Path::new(p);
+            let meta = fs::metadata(path).ok();
+            let key = meta.as_ref().map(|m| (m.modified().ok().and_then(millis).unwrap_or(0), m.len()));
+            if let Some((mt, len)) = key {
+                if let Ok(cache) = preview_cache().lock() {
+                    if let Some((cm, cl, pv)) = cache.get(p) {
+                        if *cm == mt && *cl == len {
+                            return pv.clone();
+                        }
+                    }
+                }
+            }
+            let pv = preview_uncached(path);
+            if let (Some((mt, len)), Ok(mut cache)) = (key, preview_cache().lock()) {
+                if cache.len() >= PREVIEW_CACHE_MAX {
+                    cache.clear();
+                }
+                cache.insert(p.clone(), (mt, len, pv.clone()));
+            }
+            pv
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn preview_title_excerpt_words() {
+        let text = "---\ntitle: x\n---\n# 本周开源模型盘点\n\n这周**开源**社区格外热闹。\n\n```js\ncode()\n```\nMore words here.\n";
+        let (title, excerpt) = super::preview_of(std::path::Path::new("/w/a.md"), text);
+        assert_eq!(title, "本周开源模型盘点");
+        assert!(excerpt.starts_with("这周开源社区格外热闹。"), "{excerpt}");
+        assert!(!excerpt.contains("code()"));
+        assert_eq!(super::count_words("Hello world 你好"), 4);
+        assert_eq!(super::strip_inline("has **bold**, *it*, ~~s~~, ==m==, `c`, [link](http://x/(y)) and ![img](a.png)"), "has bold, it, s, m, c, link and img");
+        assert_eq!(super::count_words("it's a well-known fact"), 4);
+        let (t2, _) = super::preview_of(std::path::Path::new("/w/notes.md"), "plain text only");
+        assert_eq!(t2, "notes");
+    }
+
+    #[test]
+    fn previews_cached_and_missing() {
+        let dir = std::env::temp_dir().join(format!("mdn-prev-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let f = dir.join("p.md");
+        std::fs::write(&f, "# T\n\nbody one two").unwrap();
+        let paths = vec![f.to_string_lossy().into_owned(), dir.join("gone.md").to_string_lossy().into_owned()];
+        let a = super::recent_previews(&paths);
+        assert!(a[0].exists && a[0].title == "T" && a[0].words == 4, "{:?}", a[0]);
+        assert!(!a[1].exists);
+        let b = super::recent_previews(&paths);
+        assert_eq!(a[0], b[0]);
+        std::fs::write(&f, "# T2\n\nchanged text").unwrap();
+        let c = super::recent_previews(&paths[..1]);
+        assert_eq!(c[0].title, "T2");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
     use super::*;
 
     #[test]

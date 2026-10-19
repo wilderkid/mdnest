@@ -50,6 +50,8 @@ export interface Host {
   listFiles(root: string, max?: number): Promise<ListedFile[]>;
   /** First ~240 characters, front matter stripped. */
   fileExcerpt(path: string): Promise<string>;
+  /** Welcome-page cards: title, excerpt, word count and mtime per path (cached by the host). */
+  recentPreviews(paths: string[]): Promise<FilePreview[]>;
   /** "file" | "dir" | "other" | "missing". */
   pathKind(path: string): Promise<string>;
   /** Case-insensitive content search. */
@@ -118,3 +120,5 @@ export interface HostNet {
    */
   stream(req: StreamRequest, onEvent: (ev: StreamEvent) => void): { cancel(): void };
 }
+
+export interface FilePreview { path: string; exists: boolean; title: string; excerpt: string; words: number; mtime: number }

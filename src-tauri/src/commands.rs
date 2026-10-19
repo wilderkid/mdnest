@@ -611,6 +611,13 @@ pub async fn file_excerpt(path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+pub async fn recent_previews(paths: Vec<String>) -> Result<Vec<crate::files::Preview>, String> {
+    tauri::async_runtime::spawn_blocking(move || crate::files::recent_previews(&paths))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn path_kind(path: String) -> String {
     let path = path.clone();
     tauri::async_runtime::spawn_blocking(move || crate::files::path_kind(Path::new(&path)).to_string())

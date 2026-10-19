@@ -139,6 +139,7 @@ pub fn run() {
             commands::pandoc_export,
             commands::list_files,
             commands::file_excerpt,
+            commands::recent_previews,
             commands::path_kind,
             commands::search_files,
             commands::open_window,

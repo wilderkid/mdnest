@@ -17,6 +17,7 @@ import { PluginManager, Command, SettingSpec, DecorationProvider, cancelPendingS
 import { escapeHtml } from "./editor/render";
 import { t, lang, wordsLabel, minutesLabel, tTitle, langSetting, saveLangSetting, type LangSetting } from "./i18n";
 import { icon } from "./shell/icons";
+import type { FilePreview } from "./host/types";
 import { openPrompt } from "./editor/prompt";
 import { countWords } from "./plugins/builtin/word-stats";
 import wordStats from "./plugins/builtin/word-stats";
@@ -200,6 +201,46 @@ function syncWelcome() {
   const show = !state.path;
   if (show) showWelcome(); else hideWelcome();
 }
+const WELCOME_TIPS = [
+  "Type / on an empty line to insert tables, code blocks or math.",
+  "Ctrl+P opens any file in the folder; Ctrl+Shift+P runs any command.",
+  "Ctrl+/ switches to source mode and back.",
+  "Drop an image into the editor to copy it next to the document.",
+  "Ctrl+Shift+F searches every file in the folder.",
+];
+let welcomeAll = false;
+function kbd(accel: string): string {
+  const mac = /Mac|iPhone|iPad|iPod/.test(navigator.platform + navigator.userAgent);
+  return accel.split("+").map((k) => `<kbd>${escapeHtml(k === "CmdOrCtrl" ? (mac ? "⌘" : "Ctrl") : k === "Shift" && mac ? "⇧" : k)}</kbd>`).join(mac ? "" : '<span class="kbd-plus">+</span>');
+}
+function greeting(): string {
+  const h = new Date().getHours();
+  return t(h < 5 ? "Good evening" : h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening");
+}
+function relTime(ms: number): string {
+  if (!ms) return "";
+  const d = new Date(ms), now = new Date();
+  const mins = Math.round((now.getTime() - ms) / 60000);
+  const hm = d.toLocaleTimeString(lang() === "zh-CN" ? "zh-CN" : undefined, { hour: "2-digit", minute: "2-digit", hour12: false });
+  if (mins >= 0 && mins < 1) return t("just now");
+  if (mins >= 0 && mins < 60) return t("{n} min ago", { n: mins });
+  const day = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diff = Math.round((day(now) - day(d)) / 86400000);
+  if (diff === 0) return t("Today {time}", { time: hm });
+  if (diff === 1) return t("Yesterday");
+  const sameYear = d.getFullYear() === now.getFullYear();
+  if (lang() === "zh-CN") return sameYear ? `${d.getMonth() + 1}月${d.getDate()}日` : `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
+  return d.toLocaleDateString(undefined, sameYear ? { month: "short", day: "numeric" } : { year: "numeric", month: "short", day: "numeric" });
+}
+function dirChip(p: string): string {
+  const root = sidebar.root;
+  const dir = p.replace(/[\\/][^\\/]*$/, "");
+  if (root && (dir === root || dir.startsWith(root + "/") || dir.startsWith(root + "\\"))) {
+    const parts = [root.split(/[\\/]/).pop() || root, ...dir.slice(root.length).split(/[\\/]/).filter(Boolean)];
+    return parts.slice(-2).join("/");
+  }
+  return dir.split(/[\\/]/).filter(Boolean).slice(-2).join("/");
+}
 function showWelcome() {
   if (!welcomeEl) {
     welcomeEl = document.createElement("div");
@@ -208,28 +249,62 @@ function showWelcome() {
   }
   welcomeEl.hidden = false;
   const list = recent();
-  welcomeEl.innerHTML = `<div class="mdn-welcome-card">
-    <h1>MD Nest</h1>
-    <p>A live-preview Markdown editor.</p>
-    <div class="mdn-welcome-actions">
-      <button type="button" class="btn btn-primary" data-act="new">New File</button>
-      <button type="button" class="btn" data-act="open">Open File…</button>
-      <button type="button" class="btn" data-act="folder">Open Folder…</button>
+  const shown = list.slice(0, welcomeAll ? 12 : 6);
+  const tip = t(WELCOME_TIPS[Math.floor(Date.now() / 86400000) % WELCOME_TIPS.length]);
+  const card = (act: string, ic: string, title: string, sub: string, accel: string, primary = false) =>
+    `<button type="button" class="wel-action${primary ? " primary" : ""}" data-act="${act}"><span class="wel-action-ic">${icon(ic, 18)}</span><span class="wel-action-txt"><b>${escapeHtml(t(title))}</b><small>${escapeHtml(t(sub))}</small></span><span class="wel-kbd">${kbd(accel)}</span></button>`;
+  const fileCard = (p: string) => {
+    const name = p.split(/[\\/]/).pop() || p;
+    return `<button type="button" class="wel-file" data-path="${escapeHtml(p)}" title="${escapeHtml(p)}">
+      <span class="wel-file-title">${icon("md", 15)}<b>${escapeHtml(name.replace(/\.(md|markdown|txt)$/i, ""))}</b></span>
+      <span class="wel-file-snip"></span>
+      <span class="wel-file-meta"><span class="wel-chip">${escapeHtml(dirChip(p) || "/")}</span><span class="wel-words"></span><span class="wel-time"></span></span></button>`;
+  };
+  welcomeEl.innerHTML = `<div class="mdn-welcome-card mdn-wel">
+    <div class="wel-top">
+      <div class="wel-logo" aria-hidden="true">${WELCOME_LOGO}</div>
+      <div class="wel-hello"><h1>${escapeHtml(greeting())}${lang() === "zh-CN" ? "，" : ", "}${escapeHtml(t("start writing today"))}</h1><p class="wel-sub">MD Nest · ${escapeHtml(t("A live-preview Markdown editor."))}</p></div>
+      <button type="button" class="wel-search" data-act="quick">${icon("search", 15)}<span>${escapeHtml(t("Search files or commands…"))}</span><span class="wel-kbd">${kbd("CmdOrCtrl+P")}</span></button>
     </div>
-    <div class="mdn-recent">${list.length ? list.map((p) => `<button type="button" data-path="${escapeHtml(p)}"><span>${escapeHtml(p.split(/[\\/]/).pop() || p)}</span></button>`).join("") : `<div style="opacity:.6">No recent files</div>`}</div>
-    <div class="mdn-welcome-hints">Ctrl+N new · Ctrl+O open · Ctrl+Shift+O folder · Ctrl+P quick open · Ctrl+Shift+P command palette</div>
+    <div class="wel-actions">
+      ${card("new", "plusFile", "New File", "Start from a blank document", "CmdOrCtrl+N", true)}
+      ${card("open", "doc", "Open File…", "Open a local .md file", "CmdOrCtrl+O")}
+      ${card("folder", "folderOpen", "Open Folder…", "Use a folder as workspace", "CmdOrCtrl+Shift+O")}
+    </div>
+    <div class="wel-sec-head"><h2>${escapeHtml(t("Recent Files"))}</h2>${list.length > 6 ? `<button type="button" class="wel-link" data-act="all">${escapeHtml(t(welcomeAll ? "Show less" : "View all"))}</button>` : ""}</div>
+    ${shown.length ? `<div class="wel-grid mdn-recent">${shown.map(fileCard).join("")}</div>` : `<div class="wel-empty">${icon("clock", 22, 1.5)}<span>${escapeHtml(t("No recent files"))}</span></div>`}
+    <div class="wel-tip">${icon("sparkle", 15)}<b>${escapeHtml(t("Pro tip"))}</b><span>${escapeHtml(tip)}</span></div>
   </div>`;
   welcomeEl.querySelectorAll<HTMLButtonElement>("[data-act]").forEach((b) => {
     b.onclick = () => {
-      if (b.dataset.act === "new") void newUntitled();
-      else if (b.dataset.act === "open") void pickAndOpen();
-      else void pickFolder();
+      const act = b.dataset.act;
+      if (act === "new") void newUntitled();
+      else if (act === "open") void pickAndOpen();
+      else if (act === "folder") void pickFolder();
+      else if (act === "quick") void quickOpen();
+      else if (act === "all") { welcomeAll = !welcomeAll; showWelcome(); }
     };
   });
   welcomeEl.querySelectorAll<HTMLButtonElement>("[data-path]").forEach((b) => {
     b.onclick = () => openFile(b.dataset.path!);
   });
+  if (shown.length) void fillPreviews(shown);
 }
+async function fillPreviews(paths: string[]) {
+  let previews: FilePreview[] = [];
+  try { previews = await host.recentPreviews(paths); } catch { return; }
+  if (!welcomeEl || welcomeEl.hidden) return;
+  for (const pv of previews) {
+    const card = welcomeEl.querySelector<HTMLElement>(`.wel-file[data-path="${CSS.escape(pv.path)}"]`);
+    if (!card) continue;
+    card.classList.toggle("missing", !pv.exists);
+    if (pv.title) card.querySelector(".wel-file-title b")!.textContent = pv.title;
+    card.querySelector(".wel-file-snip")!.textContent = pv.exists ? (pv.excerpt || t("Empty document")) : t("File not found");
+    card.querySelector(".wel-words")!.textContent = pv.exists ? wordsLabel(pv.words) : "";
+    card.querySelector(".wel-time")!.textContent = relTime(pv.mtime);
+  }
+}
+const WELCOME_LOGO = `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17V7l4 5 4-5v10"/><path d="M17 7v10m0 0-3-3m3 3 3-3"/></svg>`;
 function hideWelcome() { if (welcomeEl) welcomeEl.hidden = true; }
 
 type GuardChoice = "save" | "discard" | "cancel";

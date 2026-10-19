@@ -76,6 +76,14 @@ export const ZH: Record<string, string> = {
   "Start from a blank document": "从空白文档开始", "Open a local .md file": "打开本地 .md 文件", "Use a folder as workspace": "设为工作区",
   "Search files or commands…": "搜索文件或命令…", "View all": "查看全部", "Pro tip": "小技巧",
   "Type / on an empty line to insert tables, code blocks or math.": "在空行输入 / 唤起插入菜单，表格、代码块、公式一键插入。",
+  // welcome (B)
+  "start writing today": "开始今天的写作", "just now": "刚刚", "{n} min ago": "{n} 分钟前", "Today {time}": "今天 {time}", Yesterday: "昨天",
+  "Show less": "收起", "Empty document": "空文档", "File not found": "文件不存在",
+  "Ctrl+P opens any file in the folder; Ctrl+Shift+P runs any command.": "Ctrl+P 快速打开文件夹中的任意文件，Ctrl+Shift+P 运行任意命令。",
+  "Ctrl+/ switches to source mode and back.": "Ctrl+/ 在源代码模式与所见即所得之间切换。",
+  "Drop an image into the editor to copy it next to the document.": "把图片拖进编辑器，会自动复制到文档旁的文件夹。",
+  "Ctrl+Shift+F searches every file in the folder.": "Ctrl+Shift+F 在整个文件夹中搜索。",
+
   // settings
   Editor: "编辑器", Images: "图片", "Files & Encoding": "文件与编码", Appearance: "外观", "Search settings…": "搜索设置…",
   "Autosave (1.5 s after edits)": "自动保存（编辑停止 1.5 秒后）", "Reopen last file on startup": "启动时打开上次的文件",

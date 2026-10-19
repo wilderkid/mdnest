@@ -79,8 +79,13 @@ export function applyShellColors(followAccent = true) {
     }
     return "";
   };
+  // read the theme's own colours: drop the shell classes for the (synchronous, unpainted) probe,
+  // since the shell paints the editor surface with the previous --mdn-tbg
+  const cls = ["shell-b", "shell-plain"].filter((c) => document.body.classList.contains(c));
+  document.body.classList.remove(...cls);
   const bg = pick([write, write?.parentElement ?? null, document.body, root], "backgroundColor") || "#ffffff";
   const fg = pick([write, document.body], "color") || "#1f2330";
+  document.body.classList.add(...cls);
   root.style.setProperty("--mdn-tbg", bg);
   root.style.setProperty("--mdn-tfg", fg);
   const primary = getComputedStyle(root).getPropertyValue("--primary-color").trim();

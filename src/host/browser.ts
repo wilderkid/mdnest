@@ -44,6 +44,7 @@ export const browserHost: Host = {
   },
   async listFiles(root, max = 5000): Promise<ListedFile[]> { return (await j(await fetch("/api/list-files?root=" + encodeURIComponent(root) + "&max=" + max))).files; },
   async fileExcerpt(path) { return (await j(await fetch("/api/excerpt?path=" + encodeURIComponent(path)))).excerpt; },
+  async recentPreviews(paths) { return (await j(await fetch("/api/previews?paths=" + encodeURIComponent(JSON.stringify(paths))))).previews; },
   async pathKind(path) { return (await j(await fetch("/api/kind?path=" + encodeURIComponent(path)))).kind; },
   async searchFiles(root, query, max = 80): Promise<SearchHit[]> { return (await j(await fetch("/api/search?root=" + encodeURIComponent(root) + "&q=" + encodeURIComponent(query) + "&max=" + max))).hits; },
   async openWindow(file?: string | null) {

@@ -269,6 +269,50 @@ function uniqueCopyName(name: string, exists: (n: string) => boolean): string {
   while (exists(`${stem} copy ${n}${ext}`)) n++;
   return `${stem} copy ${n}${ext}`;
 }
+// Mirrors src-tauri/src/files.rs preview_of / count_words (browser host only).
+const previewCache = new Map<string, { key: string; value: any }>();
+function previewOf(raw: string) {
+  const stem = path.basename(String(raw)).replace(/\.[^.]+$/, "");
+  const p = inside(ROOT, String(raw));
+  if (!p || !fs.existsSync(p) || !fs.statSync(p).isFile()) return { path: raw, exists: false, title: stem, excerpt: "", words: 0, mtime: 0 };
+  const st = fs.statSync(p);
+  const key = st.mtimeMs + ":" + st.size;
+  const hit = previewCache.get(p);
+  if (hit && hit.key === key) return hit.value;
+  const fd = fs.openSync(p, "r");
+  const buf = Buffer.alloc(Math.min(st.size, 512 * 1024));
+  const n = fs.readSync(fd, buf, 0, buf.length, 0);
+  fs.closeSync(fd);
+  let body = buf.subarray(0, n).toString("utf8");
+  if (body.startsWith("---\n") || body.startsWith("---\r\n")) {
+    const after = body.startsWith("---\r\n") ? body.slice(5) : body.slice(4);
+    const idx = after.indexOf("\n---");
+    if (idx >= 0) body = after.slice(idx + 4).replace(/^[\r\n]+/, "");
+  }
+  const lines = body.split(/\r?\n/);
+  let title = "", start = 0;
+  for (let i = 0; i < Math.min(12, lines.length); i++) {
+    const tl = lines[i].trimStart();
+    const m = tl.match(/^#+(?: (.*)|$)/);
+    if (m) { title = (m[1] ?? "").replace(/#+\s*$/, "").trim(); start = i + 1; break; }
+    if (tl && i > 0) break;
+  }
+  let fenced = false;
+  const kept: string[] = [];
+  for (const l of lines.slice(start)) {
+    const tl = l.trimStart();
+    if (/^(```|~~~|\$\$)/.test(tl)) { fenced = !fenced; continue; }
+    if (fenced || /^(\|-|\| -|<!--)/.test(tl)) continue;
+    kept.push(tl.replace(/^[#>]+/, "").trimStart());
+  }
+  const cleaned = kept.join(" ").replace(/\]\([^)]*(?:\([^)]*\)[^)]*)*\)/g, "").replace(/!\[/g, "").replace(/__|~~|==|[*`$\[\]]/g, "");
+  const cjk = (body.match(/[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/g) ?? []).length;
+  const latin = (body.replace(/[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/g, " ").match(/[\p{L}\p{N}'’-]+/gu) ?? []).length;
+  const value = { path: raw, exists: true, title: title || stem, excerpt: excerptOf(cleaned), words: cjk + latin, mtime: Math.round(st.mtimeMs) };
+  if (previewCache.size > 64) previewCache.clear();
+  previewCache.set(p, { key, value });
+  return value;
+}
 function excerptOf(text: string): string {
   let body = text;
   if (body.startsWith("---\n") || body.startsWith("---\r\n")) {
@@ -538,6 +582,11 @@ function devFs(): Plugin {
         const n = fs.readSync(fd, buf, 0, 8192, 0);
         fs.closeSync(fd);
         return send(200, { excerpt: excerptOf(buf.subarray(0, n).toString("utf8")) });
+      }
+      if (url.pathname === "/api/previews") {
+        let list: string[] = [];
+        try { list = JSON.parse(url.searchParams.get("paths") ?? "[]"); } catch { /* none */ }
+        return send(200, { previews: list.slice(0, 24).map((raw) => previewOf(raw)) });
       }
       if (url.pathname === "/api/kind") {
         const p = inside(ROOT, url.searchParams.get("path") ?? "");
