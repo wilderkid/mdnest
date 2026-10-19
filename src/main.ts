@@ -1,3 +1,6 @@
+import { blockPosForLine } from "./editor/lines";
+import { TextSelection } from "prosemirror-state";
+import { Decoration, DecorationSet } from "prosemirror-view";
 import "codemirror/lib/codemirror.css";
 import "prosemirror-view/style/prosemirror.css";
 import "prosemirror-tables/style/tables.css";
@@ -16,6 +19,7 @@ import { countWords } from "./plugins/builtin/word-stats";
 import wordStats from "./plugins/builtin/word-stats";
 import readingGoal from "./plugins/builtin/reading-goal";
 import ai from "./plugins/builtin/ai";
+import library from "./plugins/builtin/library";
 import { FindBar, SourceSearch } from "./shell/findbar";
 import { EditorSearch } from "./editor/search";
 import { insertImageFiles, IMAGE_FOLDER_KEY, imageFolderPattern } from "./shell/images";
@@ -27,6 +31,10 @@ const WELCOME = `# Welcome to MD Nest\n\nOpen a file (Ctrl+O) or a folder (Ctrl+
 const state = { path: null as string | null, dirty: false, lastSaved: "", mtime: null as number | null, conflict: false };
 const commands: Command[] = [];
 const decorationProviders: DecorationProvider[] = [];
+// citation / search-hit jump highlight: a node decoration survives the block re-rendering
+// (syntax reveal) that a plain DOM class would not
+let citeFlash: { doc: unknown; from: number; to: number } | null = null;
+decorationProviders.push((st) => citeFlash && citeFlash.doc === st.doc ? DecorationSet.create(st.doc, [Decoration.node(citeFlash.from, citeFlash.to, { class: "md-cite-flash" })]) : null);
 const settingSpecs: { owner: string; specs: SettingSpec[] }[] = [];
 
 document.body.classList.add("os-linux", "pin-outline");
@@ -89,8 +97,29 @@ async function openFile(path: string) {
     localStorage.setItem("mdnest.lastFile", path); plugins.emit("file-opened", path);
   } catch (e: any) { notify("Open failed: " + (e.message ?? e)); }
 }
+/** Open a file and reveal the top-level block at a 1-based source line, briefly highlighted. */
+async function openAt(path: string, line?: number) {
+  if (state.path !== path) {
+    if (state.dirty) await save(false);
+    await openFile(path);
+    if (state.path !== path) return;
+  }
+  if (!line || source.active) return;
+  const v = editor.view;
+  const hit = blockPosForLine(v.state.doc, state.lastSaved ?? editor.getMarkdown(), line);
+  if (!hit) return;
+  const node = v.state.doc.nodeAt(hit.pos);
+  const inside = Math.min(hit.pos + 1, v.state.doc.content.size);
+  v.dispatch(v.state.tr.setSelection(TextSelection.near(v.state.doc.resolve(inside))).scrollIntoView());
+  v.focus();
+  if (!node) return;
+  citeFlash = { doc: v.state.doc, from: hit.pos, to: hit.pos + node.nodeSize };
+  v.dispatch(v.state.tr.setMeta("addToHistory", false));
+  const mine = citeFlash;
+  setTimeout(() => { if (citeFlash === mine) { citeFlash = null; editor.view.dispatch(editor.view.state.tr.setMeta("addToHistory", false)); } }, 1800);
+}
 async function pickAndOpen() { const p = await host.pickFile(); if (p) openFile(p); }
-async function pickFolder() { const p = await host.pickFolder(); if (p) { await sidebar.openFolder(p); localStorage.setItem("mdnest.lastFolder", p); } }
+async function pickFolder() { const p = await host.pickFolder(); if (p) { await sidebar.openFolder(p); localStorage.setItem("mdnest.lastFolder", p); plugins.emit("workspace-changed", p); } }
 let quietSave = false;
 async function save(as: boolean) {
   let p = state.path;
@@ -204,6 +233,8 @@ const plugins = new PluginManager({
   getState: () => editor.view.state,
   getView: () => editor.view,
   getFilePath: () => state.path,
+  getWorkspaceRoot: () => sidebar.root,
+  openAt: (path, line) => openAt(path, line),
   refreshDecorations: () => editor.refreshDecorations(),
   addSettings: (owner, specs) => settingSpecs.push({ owner, specs }),
   getSetting: (owner, key) => {
@@ -252,7 +283,7 @@ document.addEventListener("keydown", (e) => {
   else if (e.key.toLowerCase() === "t" && !e.shiftKey && !source.active) { e.preventDefault(); insertTable(3, 3)(editor.view.state, editor.view.dispatch); }
 }, true);
 
-plugins.activateAll([readingGoal, wordStats, ai]); // order irrelevant: topo-sorted by depends
+plugins.activateAll([readingGoal, wordStats, ai, library]); // order irrelevant: topo-sorted by depends
 sidebar.addTab("settings", "⚙", undefined, {
   id: "settings", title: "Settings", render: (el) => {
     const folder = imageFolderPattern();
@@ -343,7 +374,7 @@ async function saveOrClearSecret(btn: HTMLButtonElement) {
 }
 sidebar.addTab("recent", "Recent", undefined, { id: "recent", title: "Recent", render: (el) => { recentEl = el; renderRecent(); return () => (recentEl = null); } });
 sidebar.select("files");
-(window as any).mdnest = { editor, host, notify, exportHtmlString, findBar, state };
+(window as any).mdnest = { editor, host, notify, exportHtmlString, findBar, state, openAt };
 
 window.addEventListener("beforeunload", (e) => { if (state.dirty && host.kind === "browser") e.preventDefault(); });
 
@@ -356,7 +387,7 @@ window.addEventListener("beforeunload", (e) => { if (state.dirty && host.kind ==
   // --no-restore (or ?restore=0, or the setting) → no last folder/file: start on the welcome page
   const restore = !args.includes("--no-restore") && q.get("restore") !== "0" && localStorage.getItem(REOPEN_KEY) !== "0";
   const ws = q.get("folder") ?? (cli ? cli.replace(/[\\/][^\\/]*$/, "") : null) ?? (restore ? localStorage.getItem("mdnest.lastFolder") : null) ?? (await host.defaultWorkspace());
-  if (ws) await sidebar.openFolder(ws).catch(() => {});
+  if (ws) { await sidebar.openFolder(ws).catch(() => {}); if (sidebar.root) plugins.emit("workspace-changed", sidebar.root); }
   const f = cli ?? q.get("file") ?? (restore ? localStorage.getItem("mdnest.lastFile") : null) ?? (restore && ws && host.kind === "browser" ? ws + "/sample.md" : null);
   if (f) await openFile(f); else afterLoad();
   if (q.get("sidebar") === "0") document.body.classList.remove("pin-outline");

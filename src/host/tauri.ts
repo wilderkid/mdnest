@@ -28,6 +28,16 @@ export const tauriHost: Host = {
     delete: (id) => invoke<void>("secret_delete", { id }),
     backend: () => invoke<string>("secret_backend"),
   },
+  index: {
+    call: (req) => invoke("kb_call", { req }),
+    async watch(root, onChange) {
+      const id = "w" + Math.random().toString(36).slice(2);
+      const ch = new Channel<string[]>();
+      ch.onmessage = (paths) => onChange(paths);
+      await invoke("kb_watch", { id, root, onChange: ch });
+      return () => { void invoke("kb_unwatch", { id }); };
+    },
+  },
   net: {
     stream(req: StreamRequest, onEvent: (ev: StreamEvent) => void) {
       const id = streamId();

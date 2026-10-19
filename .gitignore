@@ -15,3 +15,4 @@ dev-data/workspace/*.html
 dev-data/workspace/p2-refs.md
 # Browser-dev secret store (never commit; may hold local API keys)
 dev-data/secrets.json
+dev-data/library-data/

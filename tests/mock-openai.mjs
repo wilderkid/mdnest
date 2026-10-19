@@ -61,6 +61,12 @@ function firstWords(text, n) {
  * Returns the full assistant text (split into SSE pieces by the caller).
  */
 export function replyFor(user, model) {
+  const src = /<sources>\n([\s\S]*?)\n<\/sources>/.exec(user);
+  if (src) {
+    // RAG: cite the first two sources by number, name the first one
+    const labels = [...src[1].matchAll(/^\[(\d+)\] (.+?) \(lines/gm)].map((m) => m[2]);
+    return { kind: "rag", text: `According to ${labels[0] ?? "your notes"} [1]` + (labels.length > 1 ? `, see also [2].` : ".") };
+  }
   const instruction = instructionOf(user);
   const doc = documentOf(user);
   const lower = instruction.toLowerCase();
@@ -112,6 +118,21 @@ function sleep(ms, signal) {
   });
 }
 
+const SYN = [["feline", "cat", "cats", "kitten", "purr"], ["canine", "dog", "dogs", "puppy", "bark"], ["money", "budget", "cost", "price", "expense"], ["sleep", "nap", "rest", "bed"]];
+export function toyEmbed(text) {
+  const v = new Array(64).fill(0);
+  for (let w of String(text).toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []) {
+    const g = SYN.findIndex((xs) => xs.includes(w));
+    if (g >= 0) w = "syn" + g;
+    else if (w.length > 4) w = w.slice(0, 5);
+    let h = 2166136261;
+    for (const c of w) h = Math.imul(h ^ c.codePointAt(0), 16777619) >>> 0;
+    v[h % 64] += 1;
+  }
+  const n = Math.hypot(...v) || 1;
+  return v.map((x) => x / n);
+}
+
 export function start(port = DEFAULT_PORT) {
   const requests = [];
   const sockets = new Set();
@@ -131,6 +152,17 @@ export function start(port = DEFAULT_PORT) {
     }
     if (req.method === "GET" && url.pathname === "/health") {
       sendJson(res, 200, { ok: true });
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/v1/embeddings") {
+      // Deterministic toy embeddings: hashed bag of word stems in 64 dims (+ a few synonym groups),
+      // L2-normalized. No auth required (local Ollama style); records requests like chat.
+      let raw = ""; try { raw = await readBody(req); } catch { /* empty */ }
+      let body = {}; try { body = JSON.parse(raw || "{}"); } catch { /* bad */ }
+      const input = Array.isArray(body.input) ? body.input : [String(body.input ?? "")];
+      requests.push({ method: "POST", path: url.pathname, model: body.model ?? null, count: input.length, authPresent: !!req.headers.authorization, user: input.join("\n---\n").slice(0, 2000), at: Date.now() });
+      if (body.model === "missing") { sendJson(res, 404, { error: { message: "model missing", type: "not_found" } }); return; }
+      sendJson(res, 200, { object: "list", model: body.model, data: input.map((t, index) => ({ object: "embedding", index, embedding: toyEmbed(t) })), usage: { prompt_tokens: input.reduce((n, t) => n + Math.ceil(t.length / 4), 0), total_tokens: 0 } });
       return;
     }
     if (req.method !== "POST" || url.pathname !== "/v1/chat/completions") {

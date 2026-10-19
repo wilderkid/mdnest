@@ -24,6 +24,15 @@ export interface Host {
   secrets: HostSecrets;
   /** Plugin platform: streaming HTTP. Secrets are attached in the host, not here. */
   net: HostNet;
+  /** Plugin platform: workspace index (SQLite + FTS5 + sqlite-vec in Rust). */
+  index: HostIndex;
+}
+
+/** Index requests are `{ op, root, ... }`; see src-tauri/src/kb/mod.rs `dispatch`. */
+export interface HostIndex {
+  call<T = any>(req: { op: string; root: string; [k: string]: any }): Promise<T>;
+  /** debounced batches of changed Markdown paths under root; returns stop() */
+  watch(root: string, onChange: (paths: string[]) => void): Promise<() => void>;
 }
 
 /** `^[a-z0-9._-]{1,64}$` */

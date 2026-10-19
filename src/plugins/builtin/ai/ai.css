@@ -76,3 +76,9 @@
   opacity: .65;
   margin: -2px 0 6px;
 }
+
+.mdn-ai button.mdn-ai-cite { font: inherit; font-size: .85em; padding: 0 2px; margin: 0 1px; border: 0; background: transparent;
+  color: var(--primary-color, #4183c4); cursor: pointer; vertical-align: super; line-height: 1; }
+.mdn-ai button.mdn-ai-cite:hover, .mdn-ai button.mdn-ai-source:hover { text-decoration: underline; }
+.mdn-ai-sources { margin: 4px 0 2px; padding-left: 20px; font-size: 11px; }
+.mdn-ai button.mdn-ai-source { font: inherit; border: 0; background: transparent; color: var(--primary-color, #4183c4); cursor: pointer; padding: 0; text-align: left; }

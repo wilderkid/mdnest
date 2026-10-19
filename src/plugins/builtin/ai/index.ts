@@ -26,6 +26,10 @@ function settingSpecs(): SettingSpec[] {
     { key: "maxTokens", title: "Max tokens", type: "number", default: 1024 },
     { key: "translateTo", title: "Translate into", type: "string", default: "English" },
     { key: "localOnly", title: "Local only (localhost or private LAN)", type: "boolean", default: false },
+    { key: "embedNote", title: "Embeddings (used by the Library plugin)", type: "note", text: "OpenAI-compatible /v1/embeddings. The default is a local Ollama (ollama pull nomic-embed-text); the relay preset has no embeddings endpoint. Changing the model rebuilds the index." },
+    { key: "embedBaseUrl", title: "Embeddings base URL", type: "url", default: "http://localhost:11434/v1" },
+    { key: "embedModel", title: "Embeddings model", type: "string", default: "nomic-embed-text" },
+    { key: "embedApiKey", title: "Embeddings API key (optional)", type: "secret" },
     { key: "dailyRequestLimit", title: "Daily request limit (0 = none)", type: "number", default: 0 },
     { key: "dailyTokenLimit", title: "Daily token limit (0 = none)", type: "number", default: 0 },
     { key: "exclude", title: "Excluded folders (one prefix per line)", type: "text", default: "" },
@@ -44,6 +48,7 @@ const plugin: EditorPlugin = {
       net: ["http://localhost:11434", "http://127.0.0.1:11434"],
       secrets: true,
       editor: ["read", "suggest", "write"],
+      workspace: ["open"],
     },
   },
   activate(ctx) {
@@ -80,6 +85,11 @@ const plugin: EditorPlugin = {
       localOnly: () => ctx.settings.get("localOnly") === true,
       secretKey: "apiKey",
       usage,
+      exclude: () => String(ctx.settings.get("exclude") ?? ""),
+      embedBaseUrl: () => String(ctx.settings.get("embedBaseUrl") ?? ""),
+      embedModel: () => String(ctx.settings.get("embedModel") ?? ""),
+      hasEmbedSecret: () => ctx.secrets.has("embedApiKey"),
+      embedSecretKey: "embedApiKey",
     });
     ctx.services.provide("ai.provider@1", provider);
 

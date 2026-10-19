@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { defineConfig, Plugin } from "vite";
 import fs from "node:fs";
 import http from "node:http";
@@ -263,6 +264,34 @@ function devFs(): Plugin {
           if (unique && fs.existsSync(p)) { const ext = path.extname(p), stem = p.slice(0, p.length - ext.length); let i = 1; while (fs.existsSync(`${stem}-${i}${ext}`)) i++; p = `${stem}-${i}${ext}`; }
           fs.writeFileSync(p, Buffer.from(data, "base64")); send(200, { path: p });
         }); return;
+      }
+      if (url.pathname === "/api/kb" && req.method === "POST") {
+        // Same Rust index as the desktop app, through the kb-cli JSON bridge.
+        readBody(req).then((raw) => {
+          let body: any; try { body = JSON.parse(raw || "{}"); } catch { return send(400, { err: "bad json" }); }
+          if (!body.root || !inside(ROOT, body.root)) return send(403, { err: "root outside sandbox" });
+          const bin = ["release", "debug"].map((m) => path.resolve(`src-tauri/target/${m}/kb-cli`)).find((b) => fs.existsSync(b));
+          if (!bin) return send(500, { err: "kb-cli not built (cargo build --release --bin kb-cli)" });
+          const cp = spawn(bin, [path.resolve("dev-data/library-data")], { stdio: ["pipe", "pipe", "pipe"] });
+          let out = "", errText = "";
+          cp.stdout.on("data", (d: any) => (out += d)); cp.stderr.on("data", (d: any) => (errText += d));
+          cp.on("close", () => { try { send(200, JSON.parse(out)); } catch { send(500, { err: "kb-cli: " + (errText || out).slice(0, 300) }); } });
+          cp.stdin.end(JSON.stringify(body));
+        });
+        return;
+      }
+      if (url.pathname === "/api/kb/watch") {
+        const root = url.searchParams.get("root") ?? "";
+        if (!inside(ROOT, root)) return send(403, "outside sandbox", "text/plain");
+        res.writeHead(200, { "content-type": "application/x-ndjson", "cache-control": "no-cache" });
+        let batch = new Set<string>(), timer: any = null;
+        const w = fs.watch(root, { recursive: true }, (_ev, name) => {
+          if (!name || !/\.(md|markdown|mdown|txt)$/i.test(String(name)) || String(name).split(/[\\/]/).some((s) => s.startsWith("."))) return;
+          batch.add(path.join(root, String(name)));
+          clearTimeout(timer); timer = setTimeout(() => { res.write(JSON.stringify([...batch]) + "\n"); batch = new Set(); }, 800);
+        });
+        req.on("close", () => { w.close(); clearTimeout(timer); });
+        return;
       }
       if (url.pathname === "/api/secret/backend") { loadSecrets(); return send(200, { backend: "file" }); }
       if (url.pathname === "/api/secret/has") {

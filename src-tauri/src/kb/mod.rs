@@ -271,6 +271,12 @@ impl Index {
 
     /// Hybrid search: FTS5 BM25 and vector kNN, fused with reciprocal rank fusion (k = 60).
     pub fn search(&self, query: &str, vector: Option<&[f32]>, k: usize, path_prefix: Option<&str>) -> Result<Vec<Hit>, String> {
+        self.search_opts(query, vector, k, path_prefix, 0.8)
+    }
+
+    /// `max_distance`: cosine distance cut-off for vector hits (kNN always returns neighbours,
+    /// even unrelated ones); keyword hits are not affected.
+    pub fn search_opts(&self, query: &str, vector: Option<&[f32]>, k: usize, path_prefix: Option<&str>, max_distance: f64) -> Result<Vec<Hit>, String> {
         let depth = (k * 4).max(20);
         let mut fused: HashMap<i64, (f64, Vec<String>)> = HashMap::new();
         if let Some(q) = fts_query(query) {
@@ -283,7 +289,7 @@ impl Index {
             }
         }
         if let Some(v) = vector {
-            for (rank, (id, _dist)) in self.knn(v, depth).into_iter().enumerate() {
+            for (rank, (id, _dist)) in self.knn(v, depth).into_iter().filter(|(_, d)| *d <= max_distance).enumerate() {
                 let e = fused.entry(id).or_insert((0.0, vec![]));
                 e.0 += 1.0 / (60.0 + rank as f64 + 1.0);
                 e.1.push("vec".into());
@@ -383,7 +389,8 @@ pub fn dispatch(data_dir: &Path, req: serde_json::Value) -> Result<serde_json::V
         "search" => {
             let vector: Option<Vec<f32>> = req.get("vector").and_then(|v| serde_json::from_value(v.clone()).ok());
             let k = req.get("k").and_then(|v| v.as_u64()).unwrap_or(8).min(50) as usize;
-            to_json(&idx.search(req.get("query").and_then(|v| v.as_str()).unwrap_or(""), vector.as_deref(), k, req.get("pathPrefix").and_then(|v| v.as_str()))?)
+            let maxd = req.get("maxDistance").and_then(|v| v.as_f64()).unwrap_or(0.8);
+            to_json(&idx.search_opts(req.get("query").and_then(|v| v.as_str()).unwrap_or(""), vector.as_deref(), k, req.get("pathPrefix").and_then(|v| v.as_str()), maxd)?)
         }
         "related" => to_json(&idx.related(req.get("path").and_then(|v| v.as_str()).ok_or("missing path")?, req.get("k").and_then(|v| v.as_u64()).unwrap_or(5).min(20) as usize)?),
         "stats" => to_json(&idx.stats()),

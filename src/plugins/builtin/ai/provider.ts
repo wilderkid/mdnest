@@ -1,3 +1,4 @@
+import { registerMention } from "./mentions";
 import { parseUsage, type Usage } from "./usage";
 // OpenAI-compatible chat provider. Talks only through the plugin net/secrets API.
 // The API key is named by secretRef and never appears in a request body or an error string.
@@ -46,6 +47,17 @@ export interface AiProvider {
   info(): ProviderInfo;
   /** "Today: N requests · M tokens (limit …)" */
   usageSummary(): string;
+  /**
+   * OpenAI-compatible `POST {embedBaseUrl}/embeddings`. Batches of `batch` (default 32).
+   * Returns one vector per input, in order. Throws when AI is off or the endpoint has no embeddings.
+   */
+  embed(texts: string[], opts?: { signal?: AbortSignal; batch?: number }): Promise<number[][]>;
+  /** embedding model id ("" when not configured); the index rebuilds when it changes */
+  embedInfo(): { baseUrl: string; model: string };
+  /** add a chat context provider such as "@library"; returns unregister */
+  registerMention(m: import("./mentions").Mention): () => void;
+  /** the AI plugin's excluded folders (one per line); dependents must skip these too */
+  excluded(): string[];
 }
 
 export function presetOf(raw: unknown): PresetId {
@@ -105,6 +117,11 @@ export function localOnlyAllows(url: string): boolean {
 }
 
 /** Map an HTTP status or a transport failure to a short message. Never includes a secret. */
+export function embedError(status: number | undefined, message: string, url: string): string {
+  if (status === 404 || /not supported|not_found/i.test(message)) return `no embeddings at ${hostOf(url)} (404) — use Ollama or another OpenAI-compatible /v1/embeddings endpoint`;
+  return mapStreamError(status, message, url);
+}
+
 export function mapStreamError(status: number | undefined, message: string, url: string): string {
   if (status === 401 || status === 403) return "API key rejected";
   if (status === 404) return "model or URL not found";
@@ -151,6 +168,12 @@ export interface ProviderDeps {
   temperature: () => number;
   maxTokens: () => number;
   localOnly: () => boolean;
+  exclude?: () => string;
+  embedBaseUrl?: () => string;
+  embedModel?: () => string;
+  /** secretRef for the embedding endpoint (its own key), when stored */
+  hasEmbedSecret?: () => Promise<boolean>;
+  embedSecretKey?: string;
   /** usage counters / daily limits (optional so tests can omit it) */
   usage?: import("./usage").UsageTracker;
   /** secretRef passed to ctx.net. Omitted when there is no stored key and the preset is ollama. */
@@ -270,6 +293,44 @@ export function createProvider(deps: ProviderDeps): AiProvider {
       return out;
     },
     usageSummary: () => deps.usage?.summary() ?? "",
+    registerMention: (m) => registerMention(m),
+    excluded: () => (deps.exclude?.() ?? "").split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !l.startsWith("#")),
+    embedInfo: () => ({ baseUrl: (deps.embedBaseUrl?.() ?? "").trim(), model: (deps.embedModel?.() ?? "").trim() }),
+    async embed(texts, opts = {}) {
+      assertEnabled();
+      const base = (deps.embedBaseUrl?.() ?? "").trim().replace(/\/+$/, "");
+      const model = (deps.embedModel?.() ?? "").trim();
+      if (!base || !model) throw new Error("no embedding endpoint configured (Settings → AI → Embeddings)");
+      assertLocal(base);
+      const url = base + "/embeddings";
+      const useKey = deps.hasEmbedSecret ? await deps.hasEmbedSecret() : false;
+      const out: number[][] = [];
+      const size = Math.max(1, Math.min(256, opts.batch ?? 32));
+      for (let i = 0; i < texts.length; i += size) {
+        if (opts.signal?.aborted) throw new Error("cancelled");
+        const input = texts.slice(i, i + size);
+        deps.usage?.check();
+        const req: Parameters<StreamFn>[0] = { url, method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ model, input }) };
+        if (useKey && deps.embedSecretKey) req.secretRef = deps.embedSecretKey;
+        const body = await new Promise<string>((resolve, reject) => {
+          let acc = "";
+          const h = deps.stream(req, (ev: StreamEvent) => {
+            if (ev.type === "data") acc += ev.data;
+            else if (ev.type === "error") reject(new Error(embedError(ev.status, ev.message, url)));
+            else if (ev.type === "done") resolve(acc);
+          });
+          opts.signal?.addEventListener("abort", () => { h.cancel(); reject(new Error("cancelled")); }, { once: true });
+        });
+        let json: any;
+        try { json = JSON.parse(body); } catch { throw new Error("embedding endpoint returned no JSON"); }
+        const rows: any[] = Array.isArray(json?.data) ? json.data.slice() : [];
+        rows.sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
+        if (rows.length !== input.length || rows.some((r) => !Array.isArray(r.embedding))) throw new Error(json?.error?.message ? "embeddings: " + json.error.message : "embedding endpoint returned an unexpected shape");
+        deps.usage?.record(json.usage ?? null, input.reduce((n, t) => n + t.length, 0), 0);
+        for (const r of rows) out.push(r.embedding.map(Number));
+      }
+      return out;
+    },
     info() {
       return {
         preset: deps.preset(),

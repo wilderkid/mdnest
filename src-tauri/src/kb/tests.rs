@@ -87,6 +87,8 @@ fn hybrid_search_rrf_lines_and_cjk() {
     let h = idx.search("ownership", Some(&emb("rust memory")), 3, None).unwrap();
     assert_eq!(h[0].rel, "notes/rust.md");
     assert_eq!(h[0].via, vec!["fts", "vec"]);
+    // unrelated vector beyond the distance cut-off finds nothing
+    assert!(idx.search_opts("zzz", Some(&[0.0, 0.0, 1.0]), 3, None, 0.05).unwrap().iter().all(|x| x.rel.ends_with("中文.md")));
     // CJK substring
     let h = idx.search("语义", None, 3, None).unwrap();
     assert_eq!(h.len(), 1);

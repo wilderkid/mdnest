@@ -18,7 +18,7 @@ export interface PluginManifest {
   depends?: Record<string, string>;
   description?: string;
   /** Capability grants. Absent means the matching API throws when called. */
-  permissions?: { net?: string[]; secrets?: boolean; editor?: EditorPerm[] };
+  permissions?: { net?: string[]; secrets?: boolean; editor?: EditorPerm[]; index?: boolean; workspace?: ("read" | "open")[] };
   /** Service names this plugin provides (see ctx.services.provide). */
   provides?: string[];
   /** Service names this plugin requires. A missing one disables the plugin. */
@@ -53,7 +53,7 @@ export interface SettingSpec {
 }
 
 export type DecorationProvider = (state: EditorState) => DecorationSet | null;
-export type AppEvent = "doc-changed" | "file-opened" | "file-saved" | "theme-changed" | "settings-changed";
+export type AppEvent = "doc-changed" | "file-opened" | "file-saved" | "theme-changed" | "settings-changed" | "workspace-changed";
 
 export interface SlashRunCtx { from: number; to: number; query: string }
 export interface SlashSpec { id: string; title: string; hint?: string; run: (ctx: SlashRunCtx) => void }
@@ -111,6 +111,21 @@ export interface PluginContext {
   net: { stream(req: StreamRequest, onEvent: (ev: StreamEvent) => void): { cancel(): void } };
   /** Presence checks only. Values are never returned. Requires permissions.secrets. */
   secrets: { has(key: string): Promise<boolean>; backend(): Promise<string> };
+  /** Open folder. Requires permissions.workspace. */
+  workspace: {
+    root(): string | null;
+    /** Open a file and reveal the block at a 1-based source line (citation jump). Requires "open". */
+    openAt(path: string, line?: number): Promise<void>;
+  };
+  /**
+   * Workspace index (Rust: SQLite + FTS5 + sqlite-vec) for the open folder. Requires permissions.index.
+   * ops: scan {exclude, paths?}, pending {limit}, putVectors {model, items:[[id, vec]]},
+   * search {query, vector?, k?, pathPrefix?}, related {path, k?}, stats, model, clear.
+   */
+  index: {
+    call<T = any>(op: string, args?: Record<string, any>): Promise<T>;
+    watch(onChange: (paths: string[]) => void): Promise<() => void>;
+  };
 }
 
 export interface EditorPlugin { manifest: PluginManifest; activate(ctx: PluginContext): any; deactivate?(): void }
@@ -128,6 +143,8 @@ export interface PluginHost {
   getView(): EditorView;
   /** Absolute path of the open document, or null when untitled. */
   getFilePath(): string | null;
+  getWorkspaceRoot(): string | null;
+  openAt(path: string, line?: number): Promise<void>;
   refreshDecorations(): void;
   addSettings(owner: string, specs: SettingSpec[]): void;
   /** Current value of a plugin setting, or undefined when unset. */
@@ -283,6 +300,11 @@ export class PluginManager {
     if (!list.includes(kind)) throw new Error(`plugin ${p.manifest.id} lacks editor permission "${kind}"`);
   }
 
+  private requireWs(p: EditorPlugin, kind: "read" | "open") {
+    const list = p.manifest.permissions?.workspace ?? [];
+    if (!list.includes(kind)) throw new Error(`plugin ${p.manifest.id} lacks workspace permission "${kind}"`);
+  }
+
   private context(p: EditorPlugin): PluginContext {
     const id = p.manifest.id, h = this.host;
     const deps: Record<string, any> = {};
@@ -419,6 +441,24 @@ export class PluginManager {
             }
           }
           return h.host.net.stream({ ...req, secretRef }, onEvent);
+        },
+      },
+      workspace: {
+        root: () => { this.requireWs(p, "read"); return h.getWorkspaceRoot(); },
+        openAt: async (path, line) => { this.requireWs(p, "open"); await h.openAt(path, line); },
+      },
+      index: {
+        call: async (op, args = {}) => {
+          if (!p.manifest.permissions?.index) throw new Error(`plugin ${id} lacks index permission`);
+          const root = h.getWorkspaceRoot();
+          if (!root) throw new Error("no folder is open");
+          return h.host.index.call({ ...args, op, root });
+        },
+        watch: async (fn) => {
+          if (!p.manifest.permissions?.index) throw new Error(`plugin ${id} lacks index permission`);
+          const root = h.getWorkspaceRoot();
+          if (!root) return () => {};
+          return h.host.index.watch(root, fn);
         },
       },
       secrets: {

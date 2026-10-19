@@ -23,6 +23,28 @@ export const browserHost: Host = {
   async exportPdf() { throw new Error("unsupported"); },
   async quit() { window.close(); },
   async defaultWorkspace() { return (await j(await fetch("/api/workspace"))).path; },
+  index: {
+    async call(req) {
+      const r = await j(await fetch("/api/kb", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(req) }));
+      if (r.err) throw new Error(r.err);
+      return r.ok;
+    },
+    async watch(root, onChange) {
+      const ac = new AbortController();
+      void (async () => {
+        try {
+          const res = await fetch("/api/kb/watch?root=" + encodeURIComponent(root), { signal: ac.signal });
+          const rd = res.body!.getReader(); const dec = new TextDecoder(); let buf = "";
+          for (;;) {
+            const { value, done } = await rd.read(); if (done) return;
+            buf += dec.decode(value, { stream: true });
+            let i; while ((i = buf.indexOf("\n")) >= 0) { const line = buf.slice(0, i); buf = buf.slice(i + 1); if (line.trim()) onChange(JSON.parse(line)); }
+          }
+        } catch { /* stopped */ }
+      })();
+      return () => ac.abort();
+    },
+  },
   secrets: {
     async set(id, value) {
       await j(await fetch("/api/secret/set", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id, value }) }));
