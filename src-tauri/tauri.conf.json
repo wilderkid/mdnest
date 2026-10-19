@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "MD Nest",
+  "productName": "mdnest",
   "version": "0.1.0",
   "identifier": "app.mdnest.editor",
   "build": {
@@ -38,7 +38,15 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "shortDescription": "MD Nest - a Typora-style Markdown editor",
+    "longDescription": "MD Nest is a live-preview (WYSIWYG) Markdown editor compatible with Typora themes.",
+    "linux": {
+      "deb": {
+        "desktopTemplate": "deb/mdnest.desktop",
+        "section": "editors"
+      }
+    }
   },
   "mainBinaryName": "mdnest"
 }

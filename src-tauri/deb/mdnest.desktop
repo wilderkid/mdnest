@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=MD Nest
+GenericName=Markdown Editor
+Comment={{comment}}
+Exec={{exec}} %F
+StartupWMClass={{exec}}
+Icon={{icon}}
+Terminal=false
+Categories=Office;TextEditor;Utility;
+MimeType=text/markdown;text/x-markdown;
