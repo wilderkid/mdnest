@@ -98,6 +98,28 @@ print(w, h)
     }, tmp);
     ok(ops.kind === "file" && ops.names.includes("note-renamed.md"), "native create + rename", JSON.stringify(ops.names));
     ok(String(ops.dup).includes("copy") && ops.dupGone, "native duplicate + trash", ops.dup);
+
+    // B1: open the temp folder, then a file created outside the app appears in the watched tree.
+    await n.exec(async (dir) => { await window.mdnest.openFolder(dir); }, tmp);
+    await sleep(400);
+    const external = path.join(tmp, "outside-watch.txt");
+    fs.writeFileSync(external, "created outside\n");
+    await sleep(900);
+    const seen = await n.exec(async () => {
+      const names = [...document.querySelectorAll("#file-library-tree .file-node-title, .file-list-item-file-name")].map((n) => (n.textContent || "").trim());
+      return names.join(" | ");
+    });
+    ok(seen.includes("outside-watch"), "B1 external file appears in the tree", seen.slice(0, 180));
+
+    // B4: the spell-check command reaches WebKitGTK and does not crash.
+    const spell = await n.exec(async () => {
+      await window.mdnest.runCommand("edit.spellcheck");
+      await new Promise((r) => setTimeout(r, 200));
+      const attr = document.getElementById("write")?.getAttribute("spellcheck");
+      await window.mdnest.runCommand("edit.spellcheck");
+      return { attr, ready: document.body.classList.contains("mdn-ready") };
+    });
+    ok(spell.attr === "true" && spell.ready, "B4 spell-check toggle does not crash", JSON.stringify(spell));
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }

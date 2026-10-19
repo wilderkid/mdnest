@@ -1,6 +1,7 @@
 // Source mode: whole-document CodeMirror 5 (gfm mode) in #typora-source, toggled by body.typora-sourceview-on
 import CodeMirror from "codemirror";
 import { loadMode } from "../editor/codeview";
+import { spellcheckOn } from "../editor/spellcheck";
 
 export class SourceMode {
   cm: CodeMirror.Editor | null = null;
@@ -18,6 +19,8 @@ export class SourceMode {
     else this.cm.setValue(text);
     document.body.classList.add("typora-sourceview-on");
     if (document.body.classList.contains("ty-readonly")) this.cm!.setOption("readOnly", "nocursor");
+    const cmEl = this.el.querySelector(".CodeMirror") as HTMLElement | null;
+    cmEl?.setAttribute("spellcheck", spellcheckOn() ? "true" : "false");
     setTimeout(() => { this.cm!.refresh(); this.cm!.focus(); }, 0);
   }
   hide(): string { document.body.classList.remove("typora-sourceview-on"); return this.cm?.getValue() ?? ""; }

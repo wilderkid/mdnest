@@ -30,6 +30,7 @@ export const browserHost: Host = {
   async duplicatePath(path) { return (await j(await fetch("/api/duplicate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path }) }))).path; },
   async trashPath(path) { await j(await fetch("/api/trash", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path }) })); },
   async revealPath(path) { await j(await fetch("/api/reveal?path=" + encodeURIComponent(path))); },
+  async setSpellcheck() {},
   async openExternal(url) {
     const u = url.trim();
     if (/^(https?:|mailto:)/i.test(u)) { window.open(u, "_blank", "noopener"); return; }

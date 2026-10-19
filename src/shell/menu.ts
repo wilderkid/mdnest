@@ -35,6 +35,7 @@ export interface MenuState {
   pairBrackets?: boolean;
   pairMarkdown?: boolean;
   smartPunct?: boolean;
+  spellcheck?: boolean;
   maximized?: boolean;
   readonly?: boolean;
   eol?: "LF" | "CRLF";
@@ -150,6 +151,7 @@ export function menuTemplate(mac: boolean): MenuNode[] {
         item("edit.autoPair.markdown", "Markdown Syntax"),
       ] },
       item("edit.smartPunct", "Smart Punctuation"),
+      item("edit.spellcheck", "Spell Check"),
     ],
   };
   const paragraph: MenuNode = {
@@ -384,6 +386,7 @@ function applyState(node: MenuNode, state: MenuState, commands: Command[], occup
   if (node.id === "edit.autoPair.brackets") return { ...node, enabled, checked: state.pairBrackets !== false };
   if (node.id === "edit.autoPair.markdown") return { ...node, enabled, checked: !!state.pairMarkdown };
   if (node.id === "edit.smartPunct") return { ...node, enabled, checked: !!state.smartPunct };
+  if (node.id === "edit.spellcheck") return { ...node, enabled, checked: !!state.spellcheck };
   if (node.id === "view.readonly") return { ...node, enabled, checked: !!state.readonly };
   if (node.id === "file.eol.lf") return { ...node, enabled, checked: state.eol !== "CRLF" };
   if (node.id === "file.eol.crlf") return { ...node, enabled, checked: state.eol === "CRLF" };

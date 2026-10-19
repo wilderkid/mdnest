@@ -148,6 +148,15 @@ Item-by-item status is in [docs/typora-parity-gap.md](docs/typora-parity-gap.md)
 Measured numbers and method: `docs/ram-notes.md`.
 Startup restores `mdnest.lastFile`, so a no-argument launch is only a "welcome screen" with a fresh profile. Compare builds with `scripts/measure-ram.sh`. It refuses to run while other WebKit processes are alive, because those share library pages and lower PSS.
 
+### Spell check
+Edit ▸ Spell Check (and Settings ▸ Spell check) is off by default. It sets `spellcheck` on `#write` and on the CodeMirror source view.
+
+| Platform | Checker |
+|---|---|
+| Linux (WebKitGTK) | `WebContext` spell checking, languages from `$LANG` (falling back to `en_US`). Uses enchant/hunspell. If no dictionary is installed, the toggle still works and no words are marked. |
+| Windows (WebView2) | the OS spellchecker, through the `spellcheck` attribute |
+| macOS (WKWebView) | the system spellchecker, through the `spellcheck` attribute |
+
 ### PDF platform notes
 | Platform | Path |
 |---|---|

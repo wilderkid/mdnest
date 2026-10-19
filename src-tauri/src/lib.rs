@@ -133,6 +133,7 @@ pub fn run() {
             commands::duplicate_path,
             commands::trash_path,
             commands::reveal_path,
+            commands::set_spellcheck,
             commands::open_external,
             commands::list_files,
             commands::file_excerpt,
@@ -166,3 +167,30 @@ pub fn disable_webview_chrome(win: &tauri::WebviewWindow) {
 
 #[cfg(not(windows))]
 pub fn disable_webview_chrome(_win: &tauri::WebviewWindow) {}
+
+/// Turn the platform spell checker on or off.
+/// Linux uses enchant/hunspell through WebKitGTK. If no dictionary is installed, the
+/// attribute still toggles and no words are marked. Windows WebView2 and macOS WKWebView
+/// follow the DOM `spellcheck` attribute, so there is nothing extra to set.
+#[cfg(target_os = "linux")]
+pub fn set_spellcheck(win: &tauri::WebviewWindow, enabled: bool) {
+    let _ = win.with_webview(move |webview| {
+        use webkit2gtk::{WebContextExt, WebViewExt};
+        let view: webkit2gtk::WebView = webview.inner();
+        let Some(ctx) = view.context() else { return };
+        ctx.set_spell_checking_enabled(enabled);
+        if enabled {
+            let lang = std::env::var("LANG").unwrap_or_default();
+            let code = lang.split(['.', '@']).next().unwrap_or("").trim();
+            let code = if code.is_empty() || code == "C" || code == "POSIX" {
+                "en_US"
+            } else {
+                code
+            };
+            ctx.set_spell_checking_languages(&[code]);
+        }
+    });
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn set_spellcheck(_win: &tauri::WebviewWindow, _enabled: bool) {}

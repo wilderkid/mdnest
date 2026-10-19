@@ -40,6 +40,8 @@ export interface Host {
   revealPath(path: string): Promise<void>;
   /** Open an http(s)/mailto URL or a local file in the system handler. */
   openExternal(url: string): Promise<void>;
+  /** Enable the platform spell checker. Browser host is a no-op (the attribute is enough). */
+  setSpellcheck(enabled: boolean): Promise<void>;
   /** Recursive Markdown/txt walk. */
   listFiles(root: string, max?: number): Promise<ListedFile[]>;
   /** First ~240 characters, front matter stripped. */

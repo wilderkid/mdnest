@@ -410,6 +410,15 @@ pub async fn trash_path(path: String) -> Result<(), String> {
         .map_err(|e| e.to_string())?
 }
 
+/// Enable or disable the platform spell checker.
+/// Linux: WebKitGTK WebContext (enchant/hunspell). Languages come from $LANG, else en_US.
+/// Windows and macOS: the WebView's own checker follows the `spellcheck` attribute, so this is a no-op.
+#[tauri::command]
+pub fn set_spellcheck(window: tauri::WebviewWindow, enabled: bool) -> Result<(), String> {
+    crate::set_spellcheck(&window, enabled);
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn open_external(url: String) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || crate::files::open_external(&url))

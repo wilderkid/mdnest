@@ -16,6 +16,7 @@ import { collectImages, imagesFromPastedHtml, pastedHtmlIsOnlyImages, type Image
 import { buildInputRules, buildKeymaps } from "./rules";
 import { autoPairPlugin, skipAutoCloser } from "./autopair";
 import { smartPunctPlugin } from "./smartpunct";
+import { spellcheckOn } from "./spellcheck";
 import type { Command, DecorationProvider } from "../plugins/api";
 import { suggestPlugin } from "./suggest";
 import { slashPlugin, slashItems, registerSlashItem } from "./slash";
@@ -71,7 +72,7 @@ export function createEditor(mount: HTMLElement, markdown: string, hooks: Editor
   const view = new EditorView({ mount }, {
     state: mkState(markdown),
     nodeViews: nodeViews() as any,
-    attributes: { id: "write", class: "", spellcheck: "false" },
+    attributes: { id: "write", class: "", spellcheck: spellcheckOn() ? "true" : "false" },
     dispatchTransaction(tr) {
       const st = view.state.apply(tr);
       view.updateState(st);

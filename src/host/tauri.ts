@@ -33,6 +33,7 @@ export const tauriHost: Host = {
   trashPath: (path) => invoke<void>("trash_path", { path }),
   revealPath: (path) => invoke<void>("reveal_path", { path }),
   openExternal: (url) => invoke<void>("open_external", { url }),
+  setSpellcheck: (enabled) => invoke<void>("set_spellcheck", { enabled }),
   listFiles: (root, max) => invoke<ListedFile[]>("list_files", { root, max: max ?? 5000 }),
   fileExcerpt: (path) => invoke<string>("file_excerpt", { path }),
   pathKind: (path) => invoke<string>("path_kind", { path }),

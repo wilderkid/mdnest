@@ -133,6 +133,29 @@ try {
   await page.screenshot({ path: path.join(OUT, "smart-punct.png") });
   await page.evaluate(() => localStorage.setItem("mdnest.smartPunct", "0"));
   ok(errors.length === 0, "B3 no page errors", errors.join(" | "));
+
+  // ---------- B4: spell check ----------
+  const off = await page.evaluate(() => document.getElementById("write").getAttribute("spellcheck"));
+  ok(off === "false", "B4 spellcheck starts off", off);
+  await run("edit.spellcheck");
+  await page.waitForTimeout(80);
+  const on = await page.evaluate(() => document.getElementById("write").getAttribute("spellcheck"));
+  ok(on === "true", "B4 toggle sets spellcheck on #write", on);
+  await run("view.source");
+  await page.waitForTimeout(200);
+  const src = await page.evaluate(() => document.querySelector("#typora-source .CodeMirror")?.getAttribute("spellcheck"));
+  ok(src === "true", "B4 source mode spellcheck follows the setting", src);
+  await run("view.source");
+  await page.waitForTimeout(150);
+  await run("edit.spellcheck");
+  await page.waitForTimeout(80);
+  const cleared = await page.evaluate(() => document.getElementById("write").getAttribute("spellcheck"));
+  ok(cleared === "false", "B4 toggle clears spellcheck", cleared);
+  await page.locator("#mdn-menubar").getByText("Edit", { exact: true }).click();
+  await page.waitForTimeout(80);
+  await page.screenshot({ path: path.join(OUT, "spellcheck.png") });
+  await page.keyboard.press("Escape");
+  ok(errors.length === 0, "B4 no page errors", errors.join(" | "));
 } catch (e) {
   ok(false, "parity-012b threw", e?.message || String(e));
 } finally {
