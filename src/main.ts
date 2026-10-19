@@ -235,6 +235,12 @@ const plugins = new PluginManager({
 document.getElementById("sidebar-toggle")!.onclick = () => document.body.classList.toggle("pin-outline");
 document.getElementById("source-toggle")!.onclick = toggleSource;
 document.addEventListener("keydown", (e) => {
+  // Reject a pending suggestion even when focus has left the editor (palette, prompt, sidebar).
+  if (e.key === "Escape" && !e.ctrlKey && !e.metaKey && !e.altKey && !source.active && document.querySelector("#write .md-sug")) {
+    e.preventDefault();
+    cancelPendingSuggestions(editor.view);
+    return;
+  }
   const mod = e.ctrlKey || e.metaKey;
   if (!mod) return;
   // global shortcuts that must also work while source mode / CodeMirror has focus
@@ -301,12 +307,18 @@ function renderSetting(owner: string, s: SettingSpec): string {
   return `<label>${title}<br><input type="${s.type === "number" ? "number" : "text"}" data-o="${owner}" data-k="${s.key}" value="${escapeHtml(String(v ?? ""))}"></label>`;
 }
 
+function hostSecretId(owner: string, key: string): string {
+  // Host ids are `^[a-z0-9._-]{1,64}$`. Plugins pass camelCase (`apiKey`); the net path
+  // lowercases via secretIdFor, so the settings form must store the same id.
+  return `${owner}.${key}`.toLowerCase();
+}
+
 async function refreshSecretStatus(node: HTMLElement) {
   const id = node.dataset.secretStatus!;
   const dot = id.indexOf(".");
   const owner = id.slice(0, dot), key = id.slice(dot + 1);
   try {
-    const sid = `${owner}.${key}`.toLowerCase();
+    const sid = hostSecretId(owner, key);
     const [has, backend] = await Promise.all([host.secrets.has(sid), host.secrets.backend()]);
     node.textContent = has ? `stored ✓ (${backend})` : `not stored (${backend})`;
   } catch { node.textContent = "unavailable"; }
@@ -314,7 +326,7 @@ async function refreshSecretStatus(node: HTMLElement) {
 
 async function saveOrClearSecret(btn: HTMLButtonElement) {
   const owner = btn.dataset.o!, key = btn.dataset.k!;
-  const sid = `${owner}.${key}`;
+  const sid = hostSecretId(owner, key);
   const row = btn.closest(".mdn-secret");
   const input = row?.querySelector("input") as HTMLInputElement | null;
   const status = row?.querySelector("[data-secret-status]") as HTMLElement | null;

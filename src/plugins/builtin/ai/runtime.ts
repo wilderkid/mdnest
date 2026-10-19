@@ -8,13 +8,16 @@ import type { AiProvider, ChatMessage } from "./provider";
 
 export function mountChat(el: HTMLElement, ctx: PluginContext, provider: AiProvider): () => void {
   // Second dynamic import so the chat UI is its own chunk, fetched only when the panel paints.
-  let cleanup: (() => void) | void;
+  let inner: (() => void) | void;
   let dead = false;
   void import("./panel").then((mod) => {
     if (dead) return;
-    cleanup = mod.mountChat(el, ctx, provider);
+    inner = mod.mountChat(el, ctx, provider);
   });
-  return () => { dead = true; if (typeof cleanup === "function") cleanup(); };
+  return () => {
+    dead = true;
+    if (typeof inner === "function") inner();
+  };
 }
 
 type Kind = "rewrite" | "polish" | "translate" | "summarize" | "continue";

@@ -2,7 +2,7 @@
 // It is written into the document in one transaction when the user accepts.
 import { Plugin, PluginKey, EditorState, Transaction } from "prosemirror-state";
 import { Decoration, DecorationSet, EditorView } from "prosemirror-view";
-import { undo } from "prosemirror-history";
+import { undo, closeHistory } from "prosemirror-history";
 import { wordDiff } from "./diff";
 import { selectionMarkdown, sliceForInsert } from "./insertmd";
 
@@ -28,6 +28,7 @@ export interface SugRecord {
 interface SugState { items: SugRecord[]; notice: string | null }
 
 export const suggestKey = new PluginKey<SugState>("mdn-suggest");
+const closeHistoryKey = closeHistory;
 
 type SugMeta =
   | { type: "add"; item: SugRecord }
@@ -97,7 +98,10 @@ export function suggestPlugin() {
             decos.push(Decoration.inline(it.from, it.to, { class: "md-sug-del" }));
           }
           const at = Math.max(0, Math.min(it.to, state.doc.content.size));
-          decos.push(Decoration.widget(at, (view) => widget(view, it), { side: 1, ignoreSelection: true, key: it.id }));
+          // The key must change when the pending text or phase changes. ProseMirror reuses a
+// widget DOM node while the key stays the same, which left "generating…" on screen
+// after the stream had already finished.
+decos.push(Decoration.widget(at, (view) => widget(view, it), { side: 1, ignoreSelection: true, key: widgetKey(it) }));
         }
         if (st.notice) {
           const pos = Math.max(0, Math.min(state.selection.from, state.doc.content.size));
@@ -124,6 +128,12 @@ export function suggestPlugin() {
       },
     },
   });
+}
+
+function widgetKey(it: SugRecord): string {
+  let h = 0;
+  for (let i = 0; i < it.text.length; i++) h = (Math.imul(h, 33) + it.text.charCodeAt(i)) >>> 0;
+  return it.id + ":" + it.phase + ":" + h + ":" + (it.error ?? "");
 }
 
 function widget(view: EditorView, it: SugRecord) {
@@ -215,11 +225,12 @@ export function cancelAll(view: EditorView, result: SugResult = "rejected") {
 }
 
 export function addSuggestion(view: EditorView, item: SugRecord) {
-  view.dispatch(view.state.tr.setMeta(suggestKey, { type: "add", item } satisfies SugMeta).setMeta("addToHistory", false));
+  // closeHistory so streaming patches do not join the next user edit (or split Accept from undo).
+  view.dispatch(view.state.tr.setMeta(suggestKey, { type: "add", item } satisfies SugMeta).setMeta("addToHistory", false).setMeta(closeHistoryKey, true));
 }
 
 export function patchSuggestion(view: EditorView, id: string, patch: Partial<SugRecord>) {
-  view.dispatch(view.state.tr.setMeta(suggestKey, { type: "patch", id, patch } satisfies SugMeta).setMeta("addToHistory", false));
+  view.dispatch(view.state.tr.setMeta(suggestKey, { type: "patch", id, patch } satisfies SugMeta).setMeta("addToHistory", false).setMeta(closeHistoryKey, true));
 }
 
 export function suggestionItems(state: EditorState): SugRecord[] {

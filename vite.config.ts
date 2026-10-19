@@ -108,6 +108,13 @@ function proxyStream(id: string, reqBody: any, res: any): void {
   }
   const ac = new AbortController();
   netCancels.set(id, ac);
+  let upstreamReq: any = null;
+  let upstreamRes: any = null;
+  const killUpstream = () => {
+    try { upstreamReq?.socket?.destroy(); } catch { /* already closed */ }
+    try { upstreamReq?.destroy(); } catch { /* already closed */ }
+    try { upstreamRes?.destroy(); } catch { /* already closed */ }
+  };
   const timeoutMs = Math.min(600_000, Math.max(1_000, Number(req.timeoutMs) || 120_000));
   const timer = setTimeout(() => ac.abort(), timeoutMs);
   const lib = target.protocol === "https:" ? https : http;
@@ -118,13 +125,16 @@ function proxyStream(id: string, reqBody: any, res: any): void {
     finished = true;
     clearTimeout(timer);
     netCancels.delete(id);
+    killUpstream();
     if (!res.writableEnded) { write({ type: "done" }); res.end(); }
   };
   let attempt = 0;
   let opened = false;
   const go = () => {
     if (ac.signal.aborted || finished) { finish(); return; }
-    const upstream = lib.request(target, { method, headers, timeout: timeoutMs }, (up) => {
+    const upstream = lib.request(target, { method, headers, timeout: timeoutMs, signal: ac.signal }, (up) => {
+      upstreamReq = upstream;
+      upstreamRes = up;
       const status = up.statusCode ?? 0;
       const retryable = status === 429 || status >= 500;
       // Same rule as Rust: retry 429/5xx at most twice, and only before the first byte is forwarded.
@@ -208,7 +218,9 @@ function proxyStream(id: string, reqBody: any, res: any): void {
       write({ type: "error", message: scrub(String(e?.message ?? e), secret) });
       finish();
     });
-    ac.signal.addEventListener("abort", () => { upstream.destroy(); finish(); }, { once: true });
+    ac.signal.addEventListener("abort", () => { killUpstream(); finish(); }, { once: true });
+    // The browser cancels by aborting its fetch. That closes this response; drop the upstream too.
+    res.on("close", () => { if (!finished) { ac.abort(); killUpstream(); finish(); } });
     if (method !== "GET" && req.body != null) upstream.write(String(req.body));
     upstream.end();
   };

@@ -114,7 +114,10 @@ const plugin: EditorPlugin = {
           box.append(p, btn);
           el.appendChild(box);
         };
+        let painted = false;
         const paintOn = () => {
+          if (painted) return;
+          painted = true;
           el.replaceChildren();
           const holder = document.createElement("div");
           holder.className = "mdn-ai mdn-ai-loading";
@@ -129,12 +132,13 @@ const plugin: EditorPlugin = {
           if (!isOn(ctx)) {
             if (typeof cleanup === "function") cleanup();
             cleanup = undefined;
+            painted = false;
             paintOff();
             return;
           }
           ensureSlash();
           // Status-only changes must not reload the chat chunk or wipe the transcript.
-          if (cleanup) return;
+          if (painted) return;
           paintOn();
         };
         sync();

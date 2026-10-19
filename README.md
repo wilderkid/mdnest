@@ -13,6 +13,9 @@ npm run dev                      # browser dev mode, http://127.0.0.1:1420 (file
 npm run build && npx vite preview   # http://127.0.0.1:4173
 node tests/screenshots.mjs      # headless Playwright screenshots + smoke checks → screenshots/
 node tests/phase2.mjs           # Phase 2 E2E suite (35 checks; needs `npx vite preview` on :4173)
+node tests/mock-openai.mjs      # OpenAI-compatible mock (default :1421, or MOCK_OPENAI_PORT). Fake key test-key-123 only
+node tests/ai-e2e.mjs           # AI plugin E2E (starts the mock; needs preview on :4173, or starts it) → screenshots/ai/
+npx tsx tests/ai.ts             # AI plugin unit tests (no network)
 npx tsx tests/markers.ts        # editable-marker unit tests
 npx tsx tests/refs.ts           # footnotes + reference links (round-trip, markers)
 node tests/fixes.mjs            # E2E: footnotes/ref links, WebKitGTK-style paste/drop payloads

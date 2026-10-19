@@ -239,8 +239,10 @@ export function createProvider(deps: ProviderDeps): AiProvider {
             await new Promise<void>((resolve) => { wake = resolve; });
           }
         } finally {
-          handle.cancel();
           signal?.removeEventListener("abort", onAbort);
+          // The iterator always ends here, including a normal finish. Cancelling then
+          // aborts the host request and makes a completed call look like a client cancel.
+          if (signal?.aborted || failure) handle.cancel();
         }
       },
     };

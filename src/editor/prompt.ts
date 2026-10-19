@@ -25,15 +25,17 @@ export function openPrompt(view: EditorView, opts: PromptOpts): Promise<string |
     box.style.left = Math.max(8, coords.left) + "px";
     box.style.top = (coords.bottom + 6) + "px";
     let done = false;
-    const finish = (v: string | null) => {
+    const finish = (v: string | null, refocus = false) => {
       if (done) return;
       done = true;
       box.remove();
+      // Enter/Escape should land back in the editor so Accept/Reject keys work immediately.
+      if (refocus) view.focus();
       resolve(v);
     };
     input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); finish(input.value); }
-      else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); finish(null); }
+      if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); finish(input.value, true); }
+      else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); finish(null, true); }
     });
     input.addEventListener("blur", () => setTimeout(() => finish(null), 120));
     input.focus();
