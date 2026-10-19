@@ -36,7 +36,7 @@ What really was Windows-specific (before):
 | | done | partial | missing | win-broken | n/a |
 |---|---|---|---|---|---|
 | Before (0.1.0) | 28 | 42 | 85 | 4 | 4 |
-| After (0.1.2 so far) | 155 | 0 | 4 | 0 | 4 |
+| After (0.1.2 so far) | 157 | 0 | 2 | 0 | 4 |
 
 Counted by `python3 scripts/parity-count.py` (163 rows; an empty After cell inherits Before).
 
@@ -105,7 +105,7 @@ Counted by `python3 scripts/parity-count.py` (163 rows; an empty After cell inhe
 | Find in files (sidebar search) | Ctrl+Shift+F | partial | done | #file-library-search-input; content hits open at the line |
 | Smart punctuation / substitutions |  | missing | done | Edit ▸ Smart Punctuation, off by default; quotes, dashes, ellipsis; undo restores the typed characters |
 | Spell check |  | missing | done | Edit ▸ Spell Check, off by default; spellcheck on #write and source mode; Linux WebKitGTK enchant/hunspell |
-| Emoji & symbols / :emoji: autocomplete |  | missing | missing | not built |
+| Emoji & symbols / :emoji: autocomplete |  | missing | done | :shortcode: popup and Edit ▸ Emoji & Symbols grid; gemoji MIT data; setting default on |
 | Auto-pair brackets and quotes |  | missing | done | on by default; Edit ▸ Auto Pair and Settings |
 | Auto-pair Markdown syntax (`*`, `` ` ``, `~~`) |  | missing | done | off by default; Edit ▸ Auto Pair and Settings |
 | Code tools: copy code content |  | missing | done | Copy button in .code-tooltip; Edit ▸ Code Tools ▸ Copy Code Content; not exported |
@@ -268,7 +268,7 @@ Still missing or only partial after 0.1.1. Each note says why.
 - **Line endings and encodings** (done). Open detects a BOM, else strict UTF-8, else the fallback encoding (default GB18030). Save reuses the encoding and the majority line ending. The footer shows both; File ▸ Line Endings and Encoding reopen or save with a chosen encoding. Legacy charsets use a TextDecoder reverse map.
 - **Smart punctuation** (done). Edit ▸ Smart Punctuation (off by default) turns straight quotes into curly quotes, `--` into an en dash, `---` into an em dash, and `...` into an ellipsis. A line of only hyphens stays a rule or front matter. Code, math, and link marks are skipped. Undo restores the typed characters.
 - **Spell check** (done). Edit ▸ Spell Check (off by default) sets `spellcheck` on `#write` and on CodeMirror source mode. Linux enables WebKitGTK spell checking (enchant/hunspell, languages from `$LANG`, else `en_US`). Windows and macOS use the WebView's own checker.
-- **Emoji autocomplete** (missing). Not built.
+- **Emoji autocomplete** (done). Typing `:` plus two letters opens `.md-emoji-suggest`. Enter, Tab, or a click inserts the character, and a finished `:smile:` converts too. Edit ▸ Emoji & Symbols opens a searchable grid. The setting is on by default. Code and math are skipped. Shortcodes come from gemoji (MIT).
 - **Copy code content** (done). Each code fence has a Copy button in `.code-tooltip`. Edit ▸ Code Tools ▸ Copy Code Content copies the fence at the caret. The button is not exported.
 - **Table align and move** (done). Paragraph ▸ Table and the table context menu add, delete, and move rows and columns, align a column (written to the GFM delimiter row), copy the table as Markdown, and delete the table. The floating toolbar has the same commands under "…".
 - **Toggle task status** (done). Paragraph ▸ Task Status ▸ Toggle Task Status (Ctrl+Alt+X), Mark as Complete, and Mark as Incomplete act on every task in the selection. Clicking the checkbox still toggles one item.

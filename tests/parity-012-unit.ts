@@ -6,6 +6,7 @@ import { setTaskStatus } from "../src/editor/editops";
 import { EditorState, TextSelection } from "prosemirror-state";
 import { applyEol, decodeAs, detectEol, encodeText, openBytes, type SaveEncoding } from "../src/editor/encoding";
 import { curlyQuote } from "../src/editor/smartpunct";
+import { emojiChar, emojiMatches } from "../src/editor/emoji";
 
 let failed = 0;
 const ok = (c: boolean, name: string, info = "") => {
@@ -90,6 +91,9 @@ function roundEnc(text: string, enc: SaveEncoding): { back: string; unmapped: st
 ok(curlyQuote("", '"') === "\u201C" && curlyQuote("a", '"') === "\u201D", "curly double quotes");
 ok(curlyQuote("", "'") === "\u2018" && curlyQuote("n", "'") === "\u2019", "apostrophe stays a right single quote");
 ok(curlyQuote(" ", "'") === "\u2018", "opening single quote after space");
+ok(emojiChar("smile") === "😄", "smile shortcode", emojiChar("smile"));
+ok(emojiMatches("rock").some((m) => m.name === "rocket"), "rocket matches rock");
+ok(emojiMatches("s").length === 0, "one letter does not open matches");
 
 console.log(`\n${failed ? failed + " failed" : "all passed"}`);
 process.exit(failed ? 1 : 0);

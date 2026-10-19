@@ -39,6 +39,7 @@ import {
 import { pairBracketsOn, pairMarkdownOn, PAIR_BRACKETS_KEY, PAIR_MARKDOWN_KEY } from "./editor/autopair";
 import { smartPunctOn, SMART_PUNCT_KEY } from "./editor/smartpunct";
 import { spellcheckOn, SPELL_KEY, applySpellcheck } from "./editor/spellcheck";
+import { emojiOn, EMOJI_KEY, openEmojiPicker } from "./editor/emoji";
 import {
   ENCODINGS, SAVE_ENCODINGS, EOL_KEY, FALLBACK_KEY, applyEol, b64ToBytes, bytesToB64, decodeAs, defaultEol,
   encodeText, encodingLabel, fallbackEncoding, openBytes, type SaveEncoding,
@@ -504,6 +505,8 @@ const plugins = new PluginManager({
   { id: "file.exportPdf", title: "File: Export PDF…", run: () => exportPdf() },
   { id: "edit.smartPunct", title: "Edit: Smart Punctuation", run: () => { const on = !smartPunctOn(); localStorage.setItem(SMART_PUNCT_KEY, on ? "1" : "0"); notify("Smart punctuation " + (on ? "on" : "off")); scheduleMenu(); } },
   { id: "edit.spellcheck", title: "Edit: Spell Check", run: () => { const on = !spellcheckOn(); localStorage.setItem(SPELL_KEY, on ? "1" : "0"); applySpellcheck(on); void host.setSpellcheck(on).catch(() => {}); notify("Spell check " + (on ? "on" : "off")); scheduleMenu(); } },
+  { id: "edit.emoji", title: "Edit: Emoji & Symbols", run: () => openEmojiPicker(editor.view) },
+  { id: "edit.emojiToggle", title: "Edit: Emoji Autocomplete", run: () => { const on = !emojiOn(); localStorage.setItem(EMOJI_KEY, on ? "1" : "0"); notify("Emoji autocomplete " + (on ? "on" : "off")); scheduleMenu(); } },
   { id: "file.reload", title: "File: Reload from Disk", run: () => reloadFromDisk(true) },
   { id: "file.eol.lf", title: "File: Line Endings LF", run: () => { state.eol = "LF"; setDirty(true); paintEncoding(); scheduleMenu(); } },
   { id: "file.eol.crlf", title: "File: Line Endings CRLF", run: () => { state.eol = "CRLF"; setDirty(true); paintEncoding(); scheduleMenu(); } },
@@ -1251,6 +1254,7 @@ function menuState(windows = openWindows): MenuState {
     pairMarkdown: pairMarkdownOn(),
     smartPunct: smartPunctOn(),
     spellcheck: spellcheckOn(),
+    emoji: emojiOn(),
     readonly,
     eol: state.eol,
     encoding: state.encoding,
@@ -1566,6 +1570,7 @@ sidebar.addTab("settings", "⚙", undefined, {
       <label><input type="checkbox" id="set-pair-md" ${pairMarkdownOn() ? "checked" : ""}> Auto-pair Markdown syntax</label>
       <label><input type="checkbox" id="set-smart" ${smartPunctOn() ? "checked" : ""}> Smart punctuation</label>
       <label><input type="checkbox" id="set-spell" ${spellcheckOn() ? "checked" : ""}> Spell check</label>
+      <label><input type="checkbox" id="set-emoji" ${emojiOn() ? "checked" : ""}> Emoji autocomplete</label>
       <label>Default line ending for new files<br><select id="set-eol">
         <option value="LF" ${defaultEol() === "LF" ? "selected" : ""}>LF</option>
         <option value="CRLF" ${defaultEol() === "CRLF" ? "selected" : ""}>CRLF</option>
@@ -1590,6 +1595,7 @@ sidebar.addTab("settings", "⚙", undefined, {
       void host.setSpellcheck(on).catch(() => {});
       scheduleMenu();
     };
+    (el.querySelector("#set-emoji") as HTMLInputElement).onchange = (e) => { localStorage.setItem(EMOJI_KEY, (e.target as HTMLInputElement).checked ? "1" : "0"); scheduleMenu(); };
     (el.querySelector("#set-eol") as HTMLSelectElement).onchange = (e) => localStorage.setItem(EOL_KEY, (e.target as HTMLSelectElement).value);
     (el.querySelector("#set-fallback") as HTMLSelectElement).onchange = (e) => localStorage.setItem(FALLBACK_KEY, (e.target as HTMLSelectElement).value);
     const fsel = el.querySelector("#set-imgfolder") as HTMLSelectElement, fcus = el.querySelector("#set-imgfolder-custom") as HTMLInputElement;

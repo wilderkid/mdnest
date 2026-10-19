@@ -17,6 +17,7 @@ import { buildInputRules, buildKeymaps } from "./rules";
 import { autoPairPlugin, skipAutoCloser } from "./autopair";
 import { smartPunctPlugin } from "./smartpunct";
 import { spellcheckOn } from "./spellcheck";
+import { emojiPlugin } from "./emoji";
 import type { Command, DecorationProvider } from "../plugins/api";
 import { suggestPlugin } from "./suggest";
 import { slashPlugin, slashItems, registerSlashItem } from "./slash";
@@ -57,7 +58,7 @@ export function createEditor(mount: HTMLElement, markdown: string, hooks: Editor
     slashPlugin(),
     liveCommandKeymap(() => hooks.commands?.() ?? []),
     defsPlugin(), defsKeymap(),
-    autoPairPlugin(), smartPunctPlugin(), buildInputRules(schema), ...buildKeymaps(schema, hooks.keys), history(), dropCursor(), gapCursor(),
+    autoPairPlugin(), smartPunctPlugin(), emojiPlugin(), buildInputRules(schema), ...buildKeymaps(schema, hooks.keys), history(), dropCursor(), gapCursor(),
     columnResizing(), tableEditing(), revealPlugin(), tableToolbarPlugin(), searchPlugin(), externalDecorations(hooks),
   ];
   const mkState = (md: string) => {

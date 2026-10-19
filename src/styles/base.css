@@ -320,6 +320,19 @@ body.typora-sourceview-on content { visibility: hidden; }
 .mdn-slash-item small, .mdn-slash-empty { opacity: .6; }
 .mdn-slash-empty { padding: 4px 8px; }
 
+.md-emoji-suggest { position: fixed; z-index: 45; min-width: 180px; max-height: 240px; overflow: auto; padding: 4px; border-radius: 8px; font-size: 13px;
+  background: var(--bg-color); color: var(--text-color); border: 1px solid rgba(127,127,127,.35); box-shadow: 0 8px 28px rgba(0,0,0,.18); }
+.md-emoji-suggest-item { display: flex; align-items: center; gap: 8px; padding: 3px 8px; border-radius: 4px; cursor: pointer; }
+.md-emoji-suggest-item.sel, .md-emoji-suggest-item:hover { background: var(--active-file-bg-color); }
+.md-emoji-glyph { font-size: 16px; width: 1.4em; text-align: center; }
+.md-emoji-picker { position: fixed; z-index: 50; width: 320px; padding: 8px; border-radius: 8px;
+  background: var(--bg-color); color: var(--text-color); border: 1px solid rgba(127,127,127,.35); box-shadow: 0 8px 28px rgba(0,0,0,.2); }
+.md-emoji-picker input { width: 100%; box-sizing: border-box; font: inherit; padding: 4px 8px; margin-bottom: 6px;
+  border: 1px solid rgba(127,127,127,.35); border-radius: 4px; background: transparent; color: inherit; }
+.md-emoji-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; max-height: 240px; overflow: auto; }
+.md-emoji-cell { font-size: 18px; line-height: 1.4; border: 0; background: transparent; cursor: pointer; border-radius: 4px; color: inherit; }
+.md-emoji-cell:hover { background: var(--active-file-bg-color); }
+
 /* floating prompt */
 .mdn-prompt { position: fixed; z-index: 46; padding: 4px; border-radius: 8px;
   background: var(--bg-color); color: var(--text-color); border: 1px solid rgba(127,127,127,.35); box-shadow: 0 6px 20px rgba(0,0,0,.16); }

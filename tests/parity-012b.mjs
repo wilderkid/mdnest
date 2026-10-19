@@ -155,7 +155,51 @@ try {
   await page.waitForTimeout(80);
   await page.screenshot({ path: path.join(OUT, "spellcheck.png") });
   await page.keyboard.press("Escape");
+  await page.waitForTimeout(80);
   ok(errors.length === 0, "B4 no page errors", errors.join(" | "));
+
+  // ---------- B5: emoji autocomplete ----------
+  await page.keyboard.press("Escape");
+  await page.evaluate(() => localStorage.removeItem("mdnest.emoji"));
+  await page.evaluate(() => window.mdnest.editor.setMarkdown("# Title\n\nA paragraph.\n"));
+  await page.waitForTimeout(80);
+  await page.locator("#write").click();
+  await page.keyboard.press("Control+End");
+  await page.keyboard.type(":smi");
+  await page.waitForTimeout(250);
+  const popup = await page.locator(".md-emoji-suggest").isVisible();
+  ok(popup, "B5 :smi opens the emoji suggest popup");
+  const first = await page.locator(".md-emoji-suggest-item").first().textContent();
+  ok(!!first && first.includes(":"), "B5 popup lists a shortcode", first);
+  await page.screenshot({ path: path.join(OUT, "emoji-suggest.png") });
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(80);
+  const inserted = await md();
+  ok(!inserted.includes(":smi") && /\p{Extended_Pictographic}/u.test(inserted), "B5 Enter inserts an emoji", inserted.slice(-40));
+  await page.keyboard.type(":smile:");
+  await page.waitForTimeout(80);
+  const full = await md();
+  ok(!full.endsWith(":smile:") && (full.match(/\p{Extended_Pictographic}/gu) || []).length >= 2, "B5 :smile: converts when closed", full.slice(-40));
+  await page.evaluate(() => window.mdnest.editor.setMarkdown("```\n:smile:\n```\n"));
+  await page.waitForTimeout(80);
+  ok((await md()).includes(":smile:"), "B5 does not convert inside a code fence", await md());
+  await run("edit.emoji");
+  await page.waitForTimeout(150);
+  ok(await page.locator(".md-emoji-picker").isVisible(), "B5 Emoji & Symbols opens the picker");
+  await page.locator(".md-emoji-picker input").fill("rocket");
+  await page.waitForTimeout(80);
+  await page.screenshot({ path: path.join(OUT, "emoji-picker.png") });
+  await page.locator(".md-emoji-cell").first().click();
+  await page.waitForTimeout(80);
+  ok(!(await page.locator(".md-emoji-picker").isVisible()), "B5 click inserts and closes the picker");
+  await page.evaluate(() => localStorage.setItem("mdnest.emoji", "0"));
+  await page.locator("#write").click();
+  await page.keyboard.press("Control+End");
+  await page.keyboard.type(" :wave");
+  await page.waitForTimeout(120);
+  ok(!(await page.locator(".md-emoji-suggest").isVisible()), "B5 setting off hides the popup");
+  await page.evaluate(() => localStorage.removeItem("mdnest.emoji"));
+  ok(errors.length === 0, "B5 no page errors", errors.join(" | "));
 } catch (e) {
   ok(false, "parity-012b threw", e?.message || String(e));
 } finally {

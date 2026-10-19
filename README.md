@@ -148,6 +148,8 @@ Item-by-item status is in [docs/typora-parity-gap.md](docs/typora-parity-gap.md)
 Measured numbers and method: `docs/ram-notes.md`.
 Startup restores `mdnest.lastFile`, so a no-argument launch is only a "welcome screen" with a fresh profile. Compare builds with `scripts/measure-ram.sh`. It refuses to run while other WebKit processes are alive, because those share library pages and lower PSS.
 
+Emoji shortcodes in `src/editor/emoji-data.ts` are generated from the [gemoji](https://github.com/wooorm/gemoji) package (MIT). The names come from [github/gemoji](https://github.com/github/gemoji) (MIT). Regenerate with `node scripts/gen-emoji.mjs`.
+
 ### Spell check
 Edit ▸ Spell Check (and Settings ▸ Spell check) is off by default. It sets `spellcheck` on `#write` and on the CodeMirror source view.
 
