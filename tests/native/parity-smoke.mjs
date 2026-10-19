@@ -20,8 +20,36 @@ let wm;
 let fail = 0;
 const ok = (c, m, info = "") => { console.log((c ? "PASS " : "FAIL ") + m + (info ? " — " + String(info).slice(0, 200) : "")); if (!c) fail++; };
 
+const tmp = path.join(os.tmpdir(), "mdnest-parity-native-" + Date.now().toString(36));
+fs.mkdirSync(tmp, { recursive: true });
+const fakeDir = path.join(tmp, "bin");
+fs.mkdirSync(fakeDir, { recursive: true });
+const argLog = path.join(tmp, "pandoc-args.txt");
+fs.writeFileSync(path.join(fakeDir, "pandoc"), `#!/bin/sh
+echo "$@" >> ${JSON.stringify(argLog)}
+if [ "$1" = "--version" ]; then
+  echo "pandoc 0.0-fake"
+  exit 0
+fi
+cat > /dev/null
+out=""
+prev=""
+for a in "$@"; do
+  if [ "$prev" = "-o" ]; then out="$a"; fi
+  prev="$a"
+done
+if [ -n "$out" ]; then printf 'fake %s\\n' "$*" > "$out"; fi
+exit 0
+`, { mode: 0o755 });
+fs.chmodSync(path.join(fakeDir, "pandoc"), 0o755);
+
 try {
-  n = await startNative({ app: APP, display: DISPLAY, args: ["--no-restore"] });
+  n = await startNative({
+    app: APP,
+    display: DISPLAY,
+    args: ["--no-restore"],
+    env: { PATH: fakeDir + path.delimiter + (process.env.PATH || "") },
+  });
   // Bare Xvfb never focuses the toplevel, so F10 / Ctrl+2 need a window manager on this display only.
   wm = spawn("xfwm4", ["--compositor=off"], { env, stdio: "ignore" });
   await n.waitFor(() => window.mdnest?.editor?.view && window.mdnest.host.kind === "tauri" && document.body.classList.contains("mdn-ready"), { timeout: 20000 });
@@ -80,8 +108,6 @@ print(w, h)
   ok(String(level.md).includes("## "), "Ctrl+2 reaches the webview as heading 2", JSON.stringify(level));
 
   // File commands through the real host, on a temp folder. No GTK menu clicking.
-  const tmp = path.join(os.tmpdir(), "mdnest-parity-native-" + Date.now().toString(36));
-  fs.mkdirSync(tmp, { recursive: true });
   try {
     const ops = await n.exec(async (dir) => {
       const h = window.mdnest.host;
@@ -120,6 +146,21 @@ print(w, h)
       return { attr, ready: document.body.classList.contains("mdn-ready") };
     });
     ok(spell.attr === "true" && spell.ready, "B4 spell-check toggle does not crash", JSON.stringify(spell));
+
+    const pandoc = await n.exec(async (dir) => {
+      const h = window.mdnest.host;
+      const info = await h.pandocInfo();
+      const out = dir + "/note.odt";
+      let err = "";
+      try { await h.pandocExport("# Native\n", "odt", out, dir); }
+      catch (e) { err = String(e && e.message || e); }
+      const kind = await h.pathKind(out);
+      return { found: info.found, version: info.version, path: info.path, err, kind };
+    }, tmp);
+    ok(pandoc.found && /fake/.test(pandoc.version || ""), "C2 fake pandoc detected", JSON.stringify(pandoc));
+    ok(pandoc.kind === "file" && !pandoc.err, "C2 fake pandoc wrote the output", JSON.stringify(pandoc));
+    const recorded = fs.existsSync(argLog) ? fs.readFileSync(argLog, "utf8") : "";
+    ok(recorded.includes("-t") && recorded.includes("odt"), "C2 fake pandoc recorded args", recorded.slice(0, 180));
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }

@@ -457,6 +457,79 @@ async function exportDocx(out?: string) {
   notify("Exported " + p);
   return p;
 }
+
+const PANDOC_FORMATS: { id: string; writer: string; ext: string; label: string }[] = [
+  { id: "file.exportPandoc.docx", writer: "docx", ext: "docx", label: "Word (pandoc)" },
+  { id: "file.exportPandoc.odt", writer: "odt", ext: "odt", label: "OpenOffice" },
+  { id: "file.exportPandoc.rtf", writer: "rtf", ext: "rtf", label: "RTF" },
+  { id: "file.exportPandoc.epub", writer: "epub", ext: "epub", label: "EPUB" },
+  { id: "file.exportPandoc.latex", writer: "latex", ext: "tex", label: "LaTeX" },
+  { id: "file.exportPandoc.mediawiki", writer: "mediawiki", ext: "wiki", label: "MediaWiki" },
+  { id: "file.exportPandoc.rst", writer: "rst", ext: "rst", label: "reStructuredText" },
+  { id: "file.exportPandoc.textile", writer: "textile", ext: "textile", label: "Textile" },
+  { id: "file.exportPandoc.opml", writer: "opml", ext: "opml", label: "OPML" },
+  { id: "file.exportPandoc.org", writer: "org", ext: "org", label: "Org mode" },
+];
+
+function pandocMissingModal(): Promise<"recheck" | "close"> {
+  return new Promise((resolve) => {
+    const back = document.createElement("div");
+    back.className = "modal-backdrop";
+    back.id = "pandoc-missing";
+    back.innerHTML = `<div class="modal" role="dialog" aria-modal="true">
+      <h3>Pandoc not found</h3>
+      <p>These formats need Pandoc. Built-in Word, HTML, and PDF still work.</p>
+      <div class="modal-actions">
+        <button type="button" class="btn" data-c="install">Install Pandoc</button>
+        <button type="button" class="btn" data-c="recheck">Re-check</button>
+        <button type="button" class="btn btn-primary" data-c="close">Close</button>
+      </div></div>`;
+    document.body.appendChild(back);
+    const done = (v: "recheck" | "close") => { back.remove(); resolve(v); };
+    back.querySelector("[data-c=close]")!.addEventListener("click", () => done("close"));
+    back.querySelector("[data-c=recheck]")!.addEventListener("click", () => done("recheck"));
+    back.querySelector("[data-c=install]")!.addEventListener("click", () => {
+      void host.openExternal("https://pandoc.org/installing.html").catch((e) => notify(String(e?.message ?? e)));
+    });
+  });
+}
+
+async function ensurePandoc(): Promise<boolean> {
+  for (;;) {
+    const info = await host.pandocInfo().catch(() => ({ found: false, version: "", path: "" }));
+    pandocFound = !!info.found;
+    scheduleMenu();
+    if (info.found) return true;
+    const choice = await pandocMissingModal();
+    if (choice === "close") return false;
+  }
+}
+
+async function exportPandoc(writer: string, ext: string, out?: string) {
+  if (!(await ensurePandoc())) return;
+  const p = out ?? (await host.pickSavePath(docStem() + "." + ext, ext as any));
+  if (!p) return;
+  if (source.active) editor.setMarkdown(source.value());
+  notify("Exporting with Pandoc…");
+  try {
+    await host.pandocExport(currentMarkdown(), writer, p, docDir());
+    notify("Exported " + p);
+    return p;
+  } catch (e: any) {
+    const msg = String(e?.message ?? e);
+    if (/not found/i.test(msg)) { pandocFound = false; scheduleMenu(); await pandocMissingModal(); return; }
+    notify("Pandoc export failed: " + msg);
+  }
+}
+
+async function exportPandocCustom() {
+  if (!(await ensurePandoc())) return;
+  const writer = await openPrompt(editor.view, { placeholder: "pandoc writer name", value: "" });
+  if (!writer) return;
+  const name = writer.trim();
+  if (!/^[A-Za-z0-9_+-]{1,64}$/.test(name)) { notify("Not a pandoc writer name"); return; }
+  await exportPandoc(name, name);
+}
 async function exportPdf(out?: string) {
   const html = await exportHtmlString(true);
   try {
@@ -522,6 +595,8 @@ const plugins = new PluginManager({
   { id: "file.exportHtml", title: "File: Export HTML…", run: () => exportHtml() },
   { id: "file.exportPdf", title: "File: Export PDF…", run: () => exportPdf() },
   { id: "file.exportDocx", title: "File: Export Word (.docx)", run: () => exportDocx() },
+  ...PANDOC_FORMATS.map((f) => ({ id: f.id, title: "File: Export " + f.label, run: () => exportPandoc(f.writer, f.ext) })),
+  { id: "file.exportPandoc.custom", title: "File: Export Custom pandoc format…", run: () => exportPandocCustom() },
   { id: "edit.smartPunct", title: "Edit: Smart Punctuation", run: () => { const on = !smartPunctOn(); localStorage.setItem(SMART_PUNCT_KEY, on ? "1" : "0"); notify("Smart punctuation " + (on ? "on" : "off")); scheduleMenu(); } },
   { id: "edit.spellcheck", title: "Edit: Spell Check", run: () => { const on = !spellcheckOn(); localStorage.setItem(SPELL_KEY, on ? "1" : "0"); applySpellcheck(on); void host.setSpellcheck(on).catch(() => {}); notify("Spell check " + (on ? "on" : "off")); scheduleMenu(); } },
   { id: "edit.emoji", title: "Edit: Emoji & Symbols", run: () => openEmojiPicker(editor.view) },
@@ -871,6 +946,7 @@ async function openLinkHref(href: string) {
   catch { window.open(raw, "_blank", "noopener"); }
 }
 let readonly = false;
+let pandocFound = false;
 function toggleReadonly() {
   readonly = !readonly;
   editor.view.setProps({ editable: () => !readonly });
@@ -1277,6 +1353,7 @@ function menuState(windows = openWindows): MenuState {
     readonly,
     eol: state.eol,
     encoding: state.encoding,
+    pandoc: pandocFound,
     inCode: inCodeNow(),
     onLink: !!linkAt(editor.view.state),
     onImage: !!imageSelection(editor.view.state),
@@ -1705,7 +1782,7 @@ function onNativeDrop(drop: NativeDrop) {
     notify,
   });
 }
-(window as any).mdnest = { editor, host, notify, exportHtmlString, exportDocx, findBar, state, openAt, commands, runCommand, refreshMenu, dispatcher, handleNativeDrop: onNativeDrop, sidebar, confirmDirty, guard, plugins, openFolder: pickFolderPath };
+(window as any).mdnest = { editor, host, notify, exportHtmlString, exportDocx, exportPandoc, findBar, state, openAt, commands, runCommand, refreshMenu, dispatcher, handleNativeDrop: onNativeDrop, sidebar, confirmDirty, guard, plugins, openFolder: pickFolderPath };
 
 window.addEventListener("beforeunload", (e) => { if (state.dirty && host.kind === "browser") e.preventDefault(); });
 

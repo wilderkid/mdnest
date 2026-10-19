@@ -7,7 +7,7 @@ export interface Host {
   kind: "tauri" | "browser";
   pickFile(): Promise<string | null>;
   pickFolder(): Promise<string | null>;
-  pickSavePath(defaultName?: string, ext?: "md" | "html" | "pdf" | "docx"): Promise<string | null>;
+  pickSavePath(defaultName?: string, ext?: string): Promise<string | null>;
   readFile(path: string): Promise<string>;
   writeFile(path: string, text: string): Promise<void>;
   /** Raw file bytes as standard base64. */
@@ -42,6 +42,10 @@ export interface Host {
   openExternal(url: string): Promise<void>;
   /** Enable the platform spell checker. Browser host is a no-op (the attribute is enough). */
   setSpellcheck(enabled: boolean): Promise<void>;
+  /** Whether pandoc is on PATH (or a known install location). */
+  pandocInfo(): Promise<{ found: boolean; version: string; path: string }>;
+  /** Run pandoc. Rejects with stderr when pandoc is missing or the conversion fails. */
+  pandocExport(markdown: string, to: string, out: string, cwd?: string | null): Promise<void>;
   /** Recursive Markdown/txt walk. */
   listFiles(root: string, max?: number): Promise<ListedFile[]>;
   /** First ~240 characters, front matter stripped. */

@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { defineConfig, Plugin } from "vite";
 import fs from "node:fs";
 import http from "node:http";
@@ -14,6 +14,32 @@ const THEMES = fs.existsSync(path.resolve(__dirname, "dev-data/themes")) ? path.
 const MIME: Record<string, string> = { ".css": "text/css", ".woff2": "font/woff2", ".woff": "font/woff", ".ttf": "font/ttf", ".otf": "font/otf",
   ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".svg": "image/svg+xml", ".webp": "image/webp", ".md": "text/markdown; charset=utf-8" };
 const inside = (base: string, p: string) => { const r = path.resolve(p); return r === base || r.startsWith(base + path.sep) ? r : null; };
+
+/** Same search as the Rust host: PATH, then known Windows and macOS install locations.
+ * The browser host also honours a test harness at dev-data/workspace/.pandoc-bin/pandoc
+ * so a suite can prepend a fake without restarting the preview process. */
+function findPandoc(): string | null {
+  if (process.env.MDNEST_PANDOC_HARNESS === "1") {
+    const harness = path.resolve(__dirname, "dev-data/workspace/.pandoc-bin/pandoc");
+    try { if (fs.existsSync(harness) && fs.statSync(harness).isFile()) return harness; } catch { /* skip */ }
+  }
+  const pathEnv = process.env.PATH || "";
+  for (const dir of pathEnv.split(path.delimiter)) {
+    if (!dir) continue;
+    for (const name of process.platform === "win32" ? ["pandoc.exe", "pandoc"] : ["pandoc"]) {
+      const cand = path.join(dir, name);
+      try { if (fs.existsSync(cand) && fs.statSync(cand).isFile()) return cand; } catch { /* skip */ }
+    }
+  }
+  const extra = process.platform === "win32"
+    ? [process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, "Pandoc", "pandoc.exe") : "", "C:\\Program Files\\Pandoc\\pandoc.exe"]
+    : process.platform === "darwin" ? ["/opt/homebrew/bin/pandoc", "/usr/local/bin/pandoc"] : [];
+  for (const cand of extra) {
+    if (!cand) continue;
+    try { if (fs.existsSync(cand) && fs.statSync(cand).isFile()) return cand; } catch { /* skip */ }
+  }
+  return null;
+}
 
 // Dev/preview stand-in for the Rust secrets + streaming HTTP commands.
 // Secrets live in an in-memory map mirrored to gitignored dev-data/secrets.json (mode 0600).
@@ -460,6 +486,40 @@ function devFs(): Plugin {
           const destName = fs.existsSync(path.join(TRASH, name)) ? uniqueCopyName(name, (n) => fs.existsSync(path.join(TRASH, n))) : name;
           fs.renameSync(p, path.join(TRASH, destName));
           send(200, { ok: true });
+        }).catch((e) => send(500, String(e?.message ?? e), "text/plain"));
+        return;
+      }
+      if (url.pathname === "/api/pandoc/info") {
+        const bin = findPandoc();
+        if (!bin) return send(200, { found: false, version: "", path: "" });
+        try {
+          const version = execFileSync(bin, ["--version"], { encoding: "utf8" }).split("\n")[0].trim();
+          return send(200, { found: true, version, path: bin });
+        } catch {
+          return send(200, { found: true, version: "", path: bin });
+        }
+      }
+      if (url.pathname === "/api/pandoc/export" && req.method === "POST") {
+        readBody(req).then(async (raw) => {
+          const { markdown, to, out, cwd } = JSON.parse(raw || "{}");
+          const bin = findPandoc();
+          if (!bin) return send(404, "pandoc not found", "text/plain");
+          const writer = String(to || "");
+          if (!/^[A-Za-z0-9_+-]{1,64}$/.test(writer)) return send(400, "invalid pandoc writer", "text/plain");
+          const dest = path.resolve(String(out || ""));
+          if (!dest || dest.includes("\0")) return send(400, "bad output", "text/plain");
+          const child = spawn(bin, ["-f", "markdown+tex_math_dollars+tex_math_single_backslash+raw_html+footnotes+pipe_tables+strikeout+task_lists+yaml_metadata_block", "-t", writer, "-o", dest], {
+            cwd: cwd && fs.existsSync(cwd) ? cwd : undefined,
+          });
+          let stderr = "";
+          child.stderr.on("data", (c) => { stderr += c; });
+          child.stdin.end(String(markdown ?? ""));
+          const timer = setTimeout(() => { try { child.kill(); } catch { /* gone */ } }, 120000);
+          child.on("close", (code) => {
+            clearTimeout(timer);
+            if (code === 0) send(200, { ok: true });
+            else send(500, (stderr || "pandoc exited " + code).slice(0, 4000), "text/plain");
+          });
         }).catch((e) => send(500, String(e?.message ?? e), "text/plain"));
         return;
       }

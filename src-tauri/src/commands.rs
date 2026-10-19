@@ -47,15 +47,28 @@ pub async fn pick_folder(app: tauri::AppHandle) -> Option<String> {
 /// Native save dialog. `default_name` arrives as camelCase `defaultName` from invoke.
 #[tauri::command]
 pub async fn pick_save_path(app: tauri::AppHandle, default_name: String, ext: Option<String>) -> Option<String> {
-    let (label, exts): (&str, Vec<&str>) = match ext.as_deref() {
+    let ext_owned = ext.clone().unwrap_or_default();
+    let (label, filter_exts): (&str, Vec<&str>) = match ext.as_deref() {
         Some("html") => ("HTML", vec!["html", "htm"]),
         Some("pdf") => ("PDF", vec!["pdf"]),
         Some("docx") => ("Word", vec!["docx"]),
+        Some("odt") => ("OpenOffice", vec!["odt"]),
+        Some("rtf") => ("RTF", vec!["rtf"]),
+        Some("epub") => ("EPUB", vec!["epub"]),
+        Some("tex") | Some("latex") => ("LaTeX", vec!["tex"]),
+        Some("wiki") | Some("mediawiki") => ("MediaWiki", vec!["wiki"]),
+        Some("rst") => ("reStructuredText", vec!["rst"]),
+        Some("textile") => ("Textile", vec!["textile"]),
+        Some("opml") => ("OPML", vec!["opml"]),
+        Some("org") => ("Org", vec!["org"]),
+        Some(other) if !other.is_empty() && other.len() <= 16 && other.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') => {
+            ("Export", vec![ext_owned.as_str()])
+        }
         _ => ("Markdown", vec!["md", "markdown"]),
     };
     app.dialog()
         .file()
-        .add_filter(label, &exts)
+        .add_filter(label, &filter_exts)
         .set_file_name(&default_name)
         .blocking_save_file()
         .and_then(path_string)
@@ -418,6 +431,146 @@ pub async fn trash_path(path: String) -> Result<(), String> {
 pub fn set_spellcheck(window: tauri::WebviewWindow, enabled: bool) -> Result<(), String> {
     crate::set_spellcheck(&window, enabled);
     Ok(())
+}
+
+#[derive(Serialize)]
+pub struct PandocInfo {
+    pub found: bool,
+    pub version: String,
+    pub path: String,
+}
+
+/// Look for pandoc on PATH, plus the usual Windows and macOS install locations.
+pub fn find_pandoc() -> Option<std::path::PathBuf> {
+    if let Some(p) = which_on_path("pandoc") {
+        return Some(p);
+    }
+    #[cfg(windows)]
+    {
+        let mut extra = Vec::new();
+        if let Ok(local) = std::env::var("LOCALAPPDATA") {
+            extra.push(std::path::PathBuf::from(local).join("Pandoc").join("pandoc.exe"));
+        }
+        extra.push(std::path::PathBuf::from(r"C:\Program Files\Pandoc\pandoc.exe"));
+        extra.push(std::path::PathBuf::from(r"C:\Program Files (x86)\Pandoc\pandoc.exe"));
+        for p in extra {
+            if p.is_file() {
+                return Some(p);
+            }
+        }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        for p in ["/opt/homebrew/bin/pandoc", "/usr/local/bin/pandoc"] {
+            let pb = std::path::PathBuf::from(p);
+            if pb.is_file() {
+                return Some(pb);
+            }
+        }
+    }
+    None
+}
+
+fn which_on_path(name: &str) -> Option<std::path::PathBuf> {
+    let path = std::env::var_os("PATH")?;
+    for dir in std::env::split_paths(&path) {
+        let cand = dir.join(name);
+        if cand.is_file() {
+            return Some(cand);
+        }
+        #[cfg(windows)]
+        {
+            let exe = dir.join(format!("{name}.exe"));
+            if exe.is_file() {
+                return Some(exe);
+            }
+        }
+    }
+    None
+}
+
+fn pandoc_version_line(bin: &std::path::Path) -> String {
+    let Ok(out) = std::process::Command::new(bin).arg("--version").output() else {
+        return String::new();
+    };
+    let text = String::from_utf8_lossy(&out.stdout);
+    text.lines().next().unwrap_or("").trim().to_string()
+}
+
+#[tauri::command]
+pub async fn pandoc_info() -> PandocInfo {
+    tauri::async_runtime::spawn_blocking(|| match find_pandoc() {
+        Some(p) => PandocInfo {
+            found: true,
+            version: pandoc_version_line(&p),
+            path: p.to_string_lossy().into_owned(),
+        },
+        None => PandocInfo { found: false, version: String::new(), path: String::new() },
+    })
+    .await
+    .unwrap_or(PandocInfo { found: false, version: String::new(), path: String::new() })
+}
+
+/// Run pandoc with Markdown on stdin. `cwd` is the document folder so relative images resolve.
+/// Returns stderr (and a non-zero status) as Err. Times out after 120 seconds.
+#[tauri::command]
+pub async fn pandoc_export(markdown: String, to: String, out: String, cwd: Option<String>) -> Result<(), String> {
+    let to = to.trim().to_string();
+    if to.is_empty() || to.len() > 64 || to.chars().any(|c| !(c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '+')) {
+        return Err("invalid pandoc writer".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let bin = find_pandoc().ok_or_else(|| "pandoc not found".to_string())?;
+        let mut cmd = std::process::Command::new(&bin);
+        cmd.arg("-f")
+            .arg("markdown+tex_math_dollars+tex_math_single_backslash+raw_html+footnotes+pipe_tables+strikeout+task_lists+yaml_metadata_block")
+            .arg("-t")
+            .arg(&to)
+            .arg("-o")
+            .arg(&out)
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+        if let Some(dir) = cwd.as_ref().filter(|d| !d.is_empty()) {
+            cmd.current_dir(dir);
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            cmd.creation_flags(CREATE_NO_WINDOW);
+        }
+        let mut child = cmd.spawn().map_err(|e| e.to_string())?;
+        if let Some(mut stdin) = child.stdin.take() {
+            use std::io::Write;
+            stdin.write_all(markdown.as_bytes()).map_err(|e| e.to_string())?;
+        }
+        let start = std::time::Instant::now();
+        loop {
+            match child.try_wait() {
+                Ok(Some(status)) => {
+                    let output = child.wait_with_output().map_err(|e| e.to_string())?;
+                    if status.success() {
+                        return Ok(());
+                    }
+                    let err = String::from_utf8_lossy(&output.stderr);
+                    let msg = err.trim();
+                    return Err(if msg.is_empty() { format!("pandoc exited {}", status) } else { msg.to_string() });
+                }
+                Ok(None) => {
+                    if start.elapsed() > std::time::Duration::from_secs(120) {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                        return Err("pandoc timed out after 120s".into());
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
+                Err(e) => return Err(e.to_string()),
+            }
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]

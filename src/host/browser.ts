@@ -31,6 +31,12 @@ export const browserHost: Host = {
   async trashPath(path) { await j(await fetch("/api/trash", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path }) })); },
   async revealPath(path) { await j(await fetch("/api/reveal?path=" + encodeURIComponent(path))); },
   async setSpellcheck() {},
+  async pandocInfo() {
+    return j(await fetch("/api/pandoc/info"));
+  },
+  async pandocExport(markdown, to, out, cwd) {
+    await j(await fetch("/api/pandoc/export", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ markdown, to, out, cwd: cwd ?? null }) }));
+  },
   async openExternal(url) {
     const u = url.trim();
     if (/^(https?:|mailto:)/i.test(u)) { window.open(u, "_blank", "noopener"); return; }

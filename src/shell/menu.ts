@@ -41,6 +41,8 @@ export interface MenuState {
   readonly?: boolean;
   eol?: "LF" | "CRLF";
   encoding?: string;
+  /** Pandoc is installed. When false, pandoc export items stay enabled so a click can show the install modal. */
+  pandoc?: boolean;
   inCode?: boolean;
   onLink?: boolean;
   onImage?: boolean;
@@ -108,6 +110,18 @@ export function menuTemplate(mac: boolean): MenuNode[] {
         item("file.exportHtml", "HTML"),
         item("file.exportHtmlPlain", "HTML (without styles)"),
         item("file.exportDocx", "Word (.docx)"),
+        sep(),
+        item("file.exportPandoc.docx", "Word (pandoc)"),
+        item("file.exportPandoc.odt", "OpenOffice (.odt)"),
+        item("file.exportPandoc.rtf", "RTF"),
+        item("file.exportPandoc.epub", "EPUB"),
+        item("file.exportPandoc.latex", "LaTeX"),
+        item("file.exportPandoc.mediawiki", "MediaWiki"),
+        item("file.exportPandoc.rst", "reStructuredText"),
+        item("file.exportPandoc.textile", "Textile"),
+        item("file.exportPandoc.opml", "OPML"),
+        item("file.exportPandoc.org", "Org mode"),
+        item("file.exportPandoc.custom", "Custom pandoc format…"),
       ] },
       item("file.print", "Print…", "CmdOrCtrl+Alt+P"),
       sep(),

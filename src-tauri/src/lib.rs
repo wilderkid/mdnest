@@ -135,6 +135,8 @@ pub fn run() {
             commands::reveal_path,
             commands::set_spellcheck,
             commands::open_external,
+            commands::pandoc_info,
+            commands::pandoc_export,
             commands::list_files,
             commands::file_excerpt,
             commands::path_kind,

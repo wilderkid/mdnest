@@ -92,18 +92,57 @@ print(text)
   await shot.screenshot({ path: path.join(OUT, "docx-export.png") });
   await shot.close();
 
-  // C2 modal is added in the next commit. If the command exists already, exercise it.
-  const hasPandoc = await page.evaluate(() => window.mdnest.commands.some((c) => c.id === "file.exportPandoc.docx"));
-  if (hasPandoc) {
-    await page.evaluate(() => window.mdnest.runCommand("file.exportPandoc.docx"));
-    await page.waitForSelector(".modal-backdrop", { timeout: 4000 });
-    const modal = await page.locator(".modal").innerText();
-    ok(/Pandoc not found/i.test(modal), "C2 missing-pandoc modal", modal.slice(0, 120));
-    await page.screenshot({ path: path.join(OUT, "pandoc-missing.png") });
-    await page.locator(".modal button", { hasText: "Close" }).click().catch(() => {});
-  } else {
-    ok(true, "C2 pandoc menu not in this build yet (C1 only)");
+  await page.keyboard.press("Escape");
+  await page.locator('#mdn-menubar .mdn-menu[data-menu="file"] > .mdn-menu-label').click();
+  await page.locator("#mdn-menubar .mdn-menu.mdn-menu-open > .dropdown-menu > .mdn-menu-sub").filter({ hasText: /^Export/ }).first().hover();
+  await page.waitForTimeout(150);
+  const pandocLabels = await page.locator("#mdn-menubar .mdn-submenu button").allTextContents();
+  for (const label of ["Word (pandoc)", "OpenOffice", "RTF", "EPUB", "LaTeX", "MediaWiki", "reStructuredText", "Textile", "OPML", "Org mode", "Custom pandoc format"]) {
+    ok(pandocLabels.some((t) => t.includes(label)), "C2 export menu has " + label);
   }
+
+  await page.evaluate(() => window.mdnest.runCommand("file.exportPandoc.docx"));
+  await page.waitForSelector("#pandoc-missing", { timeout: 4000 });
+  const modal = await page.locator("#pandoc-missing .modal").innerText();
+  ok(/Pandoc not found/i.test(modal), "C2 missing-pandoc modal", modal.slice(0, 160));
+  ok(/Install Pandoc/.test(modal) && /Re-check/.test(modal), "C2 modal has Install and Re-check");
+  await page.screenshot({ path: path.join(OUT, "pandoc-missing.png") });
+  await page.locator("#pandoc-missing [data-c=close]").click();
+  ok(await page.locator("#pandoc-missing").count() === 0, "C2 modal closes");
+
+  // Fake pandoc the Vite middleware finds before PATH (no real pandoc on this box).
+  const fakeDir = path.resolve("dev-data/workspace/.pandoc-bin");
+  fs.mkdirSync(fakeDir, { recursive: true });
+  const log = path.join(TMP, "pandoc-args.txt");
+  const stdinLog = path.join(TMP, "pandoc-stdin.md");
+  fs.writeFileSync(path.join(fakeDir, "pandoc"), `#!/bin/sh
+echo "$@" > ${JSON.stringify(log)}
+cat > ${JSON.stringify(stdinLog)}
+out=""
+prev=""
+for a in "$@"; do
+  if [ "$prev" = "-o" ]; then out="$a"; fi
+  prev="$a"
+done
+printf 'fake pandoc %s\\n' "$*" > "$out"
+`, { mode: 0o755 });
+  fs.chmodSync(path.join(fakeDir, "pandoc"), 0o755);
+  const info = await page.evaluate(async () => window.mdnest.host.pandocInfo());
+  ok(info.found && String(info.path).includes(".pandoc-bin"), "C2 fake pandoc detected", JSON.stringify(info));
+  const odt = path.join(TMP, "out.odt");
+  const exported = await page.evaluate(async (p) => {
+    try { return await window.mdnest.exportPandoc("odt", "odt", p); }
+    catch (e) { return "ERR " + (e && e.message || e); }
+  }, odt);
+  ok(fs.existsSync(odt), "C2 fake pandoc wrote the output", String(exported));
+  const args = fs.existsSync(log) ? fs.readFileSync(log, "utf8") : "";
+  ok(args.includes("-t") && args.includes("odt") && args.includes("-o"), "C2 fake pandoc recorded args", args);
+  ok(args.includes("tex_math_dollars"), "C2 from format includes tex math", args);
+  const stdin = fs.existsSync(stdinLog) ? fs.readFileSync(stdinLog, "utf8") : "";
+  ok(stdin.includes("bold") || stdin.includes("Title"), "C2 stdin is the markdown", stdin.slice(0, 80));
+  fs.rmSync(fakeDir, { recursive: true, force: true });
+  const gone = await page.evaluate(async () => window.mdnest.host.pandocInfo());
+  ok(!gone.found, "C2 re-check finds no pandoc after the fake is removed", JSON.stringify(gone));
 
   ok(errors.length === 0, "C1 no page errors", errors.join(" | "));
 } catch (e) {
