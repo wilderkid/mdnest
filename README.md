@@ -14,6 +14,10 @@ npm run build && npx vite preview   # http://127.0.0.1:4173
 node tests/screenshots.mjs      # headless Playwright screenshots + smoke checks → screenshots/
 node tests/phase2.mjs           # Phase 2 E2E suite (35 checks; needs `npx vite preview` on :4173)
 npx tsx tests/markers.ts        # editable-marker unit tests
+npx tsx tests/refs.ts           # footnotes + reference links (round-trip, markers)
+node tests/fixes.mjs            # E2E: footnotes/ref links, WebKitGTK-style paste/drop payloads
+tests/native/image-paste-drop.py src-tauri/target/release/mdnest   # native app under Xvfb (xdotool, xclip, python3-gi, xfwm4)
+scripts/measure-ram.sh LABEL BIN 30 3 [FILE]   # idle RAM: PSS over app + WebKit processes, fresh profile
 npx tsx tests/roundtrip.ts samples/sample.md   # markdown round-trip check
 CARGO_BUILD_JOBS=4 npx tauri build   # desktop binary + .deb
 ```
@@ -51,7 +55,17 @@ Gallery themes used for testing are copied unmodified into `dev-data/themes` (gi
 - **Find/replace**: `Ctrl+F` / `Ctrl+H`, case-sensitive and regex toggles, `$1` back-references, highlighting in text, code blocks and source mode.
 - **Export**: *File → Export HTML* (self-contained) and *Export PDF*.
 - Autosave (Settings → Editor, 1.5 s after the last edit), recent files (sidebar → Recent), external-change detection (2 s mtime poll: silent reload if clean, toast if dirty), syntax-colour fallback for themes without CodeMirror colours (e.g. Vue, Purple).
-- CLI: `mdnest FILE [--theme NAME] [--export-html OUT] [--export-pdf OUT] [--quit]`.
+- **Footnotes**: `[^label]` renders as `sup.md-footnote` (hover shows the note; click to edit `[^label]`, Ctrl+click jumps to the definition). `[^label]: text` definitions stay where they are written (`.md-def-footnote > .md-def-name + .md-def-content`).
+- **Reference links/images**: `[text][id]`, `[text][]`, `[text]`, `![alt][id]` keep their form on save. `[id]: url "title"` definitions are kept verbatim as a `.md-def-link` block (hidden in export). Editing an id re-resolves against the document's definitions. Soft line breaks inside paragraphs are preserved.
+- CLI: `mdnest FILE [--theme NAME] [--export-html OUT] [--export-pdf OUT] [--quit] [--debug-log PATH]`.
+- Packaging: `mdnest_<ver>_amd64.deb` (package `mdnest`, `/usr/lib/mdnest`). The display name "MD Nest" comes from the window title and `src-tauri/deb/mdnest.desktop`.
+
+### WebKitGTK paste/drop notes
+- A clipboard image never reaches the `paste` event; ProseMirror captures the native paste and gets `<img src="blob:…">`, and MD Nest fetches those bytes.
+- A file dragged from a file manager arrives as `<a>file:///…</a>` HTML, with `text/uri-list` unreadable and no `files`. MD Nest copies the file with the `copy_file` command.
+
+### Memory
+Startup restores `mdnest.lastFile`, so a no-argument launch is only a "welcome screen" with a fresh profile. Compare builds with `scripts/measure-ram.sh`. It refuses to run while other WebKit processes are alive, because those share library pages and lower PSS.
 
 ### PDF platform notes
 | Platform | Path |
