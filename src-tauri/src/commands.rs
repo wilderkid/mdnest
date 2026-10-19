@@ -230,3 +230,56 @@ pub async fn export_pdf(app: tauri::AppHandle, html: String, out: String) -> Res
     #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
     { let _ = (app, html, out); Err("unsupported".into()) }
 }
+
+/// Store a secret. The value never comes back across IPC.
+#[tauri::command]
+pub async fn secret_set(app: tauri::AppHandle, id: String, value: String) -> Result<(), String> {
+    let app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || crate::secrets::set(Some(&app), &id, &value))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Whether a secret id is stored. Does not return the value.
+#[tauri::command]
+pub async fn secret_has(app: tauri::AppHandle, id: String) -> Result<bool, String> {
+    let app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || crate::secrets::has(Some(&app), &id))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Remove a stored secret. Missing ids are not an error.
+#[tauri::command]
+pub async fn secret_delete(app: tauri::AppHandle, id: String) -> Result<(), String> {
+    let app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || crate::secrets::delete(Some(&app), &id))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// `"keyring"` when the OS store answered, otherwise `"file"`.
+#[tauri::command]
+pub async fn secret_backend(app: tauri::AppHandle) -> Result<String, String> {
+    let app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || crate::secrets::backend_name(Some(&app)))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Start a streaming HTTP request. Events arrive on `on_event`. Cancel with `net_cancel`.
+#[tauri::command]
+pub async fn net_stream(
+    app: tauri::AppHandle,
+    id: String,
+    req: crate::net::StreamRequest,
+    on_event: tauri::ipc::Channel<crate::net::StreamEvent>,
+) -> Result<(), String> {
+    crate::net::start(app, id, req, on_event)
+}
+
+/// Abort an in-flight `net_stream`. Returns whether a stream with that id was running.
+#[tauri::command]
+pub async fn net_cancel(id: String) -> bool {
+    crate::net::cancel(&id)
+}

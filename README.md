@@ -22,6 +22,34 @@ npx tsx tests/roundtrip.ts samples/sample.md   # markdown round-trip check
 CARGO_BUILD_JOBS=4 npx tauri build   # desktop binary + .deb
 ```
 
+## Platform APIs for plugins
+
+Plugins never see a secret value. The host stores it and, when a request names a `secretRef`, attaches it on the way out.
+
+**Secrets** (`host.secrets`)
+
+| Method | Behaviour |
+|---|---|
+| `set(id, value)` | Store a secret. `id` matches `^[a-z0-9._-]{1,64}$`. |
+| `has(id)` | Whether that id is stored. |
+| `delete(id)` | Remove it. A missing id is not an error. |
+| `backend()` | `"keyring"` (OS store) or `"file"` (fallback). |
+
+The desktop host uses the OS keyring (macOS Keychain, Windows Credential Manager, Linux Secret Service). With no Secret Service it writes `<app_config_dir>/secrets.json` mode `0600` and reports `"file"`. There is no command that returns a secret. The browser dev host keeps an in-memory map mirrored to gitignored `dev-data/secrets.json` and always reports `"file"`.
+
+**Streaming HTTP** (`host.net.stream(req, onEvent) → { cancel() }`)
+
+`req` is `{ url, method: "POST"|"GET", headers?, body?, secretRef?, auth?, timeoutMs? }`. Only `http` and `https` URLs are allowed. When `secretRef` is set, the host reads the secret and sets `Authorization: Bearer <secret>`, or the header named by `auth: "header:<name>"`. `onEvent` receives:
+
+- `{ type: "open", status }`
+- `{ type: "data", event?, data }` — one SSE event, or the whole body when the response is not `text/event-stream`
+- `{ type: "error", status?, message }` — `message` is at most 2 KB, with the secret scrubbed out
+- `{ type: "done" }`
+
+`data: [DONE]` ends an SSE stream. `cancel()` aborts the in-flight request. A 429 or 5xx (and a connection failure) is retried at most twice, with exponential backoff, and only before the first payload byte is forwarded.
+
+Tauri commands: `secret_set`, `secret_has`, `secret_delete`, `secret_backend`, `net_stream`, `net_cancel`. The browser equivalents are `POST /api/secret/set|delete`, `GET /api/secret/has|backend`, `POST /api/net/stream` (newline-delimited JSON events) and `POST /api/net/cancel`.
+
 ## Layout
 | Path | What |
 |---|---|
@@ -40,8 +68,8 @@ CARGO_BUILD_JOBS=4 npx tauri build   # desktop binary + .deb
 | `src/shell/*` | sidebar (file tree and outline in `#typora-sidebar`), source mode (`#typora-source`), theme manager, command palette |
 | `src/plugins/api.ts` | plugin API: manifest `{id, version, depends}`, commands, sidebar panels, settings, decoration hook, events |
 | `src/plugins/builtin/*` | `word-stats` example and the `reading-goal` plugin that depends on it |
-| `src/host/*` | HostAPI: Tauri implementation plus a browser dev implementation |
-| `src-tauri/` | Rust backend: commands, `mdtheme://` and `mdfile://` protocols, theme seeding |
+| `src/host/*` | HostAPI: Tauri implementation plus a browser dev implementation. `host.secrets` and `host.net` are the plugin platform (see above) |
+| `src-tauri/` | Rust backend: commands, `mdtheme://` and `mdfile://` protocols, theme seeding, secrets (`secrets.rs`), streaming HTTP + SSE (`net.rs`, `sse.rs`) |
 | `themes/` | built-in themes (`mdnest`, `mdnest-night`) and `github/` fonts (Open Sans, OFL) |
 
 ## Themes

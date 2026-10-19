@@ -1,7 +1,10 @@
 mod commands;
+mod net;
 #[cfg(any(target_os = "linux", target_os = "macos", windows))]
 mod pdf;
 mod protocols;
+mod secrets;
+mod sse;
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -88,6 +91,12 @@ pub fn run() {
             commands::cli_args,
             commands::quit_app,
             commands::export_pdf,
+            commands::secret_set,
+            commands::secret_has,
+            commands::secret_delete,
+            commands::secret_backend,
+            commands::net_stream,
+            commands::net_cancel,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
