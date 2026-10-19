@@ -234,7 +234,7 @@ Counted by `python3 scripts/parity-count.py` (163 rows; an empty After cell inhe
 | `|a|b|` + Enter → table | | missing | | |
 | `[^1]:` footnote, `[x]: url` ref |  | done | done | defs plugin |
 | Core slash menu `/` (headings, lists, quote, table, code, math, mermaid, hr, TOC, footnote, front matter, image) |  | missing | done | slash-core.ts; AI item still appears when AI is on |
-| Editor context menu (format / insert / paragraph / table) |  | missing | done | right-click in #write; same .context-menu as the sidebar |
+| Editor context menu (format / insert / paragraph / table) |  | missing | done | right-click in #write; Paragraph/Format/Insert/Table open beside the list and stay open |
 | Image settings (copy to ./assets etc.) |  | done | done | Settings → Images |
 | Insert image from file dialog |  | missing | done | Ctrl+Shift+I |
 

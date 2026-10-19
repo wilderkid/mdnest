@@ -81,12 +81,14 @@ body.pin-outline #typora-sidebar, body.open-sidebar #typora-sidebar { transform:
 .sidebar-footer button:hover { background: var(--item-hover-bg-color); }
 .sidebar-footer button svg { display: block; flex: none; }
 .sidebar-footer .sidebar-sort-label { font-size: 12px; }
-.context-menu.dropdown-menu { position: fixed; z-index: 80; min-width: 200px; background: var(--bg-color); color: var(--text-color);
-  border: 1px solid rgba(127,127,127,.35); border-radius: 4px; box-shadow: 0 8px 24px rgba(0,0,0,.18); padding: 4px 0; }
-.context-menu .mdn-menu-item { display: block; width: 100%; text-align: left; font: inherit; color: inherit; background: transparent; border: 0; padding: 4px 14px; cursor: pointer; }
-.context-menu .mdn-menu-item:hover { background: var(--item-hover-bg-color); }
+.context-menu.dropdown-menu { position: fixed; z-index: 80; min-width: 200px; max-height: 70vh; overflow: auto; background: var(--bg-color); color: var(--text-color);
+  border: 1px solid rgba(127,127,127,.35); border-radius: 4px; box-shadow: 0 8px 24px rgba(0,0,0,.18); padding: 4px 0; outline: none; }
+.context-menu.mdn-submenu { z-index: 81; }
+.context-menu .mdn-menu-item { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; text-align: left; font: inherit; color: inherit; background: transparent; border: 0; padding: 4px 14px; cursor: pointer; }
+.context-menu .mdn-menu-item:hover, .context-menu .mdn-menu-item.mdn-menu-active { background: var(--item-hover-bg-color); }
 .context-menu .mdn-menu-item:disabled { opacity: .4; }
 .context-menu .mdn-menu-item.danger { color: #b33; }
+.context-menu .mdn-menu-caret { opacity: .6; margin-left: 12px; }
 
 /* ---------- welcome + dialogs ---------- */
 #mdn-welcome { position: absolute; inset: 0; z-index: 6; display: flex; align-items: center; justify-content: center;

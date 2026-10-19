@@ -1159,6 +1159,9 @@ function toggleWordPopover() {
   wordPop.style.left = Math.max(8, anchor.right - 180) + "px";
   wordPop.style.top = Math.max(8, anchor.top - 120) + "px";
 }
+function rows(pairs: [string, string][]): ContextItem[] {
+  return pairs.map(([id, label]) => ({ id, label }));
+}
 function editorContextMenu(e: MouseEvent) {
   const t = e.target as HTMLElement;
   if (!t.closest("#write")) return;
@@ -1171,11 +1174,31 @@ function editorContextMenu(e: MouseEvent) {
     { id: "paste", label: "Paste" },
     { id: "edit.copyMarkdown", label: "Copy as Markdown" },
     { id: "edit.pastePlain", label: "Paste as Plain Text" },
-    { id: "paragraph", label: "Paragraph ▸" },
-    { id: "format", label: "Format ▸" },
-    { id: "insert", label: "Insert ▸" },
+    { id: "paragraph", label: "Paragraph", submenu: rows([
+      ["paragraph.heading.1", "Heading 1"], ["paragraph.heading.2", "Heading 2"], ["paragraph.heading.3", "Heading 3"],
+      ["paragraph.paragraph", "Paragraph"],
+      ["paragraph.quote", "Quote"], ["paragraph.taskList", "Task List"],
+      ["paragraph.orderedList", "Ordered List"], ["paragraph.unorderedList", "Unordered List"],
+      ["paragraph.insertBefore", "Insert Paragraph Before"], ["paragraph.insertAfter", "Insert Paragraph After"],
+      ["paragraph.deleteBlock", "Delete Block"],
+    ]) },
+    { id: "format", label: "Format", submenu: rows([
+      ["format.strong", "Strong"], ["format.emphasis", "Emphasis"], ["format.underline", "Underline"],
+      ["format.code", "Code"], ["format.strike", "Strike"], ["format.highlight", "Highlight"],
+      ["format.clear", "Clear Format"],
+    ]) },
+    { id: "insert", label: "Insert", submenu: rows([
+      ["format.link", "Hyperlink"], ["format.image", "Image…"], ["paragraph.hr", "Horizontal Line"],
+      ["paragraph.footnote", "Footnote"], ["paragraph.toc", "Table of Contents"], ["paragraph.tableDialog", "Table…"],
+      ["paragraph.codeFence", "Code Fences"], ["paragraph.mathBlock", "Math Block"],
+    ]) },
   ];
-  if (inTableNow()) items.push({ id: "table", label: "Table ▸" });
+  if (inTableNow()) items.push({ id: "table", label: "Table", submenu: rows([
+    ["paragraph.table.addRowAbove", "Add Row Above"], ["paragraph.table.addRowBelow", "Add Row Below"],
+    ["paragraph.table.addColBefore", "Add Column Before"], ["paragraph.table.addColAfter", "Add Column After"],
+    ["paragraph.table.deleteRow", "Delete Row"], ["paragraph.table.deleteColumn", "Delete Column"],
+    ["paragraph.table.deleteTable", "Delete Table"],
+  ]) });
   if (link) {
     items.push({ id: "link.open", label: "Open Link" });
     items.push({ id: "link.copy", label: "Copy Link Address" });
@@ -1189,33 +1212,12 @@ function editorContextMenu(e: MouseEvent) {
     if (id === "cut") document.execCommand("cut");
     else if (id === "copy") document.execCommand("copy");
     else if (id === "paste") document.execCommand("paste");
-    else if (id === "paragraph") openSubmenu(e.clientX + 180, e.clientY, [
-      ["paragraph.heading.1", "Heading 1"], ["paragraph.paragraph", "Paragraph"],
-      ["paragraph.quote", "Quote"], ["paragraph.taskList", "Task List"],
-      ["paragraph.insertBefore", "Insert Paragraph Before"], ["paragraph.insertAfter", "Insert Paragraph After"],
-      ["paragraph.deleteBlock", "Delete Block"],
-    ]);
-    else if (id === "format") openSubmenu(e.clientX + 180, e.clientY, [
-      ["format.strong", "Strong"], ["format.emphasis", "Emphasis"], ["format.underline", "Underline"],
-      ["format.code", "Code"], ["format.strike", "Strike"], ["format.clear", "Clear Format"],
-    ]);
-    else if (id === "insert") openSubmenu(e.clientX + 180, e.clientY, [
-      ["format.link", "Hyperlink"], ["format.image", "Image…"], ["paragraph.hr", "Horizontal Line"],
-      ["paragraph.footnote", "Footnote"], ["paragraph.toc", "Table of Contents"], ["paragraph.tableDialog", "Table…"],
-    ]);
-    else if (id === "table") openSubmenu(e.clientX + 180, e.clientY, [
-      ["paragraph.table.addRowAbove", "Add Row Above"], ["paragraph.table.addRowBelow", "Add Row Below"],
-      ["paragraph.table.deleteRow", "Delete Row"], ["paragraph.table.deleteTable", "Delete Table"],
-    ]);
     else if (id === "link.open" && link) window.open(link.href, "_blank");
     else if (id === "link.copy" && link) void navigator.clipboard.writeText(link.href);
     else if (id === "image.open" && img) window.open(img.src, "_blank");
     else if (id === "image.delete") pmRun(deleteImage());
     else runCommand(id);
   });
-}
-function openSubmenu(x: number, y: number, rows: [string, string][]) {
-  openContextMenu(x, y, rows.map(([id, label]) => ({ id, label })), (id) => runCommand(id));
 }
 editor.view.dom.addEventListener("contextmenu", (e) => editorContextMenu(e));
 document.getElementById("footer-word-count")!.addEventListener("click", () => toggleWordPopover());

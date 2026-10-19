@@ -68,34 +68,198 @@ function revealLabel(): string {
   return "Open Containing Folder";
 }
 
-export interface ContextItem { id: string; label: string; disabled?: boolean; danger?: boolean }
+export interface ContextItem {
+  id: string;
+  label: string;
+  disabled?: boolean;
+  danger?: boolean;
+  /** Nested items. The parent stays open; the submenu opens beside it. */
+  submenu?: ContextItem[];
+}
 
-/** Shared context menu (`.context-menu.dropdown-menu`). Returns a close function. */
+interface MenuLevel { el: HTMLElement; rows: HTMLElement[]; index: number }
+
+/**
+ * Shared context menu (`.context-menu.dropdown-menu`).
+ * A row with `submenu` opens that list beside the parent on hover, click, or ArrowRight.
+ * The parent stays open. Near the window edge the submenu flips left or up.
+ * Arrows move, Enter runs, Escape closes the deepest open level (then the menu).
+ * Returns a close function.
+ */
 export function openContextMenu(x: number, y: number, items: ContextItem[], run: (id: string) => void): () => void {
   document.querySelectorAll(".context-menu").forEach((e) => e.remove());
-  const menu = document.createElement("div");
-  menu.className = "context-menu dropdown-menu";
-  menu.style.left = Math.max(4, x) + "px";
-  menu.style.top = Math.max(4, y) + "px";
-  for (const it of items) {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "mdn-menu-item" + (it.danger ? " danger" : "");
-    b.dataset.id = it.id;
-    b.textContent = it.label;
-    b.disabled = !!it.disabled;
-    b.onclick = (e) => { e.stopPropagation(); close(); if (!it.disabled) run(it.id); };
-    menu.appendChild(b);
+  const root = document.createElement("div");
+  root.className = "context-menu dropdown-menu";
+  root.tabIndex = -1;
+  const levels: MenuLevel[] = [];
+
+  const place = (el: HTMLElement, left: number, top: number) => {
+    el.style.left = Math.max(4, left) + "px";
+    el.style.top = Math.max(4, top) + "px";
+    document.body.appendChild(el);
+    const rect = el.getBoundingClientRect();
+    let nx = left, ny = top;
+    if (rect.right > window.innerWidth - 4) nx = Math.max(4, window.innerWidth - rect.width - 8);
+    if (rect.bottom > window.innerHeight - 4) ny = Math.max(4, window.innerHeight - rect.height - 8);
+    el.style.left = nx + "px";
+    el.style.top = ny + "px";
+  };
+
+  const closeSubsFrom = (depth: number) => {
+    while (levels.length > depth) {
+      const gone = levels.pop()!;
+      if (gone.el !== root) gone.el.remove();
+    }
+  };
+
+  const paintActive = () => {
+    for (const level of levels) {
+      level.rows.forEach((row, i) => row.classList.toggle("mdn-menu-active", i === level.index));
+    }
+  };
+
+  const openSub = (parent: HTMLElement, items: ContextItem[], depth: number) => {
+    closeSubsFrom(depth);
+    const sub = document.createElement("div");
+    sub.className = "context-menu dropdown-menu mdn-submenu";
+    sub.dataset.depth = String(depth);
+    const rows = fill(sub, items, depth);
+    const pr = parent.getBoundingClientRect();
+    // Measure first. place() clamps into the window, which would hide a right-edge overflow.
+    document.body.appendChild(sub);
+    const width = sub.offsetWidth;
+    const height = sub.offsetHeight;
+    const roomRight = window.innerWidth - pr.right;
+    const left = roomRight < width + 4 && pr.left > width + 8 ? pr.left - width - 2 : pr.right - 4;
+    let top = pr.top - 4;
+    if (top + height > window.innerHeight - 4) top = Math.max(4, pr.bottom - height);
+    if (top + height > window.innerHeight - 4) top = Math.max(4, window.innerHeight - height - 8);
+    place(sub, left, top);
+    levels.push({ el: sub, rows, index: 0 });
+    paintActive();
+  };
+
+  const activate = (it: ContextItem, row: HTMLElement, depth: number) => {
+    if (it.disabled) return;
+    if (it.submenu?.length) {
+      openSub(row, it.submenu, depth + 1);
+      return;
+    }
+    close();
+    run(it.id);
+  };
+
+  function fill(menu: HTMLElement, list: ContextItem[], depth: number): HTMLElement[] {
+    const rows: HTMLElement[] = [];
+    for (const it of list) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "mdn-menu-item" + (it.danger ? " danger" : "") + (it.submenu?.length ? " mdn-menu-sub" : "");
+      b.dataset.id = it.id;
+      b.disabled = !!it.disabled;
+      const text = document.createElement("span");
+      text.className = "mdn-menu-text";
+      text.textContent = it.label;
+      b.appendChild(text);
+      if (it.submenu?.length) {
+        const caret = document.createElement("span");
+        caret.className = "mdn-menu-caret";
+        caret.textContent = "▸";
+        b.appendChild(caret);
+      }
+      b.onmouseenter = () => {
+        const level = levels[depth];
+        if (!level) return;
+        level.index = rows.indexOf(b);
+        paintActive();
+        if (it.submenu?.length && !it.disabled) openSub(b, it.submenu, depth + 1);
+        else closeSubsFrom(depth + 1);
+      };
+      b.onclick = (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        activate(it, b, depth);
+      };
+      menu.appendChild(b);
+      rows.push(b);
+    }
+    return rows;
   }
-  document.body.appendChild(menu);
-  const rect = menu.getBoundingClientRect();
-  if (rect.right > window.innerWidth) menu.style.left = Math.max(4, window.innerWidth - rect.width - 8) + "px";
-  if (rect.bottom > window.innerHeight) menu.style.top = Math.max(4, window.innerHeight - rect.height - 8) + "px";
-  const close = () => { menu.remove(); document.removeEventListener("mousedown", onDoc, true); document.removeEventListener("keydown", onKey, true); };
-  const onDoc = (e: MouseEvent) => { if (!menu.contains(e.target as Node)) close(); };
-  const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { e.preventDefault(); close(); } };
-  setTimeout(() => { document.addEventListener("mousedown", onDoc, true); document.addEventListener("keydown", onKey, true); }, 0);
+
+  const rows = fill(root, items, 0);
+  place(root, x, y);
+  levels.push({ el: root, rows, index: 0 });
+  paintActive();
+
+  const close = () => {
+    closeSubsFrom(1);
+    root.remove();
+    document.removeEventListener("mousedown", onDoc, true);
+    document.removeEventListener("keydown", onKey, true);
+  };
+  const onDoc = (e: MouseEvent) => {
+    const t = e.target as Node;
+    if (levels.some((l) => l.el.contains(t))) return;
+    close();
+  };
+  const onKey = (e: KeyboardEvent) => {
+    const level = levels[levels.length - 1];
+    if (!level) return;
+    const row = level.rows[level.index];
+    const item = itemAt(levels, items);
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      if (levels.length > 1) { closeSubsFrom(levels.length - 1); paintActive(); }
+      else close();
+      return;
+    }
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      e.stopPropagation();
+      const dir = e.key === "ArrowDown" ? 1 : -1;
+      const n = level.rows.length;
+      if (!n) return;
+      level.index = (level.index + dir + n) % n;
+      paintActive();
+      level.rows[level.index]?.scrollIntoView({ block: "nearest" });
+      return;
+    }
+    if (e.key === "ArrowRight") {
+      e.preventDefault();
+      e.stopPropagation();
+      const it = item;
+      if (it?.submenu?.length && row) openSub(row, it.submenu, levels.length);
+      return;
+    }
+    if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      e.stopPropagation();
+      if (levels.length > 1) { closeSubsFrom(levels.length - 1); paintActive(); }
+      return;
+    }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      e.stopPropagation();
+      if (item && row) activate(item, row, levels.length - 1);
+    }
+  };
+  setTimeout(() => {
+    document.addEventListener("mousedown", onDoc, true);
+    document.addEventListener("keydown", onKey, true);
+    root.focus();
+  }, 0);
   return close;
+}
+
+function itemAt(levels: MenuLevel[], items: ContextItem[]): ContextItem | undefined {
+  let list = items;
+  let found: ContextItem | undefined;
+  for (let d = 0; d < levels.length; d++) {
+    found = list[levels[d].index];
+    list = found?.submenu ?? [];
+  }
+  return found;
 }
 
 function fmtTime(ms: number): string {
