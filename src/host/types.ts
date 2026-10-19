@@ -7,7 +7,7 @@ export interface Host {
   kind: "tauri" | "browser";
   pickFile(): Promise<string | null>;
   pickFolder(): Promise<string | null>;
-  pickSavePath(defaultName?: string, ext?: "md" | "html" | "pdf"): Promise<string | null>;
+  pickSavePath(defaultName?: string, ext?: "md" | "html" | "pdf" | "docx"): Promise<string | null>;
   readFile(path: string): Promise<string>;
   writeFile(path: string, text: string): Promise<void>;
   /** Raw file bytes as standard base64. */

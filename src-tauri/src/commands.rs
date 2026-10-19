@@ -50,6 +50,7 @@ pub async fn pick_save_path(app: tauri::AppHandle, default_name: String, ext: Op
     let (label, exts): (&str, Vec<&str>) = match ext.as_deref() {
         Some("html") => ("HTML", vec!["html", "htm"]),
         Some("pdf") => ("PDF", vec!["pdf"]),
+        Some("docx") => ("Word", vec!["docx"]),
         _ => ("Markdown", vec!["md", "markdown"]),
     };
     app.dialog()

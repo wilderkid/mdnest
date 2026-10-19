@@ -70,7 +70,7 @@ Counted by `python3 scripts/parity-count.py` (163 rows; an empty After cell inhe
 | Export → PDF | | partial | done | File → Export submenu |
 | Export → HTML | | partial | done | File → Export submenu |
 | Export → HTML (without styles) | | missing | done | styles omitted; welcome page not in the export |
-| Export → Word / pandoc formats |  | missing | missing | needs pandoc; not built |
+| Export → Word / pandoc formats |  | missing | missing | built-in Word (.docx) without pandoc; pandoc formats still missing |
 | Import |  | n/a | n/a | pandoc |
 | Print… | Ctrl+Alt+P | missing | done | export HTML through the print dialog |
 | Properties / word count info |  | partial | done | footer word count + View ▸ Word Count popover |
@@ -264,7 +264,7 @@ Counted by `python3 scripts/parity-count.py` (163 rows; an empty After cell inhe
 Still missing or only partial after 0.1.1. Each note says why.
 
 - **Window menu** (done). Window has Minimize (Ctrl+M), Maximize/Restore (Zoom on macOS), Always on Top, Full Screen, and the open MD Nest windows. View still has an Always on Top alias.
-- **Export to Word / pandoc** (missing). No pandoc integration. Export is PDF, HTML, and HTML without styles.
+- **Export to Word / pandoc** (missing). Built-in Word (.docx) writes OOXML in TypeScript (STORE zip, no pandoc). Pandoc formats are still missing.
 - **Line endings and encodings** (done). Open detects a BOM, else strict UTF-8, else the fallback encoding (default GB18030). Save reuses the encoding and the majority line ending. The footer shows both; File ▸ Line Endings and Encoding reopen or save with a chosen encoding. Legacy charsets use a TextDecoder reverse map.
 - **Smart punctuation** (done). Edit ▸ Smart Punctuation (off by default) turns straight quotes into curly quotes, `--` into an en dash, `---` into an em dash, and `...` into an ellipsis. A line of only hyphens stays a rule or front matter. Code, math, and link marks are skipped. Undo restores the typed characters.
 - **Spell check** (done). Edit ▸ Spell Check (off by default) sets `spellcheck` on `#write` and on CodeMirror source mode. Linux enables WebKitGTK spell checking (enchant/hunspell, languages from `$LANG`, else `en_US`). Windows and macOS use the WebView's own checker.

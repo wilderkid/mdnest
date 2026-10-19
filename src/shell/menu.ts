@@ -107,6 +107,7 @@ export function menuTemplate(mac: boolean): MenuNode[] {
         item("file.exportPdf", "PDF"),
         item("file.exportHtml", "HTML"),
         item("file.exportHtmlPlain", "HTML (without styles)"),
+        item("file.exportDocx", "Word (.docx)"),
       ] },
       item("file.print", "Print…", "CmdOrCtrl+Alt+P"),
       sep(),

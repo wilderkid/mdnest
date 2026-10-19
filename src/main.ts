@@ -24,6 +24,7 @@ import { FindBar, SourceSearch } from "./shell/findbar";
 import { EditorSearch } from "./editor/search";
 import { insertImageFiles, IMAGE_FOLDER_KEY, imageFolderPattern } from "./shell/images";
 import { buildExportHtml, printHtml } from "./shell/export";
+import { buildDocx, bytesToBase64, readImageBytes } from "./shell/docx";
 import { insertTable, moveRow, moveColumn, setColumnAlign, tableMarkdown } from "./editor/tabletools";
 import { addColumnAfter, addColumnBefore, addRowAfter, addRowBefore, deleteColumn, deleteRow, deleteTable, isInTable } from "prosemirror-tables";
 import { setBlockType, toggleMark, wrapIn } from "prosemirror-commands";
@@ -439,6 +440,23 @@ async function exportHtml(out?: string, styles = true) {
   const html = await exportHtmlString(false, styles);
   await host.writeFile(p, html); notify("Exported " + p); return p;
 }
+async function exportDocx(out?: string) {
+  if (source.active) editor.setMarkdown(source.value());
+  const p = out ?? (await host.pickSavePath(docStem() + ".docx", "docx")); if (!p) return;
+  notify("Exporting Word…");
+  const dir = docDir();
+  const bytes = await buildDocx(editor.getDoc(), {
+    title: docStem(),
+    resolveImage: (src) => {
+      if (!src || /^(https?:|data:|blob:|mdfile:|\/fs\/|\/)/.test(src)) return src;
+      return dir ? dir.replace(/\\/g, "/") + "/" + src.replace(/^\.\//, "") : src;
+    },
+    readBytes: (src) => readImageBytes(host, src),
+  });
+  await host.writeFileBytes(p, bytesToBase64(bytes));
+  notify("Exported " + p);
+  return p;
+}
 async function exportPdf(out?: string) {
   const html = await exportHtmlString(true);
   try {
@@ -503,6 +521,7 @@ const plugins = new PluginManager({
   { id: "insert.table", title: "Insert: Table…", key: "Ctrl+T", run: () => openTableDialog() },
   { id: "file.exportHtml", title: "File: Export HTML…", run: () => exportHtml() },
   { id: "file.exportPdf", title: "File: Export PDF…", run: () => exportPdf() },
+  { id: "file.exportDocx", title: "File: Export Word (.docx)", run: () => exportDocx() },
   { id: "edit.smartPunct", title: "Edit: Smart Punctuation", run: () => { const on = !smartPunctOn(); localStorage.setItem(SMART_PUNCT_KEY, on ? "1" : "0"); notify("Smart punctuation " + (on ? "on" : "off")); scheduleMenu(); } },
   { id: "edit.spellcheck", title: "Edit: Spell Check", run: () => { const on = !spellcheckOn(); localStorage.setItem(SPELL_KEY, on ? "1" : "0"); applySpellcheck(on); void host.setSpellcheck(on).catch(() => {}); notify("Spell check " + (on ? "on" : "off")); scheduleMenu(); } },
   { id: "edit.emoji", title: "Edit: Emoji & Symbols", run: () => openEmojiPicker(editor.view) },
@@ -1686,7 +1705,7 @@ function onNativeDrop(drop: NativeDrop) {
     notify,
   });
 }
-(window as any).mdnest = { editor, host, notify, exportHtmlString, findBar, state, openAt, commands, runCommand, refreshMenu, dispatcher, handleNativeDrop: onNativeDrop, sidebar, confirmDirty, guard, plugins, openFolder: pickFolderPath };
+(window as any).mdnest = { editor, host, notify, exportHtmlString, exportDocx, findBar, state, openAt, commands, runCommand, refreshMenu, dispatcher, handleNativeDrop: onNativeDrop, sidebar, confirmDirty, guard, plugins, openFolder: pickFolderPath };
 
 window.addEventListener("beforeunload", (e) => { if (state.dirty && host.kind === "browser") e.preventDefault(); });
 

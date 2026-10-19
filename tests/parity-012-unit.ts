@@ -7,6 +7,7 @@ import { EditorState, TextSelection } from "prosemirror-state";
 import { applyEol, decodeAs, detectEol, encodeText, openBytes, type SaveEncoding } from "../src/editor/encoding";
 import { curlyQuote } from "../src/editor/smartpunct";
 import { emojiChar, emojiMatches } from "../src/editor/emoji";
+import { buildDocx, crc32, imagePixelSize, zipStore } from "../src/shell/docx";
 
 let failed = 0;
 const ok = (c: boolean, name: string, info = "") => {
@@ -94,6 +95,125 @@ ok(curlyQuote(" ", "'") === "\u2018", "opening single quote after space");
 ok(emojiChar("smile") === "😄", "smile shortcode", emojiChar("smile"));
 ok(emojiMatches("rock").some((m) => m.name === "rocket"), "rocket matches rock");
 ok(emojiMatches("s").length === 0, "one letter does not open matches");
+
+{
+  const hello = new TextEncoder().encode("hi");
+  ok(crc32(hello) === 0x9d8f7b8e || crc32(new TextEncoder().encode("123456789")) === 0xcbf43926, "crc32 of 123456789", crc32(new TextEncoder().encode("123456789")).toString(16));
+  const z = zipStore([{ name: "a.txt", data: hello }]);
+  ok(z[0] === 0x50 && z[1] === 0x4b && z[2] === 0x03 && z[3] === 0x04, "zip local header");
+  ok(z[8] === 0 && z[9] === 0, "zip method is STORE");
+
+  const png = new Uint8Array([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+    0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52,
+    0, 0, 0, 8, 0, 0, 0, 4,
+    8, 2, 0, 0, 0,
+  ]);
+  const sz = imagePixelSize(png, "png");
+  ok(!!sz && sz.w === 8 && sz.h === 4, "png size", JSON.stringify(sz));
+
+  const src = [
+    "# Title",
+    "",
+    "A **bold** and *em* and <u>under</u> and ~~gone~~ and `code` and ==mark== and ^up^ and ~down~.",
+    "",
+    "> a quote",
+    "",
+    "- bullet",
+    "  - nested",
+    "- [x] done",
+    "- [ ] open",
+    "",
+    "1. first",
+    "",
+    "```",
+    "let x = 1",
+    "```",
+    "",
+    "| h | i |",
+    "|---|--:|",
+    "| a | b |",
+    "",
+    "---",
+    "",
+    "[link](https://example.com)",
+    "",
+    "See [^1].",
+    "",
+    "[^1]: a note",
+    "",
+    "$$",
+    "E = mc^2",
+    "$$",
+    "",
+    "$x$",
+    "",
+    "[TOC]",
+    "",
+    "![pic](pixel.png)",
+    "",
+  ].join("\n");
+  const doc = parseMarkdown(src);
+  const bytes = await buildDocx(doc, {
+    readBytes: async (p) => (p.endsWith("pixel.png") ? png : null),
+    resolveImage: (s) => s,
+  });
+  const { writeFileSync, mkdtempSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { execFileSync } = await import("node:child_process");
+  const dir = mkdtempSync(join(tmpdir(), "mdn-docx-"));
+  const out = join(dir, "t.docx");
+  writeFileSync(out, bytes);
+  const report = execFileSync("python3", ["-c", String.raw`
+import zipfile, xml.etree.ElementTree as ET, sys
+z = zipfile.ZipFile(sys.argv[1])
+names = set(z.namelist())
+need = ["[Content_Types].xml", "_rels/.rels", "word/document.xml", "word/styles.xml", "word/numbering.xml", "word/_rels/document.xml.rels"]
+missing = [n for n in need if n not in names]
+assert not missing, missing
+assert any(n.startswith("word/media/") and n.endswith(".png") for n in names), names
+W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+root = ET.fromstring(z.read("word/document.xml"))
+styles = [el.get(W + "val") for el in root.iter(W + "pStyle")]
+nums = [el.get(W + "val") for el in root.iter(W + "numId")]
+text = "".join(t.text or "" for t in root.iter(W + "t"))
+rels = z.read("word/_rels/document.xml.rels").decode()
+styles_xml = z.read("word/styles.xml").decode()
+numbering = z.read("word/numbering.xml").decode()
+print("STYLES", ",".join(s for s in styles if s))
+print("NUMS", ",".join(n for n in nums if n))
+print("TEXT", text)
+print("HYPER", "example.com" in rels)
+print("STYLEIDS", all(s in styles_xml for s in ["Title", "Heading1", "Quote", "Code", "ListParagraph"]))
+print("NUMFMT", "bullet" in numbering and "decimal" in numbering)
+print("DRAW", "wp:extent" in z.read("word/document.xml").decode())
+print("FOOT", "[1]" in text and "a note" in text)
+print("TASK", "☑" in text and "☐" in text)
+print("MATH", "E = mc^2" in text and "x" in text)
+print("TOC", "Title" in text or "Contents" in text)
+`, out], { encoding: "utf8" });
+  const lines = Object.fromEntries(report.trim().split("\n").map((l) => {
+    const i = l.indexOf(" ");
+    return [l.slice(0, i), l.slice(i + 1)];
+  }));
+  ok(lines.STYLEIDS === "True", "styles.xml has Title Heading Quote Code ListParagraph");
+  ok(lines.NUMFMT === "True", "numbering has bullets and decimals");
+  ok(lines.STYLES.includes("Title"), "title style used", lines.STYLES);
+  ok(lines.STYLES.includes("Quote"), "quote style used", lines.STYLES);
+  ok(lines.STYLES.includes("Code"), "code style used", lines.STYLES);
+  ok(lines.STYLES.includes("ListParagraph"), "list style used", lines.STYLES);
+  ok(lines.NUMS.includes("1") && lines.NUMS.includes("2"), "bullet and decimal numIds", lines.NUMS);
+  ok(lines.TEXT.includes("bold") && lines.TEXT.includes("under") && lines.TEXT.includes("gone"), "inline runs", lines.TEXT.slice(0, 180));
+  ok(lines.HYPER === "True", "hyperlink relationship");
+  ok(lines.DRAW === "True", "embedded image drawing");
+  ok(lines.FOOT === "True", "footnote as end note", lines.TEXT.slice(-80));
+  ok(lines.TASK === "True", "task boxes");
+  ok(lines.MATH === "True", "math as monospace text");
+  ok(lines.TOC === "True", "toc heading list", lines.TEXT);
+  const { rmSync } = await import("node:fs");
+  rmSync(dir, { recursive: true, force: true });
+}
 
 console.log(`\n${failed ? failed + " failed" : "all passed"}`);
 process.exit(failed ? 1 : 0);
