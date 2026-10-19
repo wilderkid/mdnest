@@ -23,17 +23,17 @@ dirs = "6"
 http = "1"
 base64 = "0.22"
 url = "2"
-keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-openssl"] }
 futures-util = "0.3"
 tokio = { version = "1", features = ["sync", "time", "rt", "macros"] }
 
-# TLS is per target so the Windows/macOS cross-check does not build ring.
-# One reqwest version. Linux uses rustls; Windows (schannel) and macOS
-# (Security.framework) use native-tls.
+# Platform TLS everywhere (smaller than rustls+ring, ~1 MB on Linux): OpenSSL on Linux (libssl3 is a
+# deb dependency and is also used by keyring's crypto-openssl), schannel on Windows,
+# Security.framework on macOS. One reqwest version.
 [target.'cfg(target_os = "linux")'.dependencies]
 webkit2gtk = "2.0"
 gtk = "0.18"
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream"] }
+reqwest = { version = "0.12", default-features = false, features = ["native-tls", "stream"] }
 
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.39"

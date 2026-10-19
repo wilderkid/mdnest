@@ -100,12 +100,8 @@ fn inflight() -> &'static Mutex<HashMap<String, Inflight>> {
 fn http_client() -> &'static reqwest::Client {
     static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
     CLIENT.get_or_init(|| {
-        let builder = reqwest::Client::builder();
-        // Linux enables rustls-tls; Windows and macOS enable native-tls only,
-        // so use_rustls_tls is not available on those targets.
-        #[cfg(target_os = "linux")]
-        let builder = builder.use_rustls_tls();
-        builder.build().unwrap_or_else(|_| reqwest::Client::new())
+        // TLS comes from the platform: OpenSSL (Linux), schannel (Windows), Security.framework (macOS).
+        reqwest::Client::builder().build().unwrap_or_else(|_| reqwest::Client::new())
     })
 }
 
