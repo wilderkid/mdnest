@@ -99,6 +99,40 @@ try {
   a = fs.readdirSync(path.join(WS, "assets")); m = await md();
   ok(a.includes("drop-src.png") && m.includes("](assets/drop-src.png)"), "drop of file:// URI (WebKitGTK html form) → copied + linked", a.join(","));
   fs.rmSync(srcImg, { force: true });
+  // typed definitions become blocks when the caret leaves
+  await page.locator("#write p", { hasText: "Final paragraph" }).click(); await page.keyboard.press("End");
+  await page.keyboard.press("Enter"); await page.keyboard.type("[^typed]: A **typed** note");
+  await page.keyboard.press("Enter"); await page.keyboard.type("[newref]: https://new.example");
+  await page.keyboard.press("Enter"); await page.keyboard.type("Uses [it][newref] and[^typed].");
+  await page.locator("#write h1").click(); await page.waitForTimeout(200);
+  const d2 = await page.evaluate(() => ({
+    defs: [...document.querySelectorAll("#write .md-def-footnote .md-def-name")].map((e) => e.textContent),
+    links: [...document.querySelectorAll("#write .md-def-link")].map((e) => e.textContent),
+    a: [...document.querySelectorAll("#write span[md-inline=link] a")].map((a) => a.textContent + "→" + a.getAttribute("href")),
+  }));
+  ok(d2.defs.includes("typed"), "typed [^typed]: … becomes a footnote definition on leave", d2.defs.join(","));
+  ok(d2.links.some((t) => t.startsWith("[newref]: https://new.example")) && d2.a.includes("it→https://new.example"), "typed [newref]: url becomes a definition and resolves [it][newref]", d2.a.join(" ; "));
+  m = await md();
+  ok(m.includes("[^typed]: A **typed** note\n\n[newref]: https://new.example\n\nUses [it][newref] and[^typed].\n"), "typed definitions serialize as written", m.slice(-120));
+  // Enter in the middle of a footnote definition → rest becomes a paragraph, no duplicate label
+  const box = await page.locator("#write .md-def-footnote .md-def-content", { hasText: "First footnote" }).boundingBox();
+  await page.locator("#write .md-def-footnote .md-def-content", { hasText: "First footnote" }).click({ position: { x: 2, y: box.height / 2 } });
+  await page.keyboard.press("Home"); for (let i = 0; i < 5; i++) await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("Enter"); await page.locator("#write h1").click(); await page.waitForTimeout(150);
+  m = await md();
+  ok(m.includes("[^1]: First\n\nfootnote with *emphasis*.") && (m.match(/\[\^1\]:/g) || []).length === 1, "Enter mid-definition → no duplicate [^1]:", m.match(/\[\^1\]:.{0,40}/s)?.[0]);
+  // undefined reference typed in → byte-identical
+  m = await md(); ok(!m.includes("\\["), "no escaped brackets in output", m.match(/.{0,20}\\\[.{0,20}/)?.[0] ?? "");
+  // --no-restore equivalent in the browser: ?restore=0 with no file → welcome page
+  await page.goto(base + "?restore=0"); await page.waitForSelector("body.mdn-ready"); await page.waitForTimeout(300);
+  ok((await page.locator("#write h1").first().innerText()).includes("Welcome"), "?restore=0 starts on the welcome page");
+  await page.evaluate(() => localStorage.setItem("mdnest.lastFile", "/workspace/mdnest/dev-data/workspace/sample.md"));
+  await page.goto(base); await page.waitForSelector("body.mdn-ready"); await page.waitForTimeout(300);
+  ok((await page.locator("#write h1").first().innerText()).includes("Feature Tour"), "default: last file reopened");
+  await page.evaluate(() => localStorage.setItem("mdnest.reopenLast", "0"));
+  await page.goto(base); await page.waitForSelector("body.mdn-ready"); await page.waitForTimeout(300);
+  ok((await page.locator("#write h1").first().innerText()).includes("Welcome"), "setting 'Reopen last file' off → welcome page");
+  await page.evaluate(() => { localStorage.removeItem("mdnest.reopenLast"); localStorage.removeItem("mdnest.lastFile"); });
 } catch (e) { ok(false, "exception", e.message); }
 ok(errors.length === 0, "no page errors", errors.join(" | "));
 await browser.close();
