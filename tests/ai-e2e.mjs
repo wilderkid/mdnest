@@ -457,6 +457,9 @@ try {
     await shot("07-slash-menu.png");
     const slashText = await page.locator(".mdn-slash").innerText();
     ok(/AI: generate here/.test(slashText), "h) slash menu lists AI: generate here", slashText.replace(/\s+/g, " "));
+    // the core insert items come first now; filter down to the AI item
+    await page.keyboard.type("ai: gen");
+    ok(/AI: generate here/.test(await page.locator(".mdn-slash .mdn-slash-item.sel").innerText()), "h) filtering selects the AI item");
     await page.keyboard.press("Enter");
     await page.locator(".mdn-prompt input").waitFor();
     await page.locator(".mdn-prompt input").fill("generate a short list");

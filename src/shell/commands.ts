@@ -146,6 +146,12 @@ export function commandForAccel(commands: Command[], event: KeyboardEvent): Comm
 }
 
 const TEXT_EDIT = new Set(["edit.undo", "edit.redo", "edit.selectAll"]);
+const GLOBAL_EDIT = new Set(["edit.find", "edit.replace", "edit.findNext", "edit.findPrevious", "edit.findPrev"]);
+/** Commands that change the WYSIWYG document and must not fire while a text field has focus. */
+export function editsDocument(id: string): boolean {
+  if (GLOBAL_EDIT.has(id)) return false;
+  return /^(paragraph|format|insert|edit|table)\./.test(id);
+}
 
 /** True when the key should edit an input / CodeMirror rather than the ProseMirror document. */
 export function focusOutsideEditor(el: Element | null): boolean {
@@ -233,8 +239,10 @@ export function installKeyboardDispatcher(
     const cmd = commandForAccel(getCommands(), e);
     if (!cmd || !allowed(cmd.id)) return;
     const target = (e.target as Element | null) ?? document.activeElement;
-    // A text field keeps ordinary typing. The command palette still opens from one.
-    if (focusOutsideEditor(target) && !TEXT_EDIT.has(cmd.id) && cmd.id !== "view.palette") return;
+    // A text field (find bar, prompt, CodeMirror source) keeps its own editing keys; document-editing
+    // commands (paragraph/format/insert/edit.*) stay out of it. Global commands (file, view, find,
+    // replace, palette, themes) still run from there, e.g. Ctrl+S in source mode or Ctrl+H in the find bar.
+    if (focusOutsideEditor(target) && !TEXT_EDIT.has(cmd.id) && editsDocument(cmd.id)) return;
     // Undo/redo/select-all inside the editor stay with ProseMirror history (one undo step).
     // Outside it (find bar, prompts, CodeMirror source) the dispatcher edits that field.
     if (TEXT_EDIT.has(cmd.id) && !focusOutsideEditor(target)) {
