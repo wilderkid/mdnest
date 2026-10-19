@@ -44,3 +44,24 @@ Same method (`scripts/measure-ram.sh LABEL BIN 30 1 [FILE]`, `--no-restore`, fre
 | + library (feature on), library off | 8,633,152 B | 5.09 MiB | 193 MB | 246 MB |
 
 The library adds 1.36 MB to the binary over the native-tls build (SQLite with FTS5 1.0 MB, sqlite-vec, notify) and 0.70 MiB to the .deb. Overall it is still 0.35 MB above Phase 3, since native-tls saved 1.0 MB. With the library off, RAM is unchanged (within noise, −5 MB): nothing is opened, and the library runtime (6.7 kB JS) loads lazily. When the library is on, the index for the 5-note smoke folder is 3.4 MB (768-dim vectors, mostly sqlite-vec's preallocated chunk). A local llama-server with nomic-embed-text Q4_K_M uses about 185 MB RSS, in its own process.
+
+## Leftovers: library ON (2026-10-19, evening)
+
+Same method (`scripts/measure-ram.sh LABEL BIN 30 1 [FILE]`, `--no-restore`, fresh profile per sample), two interleaved rounds, nothing else running: no other mdnest/WebKit process, no llama-server, no vite or Chromium. `measure-ram.sh` now waits for the app's WebKit helpers to exit (SIGKILL after 15 s) before the next sample. Without that, lingering helpers made every later sample refuse to run, or share pages with it. The library-on rows start from a prepared profile (`PROFILE_DIR=…`, built with `scripts/make-ram-profile.mjs OUT FILE MODE`). In that profile the workspace is already indexed, so nothing is embedded at startup. I checked that the app has the index open (3 SQLite fds) with the library on, and none with it off.
+
+Workspace for the "ws" rows: `/tmp/mdn-ram-ws`, which is `samples/sample.md` plus the 20 notes of `tests/fixtures/library-calib.json`. That gives 21 files and 35 chunks. With nomic-embed-text vectors (768-dim) the index is 3.4 MB, mostly sqlite-vec's preallocated chunk; keyword-only it is 0.14 MB. The file opened is `sample.md` in all rows.
+
+Absolute numbers are about 8–10 MB above the earlier tables, for the old binary as well (box state), so compare within this table only.
+
+| Build / config | Binary | .deb | Welcome page | sample.md |
+|---|---|---|---|---|
+| `24a7fb1` (before leftovers), library off | 8,633,152 B | 5.09 MiB | 201 / 201 MB | 255 / 256 MB |
+| leftovers, library off | 8,637,376 B | 5.10 MiB | 202 / 202 MB | 256 / 257 MB |
+| leftovers, 21-note workspace, AI off, library off | | | — | 257 / 257 MB |
+| leftovers, same workspace, AI on, library off | | | — | 258 / 257 MB |
+| leftovers, same workspace, library on, keyword only (AI off) | | | — | 259 / 255 MB |
+| leftovers, same workspace, library on + AI on, vectors indexed (nomic) | | | — | 259 / 258 MB |
+
+- Library off: no change (+1 MB, within noise). The binary is +4.2 kB (relative cut-off, distances); the main JS chunk is +2 kB (formatted word diff, math rendering in cards).
+- Library on, idle, with an indexed workspace: about +1–2 MB, all in the Rust process (mdnest 73 → 74–75 MB: SQLite connection and page cache, sqlite-vec, notify watcher). The web process is unchanged; the library runtime JS is 6.7 kB and lazy. Searches load query vectors and pages on demand. They are not part of idle RAM.
+- The embedding server is a separate process and is not counted. llama-server with nomic-embed-text Q4_K_M uses about 185 MB RSS while running. It is only needed while indexing or for meaning search; keyword search works without it.
