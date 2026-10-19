@@ -31,6 +31,11 @@ scripts/cross-check.sh          # cargo check for Windows + macOS, library on an
 npx tsx tests/markers.ts        # editable-marker unit tests
 npx tsx tests/refs.ts           # footnotes + reference links (round-trip, markers)
 node tests/fixes.mjs            # E2E: footnotes/ref links, WebKitGTK-style paste/drop payloads
+node tests/parity.mjs           # menu bar, shortcuts, welcome (needs preview on :4173)
+node tests/parity-files.mjs     # file handling and sidebar (needs preview on :4173)
+node tests/parity-insert.mjs    # slash menu, input rules, editing shortcuts, toolbar (needs preview on :4173)
+npx tsx tests/parity-unit.ts    # marks, task-list and table input-rule unit tests
+node tests/native/parity-smoke.mjs   # GTK menu bar smoke (tauri-driver, Xvfb)
 tests/native/image-paste-drop.py src-tauri/target/release/mdnest   # native app under Xvfb (xdotool, xclip, python3-gi, xfwm4)
 scripts/measure-ram.sh LABEL BIN 30 3 [FILE]   # idle RAM: PSS over app + WebKit processes, fresh profile
 npx tsx tests/roundtrip.ts samples/sample.md   # markdown round-trip check
@@ -93,6 +98,17 @@ Tauri commands: `secret_set`, `secret_has`, `secret_delete`, `secret_backend`, `
 ## Themes
 The theme folder holds `<name>.css` and an optional `<name>/` asset folder. Load order is `<name>.css` → `base.user.css` → `<name>.user.css`, using link ids `#theme_css`, `#base_user_css` and `#theme_user_css`. Dark themes are detected from the computed body background. The Mermaid theme comes from `--mermaid-theme`.
 Gallery themes used for testing are copied unmodified into `dev-data/themes` (gitignored, not shipped).
+
+## Typora parity features
+
+Item-by-item status is in [docs/typora-parity-gap.md](docs/typora-parity-gap.md), including the shortcut table (Windows/Linux; Cmd on macOS).
+
+- **Menus.** File, Edit, Paragraph, Format, View, Themes, and Help. The desktop build uses a native menu. The browser host (and Playwright) uses `#mdn-menubar`. Every item runs a command from the registry.
+- **Sidebar.** File tree and article list, search, sort, and a footer with new file, new folder, open folder, sort, search, and refresh. Right-click uses the shared `.context-menu`.
+- **Quick open.** Ctrl+P opens `#typora-quick-open` (recent files, then a fuzzy name match).
+- **Slash menu.** `/` at the start of an empty paragraph inserts headings, lists, quote, table, code, math, mermaid, a rule, TOC, footnote, front matter, and a callout. The AI item still appears when AI is on.
+- **Editing.** Underline, superscript, subscript, and comments round-trip. Auto-pair is on for brackets and quotes, off for Markdown syntax. Focus mode (F8), typewriter mode (F9), a formatting toolbar, and an editor context menu.
+- **Windows drag-drop.** HTML5 drops stay on Linux. On Windows, WebView2 drops carry no paths, so a dropped folder or Markdown file is handled by Tauri's drag-drop event. In-editor text drag-move is lost on Windows.
 
 ## Phase 2 features
 - **Editable markers**: click into **bold**, *italic*, `code`, ~~strike~~, ==mark==, [links](…) or `$math$` and the delimiters become real text. Typing or deleting them changes the formatting. Inline math has a live preview popover.

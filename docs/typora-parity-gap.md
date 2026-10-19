@@ -36,16 +36,16 @@ What really was Windows-specific (before):
 | | done | partial | missing | win-broken | n/a |
 |---|---|---|---|---|---|
 | Before (0.1.0) | 28 | 42 | 85 | 4 | 4 |
-| After (0.1.1) | 94 | 19 | 46 | 0 | 4 |
+| After (0.1.1) | 143 | 8 | 8 | 0 | 4 |
 
-(Filled in from the tables below at the end of the work.)
+Counted by `python3 scripts/parity-count.py` (163 rows; an empty After cell inherits Before).
 
 ## Menu bar (window chrome)
 
 | Item | Shortcut | Before | After | Notes |
 |---|---|---|---|---|
 | Native menu bar File/Edit/Paragraph/Format/View/Themes/Help | | missing | done | HTML menubar in the browser host; GTK/Windows menu via set_app_menu |
-| Window menu (minimize, zoom, always on top) | | missing | | |
+| Window menu (minimize, zoom, always on top) |  | missing | partial | Always on Top is a View item; no separate Window menu (minimize/zoom are the OS window) |
 | App menu on macOS (About, Preferences, Quit) | | missing | done | built in Rust; not run on this box |
 
 ## File
@@ -62,7 +62,7 @@ What really was Windows-specific (before):
 | Reload from Disk | | partial | done | menu item |
 | Save | Ctrl+S | done | done | menu + shortcut |
 | Save As… | Ctrl+Shift+S | partial | done | menu + shortcut |
-| Save All | | n/a | | single document per window |
+| Save All |  | n/a | n/a | single document per window |
 | Move To… | | missing | done | folder picker + rename_path |
 | Rename… / Duplicate | | missing | done | prompt / unique "name copy.ext" |
 | Open File Location (reveal in Explorer/Finder) | | missing | done | explorer /select, open -R, FileManager1.ShowItems |
@@ -70,19 +70,19 @@ What really was Windows-specific (before):
 | Export → PDF | | partial | done | File → Export submenu |
 | Export → HTML | | partial | done | File → Export submenu |
 | Export → HTML (without styles) | | missing | done | styles omitted; welcome page not in the export |
-| Export → Word / pandoc formats | | missing | | needs pandoc |
-| Import | | n/a | | pandoc |
+| Export → Word / pandoc formats |  | missing | missing | needs pandoc; not built |
+| Import |  | n/a | n/a | pandoc |
 | Print… | Ctrl+Alt+P | missing | done | export HTML through the print dialog |
-| Properties / word count info | | partial | | footer word count |
+| Properties / word count info |  | partial | done | footer word count + View ▸ Word Count popover |
 | Preferences… | Ctrl+, | partial | done | menu opens the sidebar settings tab |
 | Close | Ctrl+W | missing | done | dirty guard; Tauri close request uses the same modal |
 | Quit | Ctrl+Q | missing | done | menu item (omitted on macOS, where it is in the app menu) |
 | Drag a .md file onto the window → open | | missing | done | handleNativeDrop; Windows uses tauri drag-drop |
 | Drag a folder onto the window → open folder | | missing | done | same handler |
 | Welcome page with Open File / Open Folder buttons | | missing | done | #mdn-welcome; also New File and recent list |
-| Launch: restore last folder / file | | done | | setting "Reopen last file" |
-| Autosave | | done | | setting |
-| Line endings (CRLF/LF), encodings | | missing | | |
+| Launch: restore last folder / file |  | done | done | setting Reopen last file |
+| Autosave |  | done | done | setting |
+| Line endings (CRLF/LF), encodings |  | missing | missing | files are read and written as UTF-8; no encoding or newline picker |
 
 ## Edit
 
@@ -90,26 +90,26 @@ What really was Windows-specific (before):
 |---|---|---|---|---|
 | Undo / Redo | Ctrl+Z / Ctrl+Y, Ctrl+Shift+Z | done | done | menu + focus-aware dispatcher |
 | Cut / Copy / Paste / Select All | Ctrl+X/C/V/A | done | done | predefined menu items + select all |
-| Copy as Markdown | Ctrl+Shift+C | missing | | |
-| Copy as HTML code | | missing | | |
-| Copy as Plain Text | | missing | | |
-| Paste as Plain Text | Ctrl+Shift+V | missing | | |
-| Delete | | done | | key only |
-| Select line / sentence | Ctrl+L | missing | | |
-| Select styled scope | Ctrl+E | missing | | |
-| Select word | Ctrl+D | missing | | |
-| Jump to top / bottom | Ctrl+Home / Ctrl+End | done | | native caret keys |
+| Copy as Markdown | Ctrl+Shift+C | missing | done | Ctrl+Shift+C |
+| Copy as HTML code |  | missing | done | menu item; no shortcut |
+| Copy as Plain Text |  | missing | done | menu item; no shortcut |
+| Paste as Plain Text | Ctrl+Shift+V | missing | done | Ctrl+Shift+V |
+| Delete |  | done | done | Edit menu + key |
+| Select line / sentence | Ctrl+L | missing | done | Ctrl+L selects the current line |
+| Select styled scope | Ctrl+E | missing | done | Ctrl+E |
+| Select word | Ctrl+D | missing | done | Ctrl+D |
+| Jump to top / bottom | Ctrl+Home / Ctrl+End | done | done | Ctrl+Home / Ctrl+End commands |
 | Find… | Ctrl+F | done | done | menu + shortcut |
 | Find Next / Previous | F3 / Shift+F3 | partial | partial | menu items; find-bar behaviour unchanged |
 | Replace | Ctrl+H | done | done | menu + shortcut |
 | Find in files (sidebar search) | Ctrl+Shift+F | partial | done | #file-library-search-input; content hits open at the line |
-| Smart punctuation / substitutions | | missing | | |
-| Spell check | | missing | | |
-| Emoji & symbols / :emoji: autocomplete | | missing | | |
-| Auto-pair brackets and quotes | | missing | | |
-| Auto-pair Markdown syntax (`*`, `` ` ``, `~~`) | | missing | | |
-| Code tools: copy code content | | missing | | |
-| Math tools: refresh math | | n/a | | always live |
+| Smart punctuation / substitutions |  | missing | missing | not built |
+| Spell check |  | missing | missing | editor spellcheck is off; no dictionary |
+| Emoji & symbols / :emoji: autocomplete |  | missing | missing | not built |
+| Auto-pair brackets and quotes |  | missing | done | on by default; Edit ▸ Auto Pair and Settings |
+| Auto-pair Markdown syntax (`*`, `` ` ``, `~~`) |  | missing | done | off by default; Edit ▸ Auto Pair and Settings |
+| Code tools: copy code content |  | missing | missing | no code-block toolbar action |
+| Math tools: refresh math |  | n/a | n/a | always live |
 
 ## Paragraph
 
@@ -117,27 +117,27 @@ What really was Windows-specific (before):
 |---|---|---|---|---|
 | Heading 1–6 | Ctrl+1…6 | partial | done | menu + shortcut |
 | Paragraph | Ctrl+0 | partial | done | menu + shortcut |
-| Increase / Decrease heading level | Ctrl+= / Ctrl+- | missing | | |
-| Insert paragraph before / after | | missing | | |
-| Table insert (rows × cols dialog) | Ctrl+T | partial | partial | menu inserts 3×3; dialog in part 3 |
-| Table submenu (add/delete row/col, align, move, delete table) | | partial | | floating table toolbar |
+| Increase / Decrease heading level | Ctrl+= / Ctrl+- | missing | done | Ctrl+= / Ctrl+-; h1 decrease returns to a paragraph |
+| Insert paragraph before / after |  | missing | done | Paragraph menu |
+| Table insert (rows × cols dialog) | Ctrl+T | partial | done | #table-insert-dialog |
+| Table submenu (add/delete row/col, align, move, delete table) |  | partial | partial | add/delete row and column, delete table; no align or move |
 | Code fences | Ctrl+Shift+K | partial | done | menu + shortcut |
-| Math block | Ctrl+Shift+M | missing | | input rule `$$` only |
+| Math block | Ctrl+Shift+M | missing | done | Ctrl+Shift+M and $$ + Enter |
 | Quote | Ctrl+Shift+Q | partial | done | menu + shortcut |
 | Ordered list | Ctrl+Shift+[ | partial | done | menu + shortcut |
 | Unordered list | Ctrl+Shift+] | partial | done | menu + shortcut |
-| Task list | Ctrl+Shift+X | missing | | input rule `[ ]` inside a list only |
-| Toggle task status | | partial | | click on the checkbox |
-| Indent / Outdent list item | Ctrl+] / Ctrl+[, Tab / Shift+Tab | done | | keys only |
-| Link reference | | missing | | parsed and round-tripped, no insert UI |
-| Footnote | | missing | | parsed and round-tripped, no insert UI |
-| Horizontal line | | partial | | input rule `---` only |
-| Table of contents | | partial | | `[TOC]` renders, no insert UI |
-| YAML front matter | | partial | | parsed, no insert UI |
-| HTML block | | partial | | parsed |
-| Alert / callout blocks (NOTE/TIP/…) | | missing | | |
-| Mermaid / diagram insert | | partial | | ```mermaid renders, no insert UI |
-| Delete block | | missing | | |
+| Task list | Ctrl+Shift+X | missing | done | Ctrl+Shift+X and [ ] + space at paragraph start |
+| Toggle task status |  | partial | partial | click the checkbox; no menu command |
+| Indent / Outdent list item | Ctrl+] / Ctrl+[, Tab / Shift+Tab | done | done | menu + Ctrl+] / Ctrl+[ |
+| Link reference |  | missing | done | Paragraph menu inserts a reference definition |
+| Footnote |  | missing | done | inserts [^n] and a definition |
+| Horizontal line |  | partial | done | Paragraph menu and --- + Enter |
+| Table of contents |  | partial | done | Paragraph menu and [TOC] + Enter |
+| YAML front matter |  | partial | done | Paragraph menu; --- + Enter on the first line |
+| HTML block |  | partial | partial | parsed and round-tripped; no insert command |
+| Alert / callout blocks (NOTE/TIP/…) |  | missing | done | Paragraph ▸ Alert; GitHub > [!NOTE] |
+| Mermaid / diagram insert |  | partial | done | Paragraph menu inserts a mermaid fence |
+| Delete block |  | missing | done | Paragraph menu |
 
 ## Format
 
@@ -145,38 +145,38 @@ What really was Windows-specific (before):
 |---|---|---|---|---|
 | Strong | Ctrl+B | partial | done | menu + shortcut |
 | Emphasis | Ctrl+I | partial | done | menu + shortcut |
-| Underline | Ctrl+U | missing | | no `<u>` mark |
+| Underline | Ctrl+U | missing | done | Ctrl+U; <u> parses and serializes |
 | Code | Ctrl+Shift+` | partial | done | menu + shortcut |
 | Strike | Alt+Shift+5 | partial | done | menu + shortcut |
-| Highlight | | partial | | `==x==` input rule only |
-| Inline math | | partial | | `$x$` input rule only |
-| Superscript / Subscript | | missing | | |
-| Comment `<!-- -->` | | missing | | |
-| Hyperlink | Ctrl+K | missing | | Ctrl+K is AI Rewrite when AI is on |
-| Image (insert from file) | Ctrl+Shift+I | missing | | paste/drop only |
-| Image zoom / align | | missing | | |
-| Clear format | Ctrl+\ | missing | | |
-| Open link / copy link address | Ctrl+click | partial | | Ctrl+click opens |
+| Highlight |  | partial | done | Format menu; ==x== input rule kept |
+| Inline math |  | partial | done | Format menu; $x$ input rule kept |
+| Superscript / Subscript |  | missing | done | ^x^ and ~x~; ~~strike~~ unchanged |
+| Comment `<!-- -->` |  | missing | done | inline comment mark; a comment-only line stays an HTML block |
+| Hyperlink | Ctrl+K | missing | done | Ctrl+K prompts for a URL; dropped while AI Rewrite owns Mod-k |
+| Image (insert from file) | Ctrl+Shift+I | missing | done | Ctrl+Shift+I file dialog, then image settings |
+| Image zoom / align |  | missing | partial | zoom 50/100/200% as an img style; no align |
+| Clear format | Ctrl+\ | missing | done | Ctrl+\ |
+| Open link / copy link address | Ctrl+click | partial | partial | Ctrl+click opens; context menu copies the address |
 
 ## View
 
 | Item | Shortcut | Before | After | Notes |
 |---|---|---|---|---|
 | Source code mode | Ctrl+/ | done | done | menu + footer + shortcut |
-| Focus mode | F8 | missing | | |
-| Typewriter mode | F9 | missing | | |
+| Focus mode | F8 | missing | done | F8; body.on-focus-mode |
+| Typewriter mode | F9 | missing | done | F9; body.ty-on-typewriter-mode |
 | Toggle sidebar | Ctrl+Shift+L | partial | done | menu + shortcut + footer |
 | Outline | Ctrl+Shift+1 | partial | done | menu shows the outline tab |
 | Articles (file list view) | Ctrl+Shift+2 | missing | done | #file-library-list excerpt, time, parent |
 | File tree | Ctrl+Shift+3 | partial | done | tree + footer toolbar |
-| Status bar toggle | | missing | | footer always shown |
-| Word count (footer, popover) | | partial | | words only |
-| Full screen | F11 | missing | | |
-| Always on top | | missing | | |
-| Zoom in / out / actual size | Ctrl+Shift+= / Ctrl+Shift+- / Ctrl+Shift+0 | missing | | WebView2 page zoom only (win-broken) |
-| Formatting toolbar | | missing | | |
-| Readonly mode | | missing | | |
-| Toggle DevTools | | n/a | | release builds |
+| Status bar toggle |  | missing | done | View ▸ Status Bar; persisted |
+| Word count (footer, popover) |  | partial | done | footer count + popover (words, characters, lines, reading minutes) |
+| Full screen | F11 | missing | done | F11; Tauri setFullscreen, browser fullscreen API |
+| Always on top |  | missing | done | View item; Tauri setAlwaysOnTop |
+| Zoom in / out / actual size | Ctrl+Shift+= / Ctrl+Shift+- / Ctrl+Shift+0 | missing | done | Ctrl+Shift+= / - / 0; persisted CSS zoom |
+| Formatting toolbar |  | missing | done | #mdn-format-toolbar; View toggle, off by default, active states |
+| Readonly mode |  | missing | missing | not built |
+| Toggle DevTools |  | n/a | n/a | release builds |
 | Command palette | Ctrl+Shift+P | done | done | View menu + shortcut |
 
 ## Themes and Help
@@ -185,7 +185,7 @@ What really was Windows-specific (before):
 |---|---|---|---|---|
 | Themes menu listing theme CSS files | | partial | done | radio items + footer select |
 | Open theme folder | | missing | done | reveal_path on the config themes dir (browser: toast) |
-| base.user.css / name.user.css | | done | | |
+| base.user.css / name.user.css |  | done | done |  |
 | Help: Markdown reference / quick start | | missing | done | modal with a short reference |
 | Help: About (version) | | missing | done | toast "MD Nest 0.1.1" |
 | Help: Keyboard shortcuts | | missing | done | modal listing registered accelerators |
@@ -211,7 +211,7 @@ What really was Windows-specific (before):
 | Context menu: copy file path | | missing | done | |
 | Context menu: open in new window | | missing | done | |
 | Outline: highlight current heading | | missing | done | .outline-item-active |
-| Outline: collapse / expand | | missing | | |
+| Outline: collapse / expand |  | missing | missing | outline lists headings; no collapse control |
 | File tree keyboard navigation | | missing | done | arrows, Enter, F2, Delete |
 | Live refresh when files change on disk | | missing | partial | refresh on focus and after our own operations |
 
@@ -219,34 +219,34 @@ What really was Windows-specific (before):
 
 | Item | Shortcut | Before | After | Notes |
 |---|---|---|---|---|
-| `#`–`######` + space → heading | | done | | |
-| `>` + space → quote | | done | | |
-| `-`/`*`/`+` + space → bullet list | | done | | |
-| `1.` + space → ordered list | | done | | |
-| `[ ]` / `[x]` + space → task list (top level) | | partial | | only inside an existing list item |
-| ```` ```lang ```` + space/Enter → code fence | | partial | | space only |
-| `$$` + Enter/space → math block | | partial | | space only |
-| `---` / `***` → horizontal rule | | done | | |
-| `**x**`, `*x*`, `` `x` ``, `~~x~~`, `==x==`, `$x$` | | done | | |
-| `<u>x</u>` underline, `^x^` sup, `~x~` sub | | missing | | |
-| `[TOC]` + Enter → TOC | | partial | | only on reload |
-| `---` on the first line → YAML front matter | | missing | | becomes a horizontal rule |
+| `#`–`######` + space → heading | | done | done | |
+| `>` + space → quote |  | done | done |  |
+| `-`/`*`/`+` + space → bullet list |  | done | done |  |
+| `1.` + space → ordered list |  | done | done |  |
+| `[ ]` / `[x]` + space → task list (top level) |  | partial | done | paragraph start, not only inside a list |
+| ```` ```lang ```` + space/Enter → code fence |  | partial | done | Enter creates the fence; space rule kept |
+| `$$` + Enter/space → math block |  | partial | done | Enter creates the block; space rule kept |
+| `---` / `***` → horizontal rule |  | done | done | first line of the doc becomes front matter instead |
+| `**x**`, `*x*`, `` `x` ``, `~~x~~`, `==x==`, `$x$` |  | done | done |  |
+| `<u>x</u>` underline, `^x^` sup, `~x~` sub |  | missing | done | parse, serialize, round-trip |
+| `[TOC]` + Enter → TOC |  | partial | done | Enter creates a TOC node |
+| `---` on the first line → YAML front matter |  | missing | done | elsewhere --- stays a horizontal rule |
 | `|a|b|` + Enter → table | | missing | | |
-| `[^1]:` footnote, `[x]: url` ref | | done | | defs plugin |
-| Core slash menu `/` (headings, lists, quote, table, code, math, mermaid, hr, TOC, footnote, front matter, image) | | missing | | engine present, only AI registered an item |
-| Editor context menu (format / insert / paragraph / table) | | missing | | WebView2/WebKit default menu |
-| Image settings (copy to ./assets etc.) | | done | | Settings → Images |
-| Insert image from file dialog | | missing | | |
+| `[^1]:` footnote, `[x]: url` ref |  | done | done | defs plugin |
+| Core slash menu `/` (headings, lists, quote, table, code, math, mermaid, hr, TOC, footnote, front matter, image) |  | missing | done | slash-core.ts; AI item still appears when AI is on |
+| Editor context menu (format / insert / paragraph / table) |  | missing | done | right-click in #write; same .context-menu as the sidebar |
+| Image settings (copy to ./assets etc.) |  | done | done | Settings → Images |
+| Insert image from file dialog |  | missing | done | Ctrl+Shift+I |
 
 ## Status bar
 
 | Item | Shortcut | Before | After | Notes |
 |---|---|---|---|---|
-| Word count | | done | | |
-| Source-mode toggle button | | done | | |
-| Sidebar toggle button | | done | | |
-| Theme switcher | | done | | MD Nest extra |
-| Character / line count popover | | missing | | |
+| Word count |  | done | done |  |
+| Source-mode toggle button |  | done | done |  |
+| Sidebar toggle button |  | done | done |  |
+| Theme switcher |  | done | done | MD Nest extra |
+| Character / line count popover |  | missing | done | View ▸ Word Count |
 
 ## Windows-specific
 
@@ -256,5 +256,28 @@ What really was Windows-specific (before):
 | Browser accelerators off (Ctrl+P print, Ctrl+R/F5 reload, page zoom) | | win-broken | done | WebView2 settings + frontend swallow |
 | No Edge default context menu (Back/Refresh/Print) | | win-broken | done | WebView2 settings + frontend preventDefault |
 | `body.os-windows` class for themes | | win-broken | done | os-windows / os-linux / is-mac, including export |
-| Native file dialogs (open/save/folder) | | done | | dialog:default capability |
-| Ctrl shortcuts (Mod = Ctrl) | | done | | |
+| Native file dialogs (open/save/folder) |  | done | done | dialog:default capability |
+| Ctrl shortcuts (Mod = Ctrl) |  | done | done |  |
+
+## Remaining gaps
+
+Still missing or only partial after 0.1.1. Each note says why.
+
+- **Window menu** (partial). Always on Top lives under View. There is no Window menu for minimize or zoom; those stay with the OS window.
+- **Export to Word / pandoc** (missing). No pandoc integration. Export is PDF, HTML, and HTML without styles.
+- **Line endings and encodings** (missing). Files are read and written as UTF-8. There is no CRLF/LF or encoding picker.
+- **Smart punctuation, spell check, emoji autocomplete** (missing). Not built. The editor keeps `spellcheck` off.
+- **Copy code content** (missing). Code fences have no copy-content action.
+- **Table align and move** (partial). The table menu adds and deletes rows and columns and deletes the table. Alignment stays on the floating table toolbar. There is no move-row or move-column command.
+- **Toggle task status** (partial). Clicking the checkbox toggles it. There is no menu command.
+- **HTML block insert** (partial). HTML blocks parse and round-trip. There is no insert command.
+- **Image align** (partial). Zoom 50/100/200% sets an `<img>` width style. There is no align control.
+- **Open link** (partial). Ctrl+click opens a link. The editor context menu copies the address. There is no separate "open link" command beyond that click.
+- **Readonly mode** (missing). Not built.
+- **Outline collapse** (missing). The outline lists headings and highlights the one at the caret. It does not collapse sections.
+- **Live file refresh** (partial). The tree refreshes on window focus and after our own create/rename/trash. It does not watch the disk.
+- **Find next / previous** (partial). Menu items and F3 / Shift+F3 step the existing find bar. The find-bar behaviour itself is unchanged.
+- **Heading level 6 decrease** (partial). Decrease from h1 returns to a paragraph. Decrease from h6 asks for a level the schema does not have, so that one step does nothing useful.
+- **Comment-only lines** (partial). An inline `<!-- note -->` is a mark and round-trips. A line that is only a comment parses as an HTML block, which is how markdown-it treats it.
+- **In-editor text drag on Windows** (partial). WebView2 HTML5 drops carry no paths, so folder and file drops use Tauri's drag-drop event. That turns off in-editor text drag-move on Windows.
+- **Hyperlink vs AI Rewrite** (partial). Both want Ctrl+K. While AI Rewrite is enabled, the core hyperlink command drops its accelerator and the plugin keeps the key. Hyperlink stays in the menu.
