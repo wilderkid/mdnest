@@ -38,7 +38,7 @@ export const ZH: Record<string, string> = {
   // Format
   Strong: "加粗", Emphasis: "斜体", Underline: "下划线", Code: "代码", Strike: "删除线", Highlight: "高亮", "Inline Math": "行内公式",
   Superscript: "上标", Subscript: "下标", Comment: "注释", Hyperlink: "超链接", "Hyperlink Actions": "超链接操作",
-  "Insert Local Image…": "插入本地图片…", "Zoom 50%": "缩放 50%", "Zoom 100%": "缩放 100%", "Zoom 200%": "缩放 200%", Default: "默认",
+  "Insert Local Image…": "插入本地图片…", Zoom: "缩放", Restore: "还原", "Zoom 50%": "缩放 50%", "Zoom 100%": "缩放 100%", "Zoom 200%": "缩放 200%", Default: "默认",
   "Open Link": "打开链接", "Copy Link Address": "复制链接地址", "Clear Format": "清除格式",
   // View
   "Source Code Mode": "源代码模式", "Toggle Source Mode": "切换源代码模式", "Focus Mode": "专注模式", "Typewriter Mode": "打字机模式",
