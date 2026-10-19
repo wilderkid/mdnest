@@ -490,7 +490,15 @@ fn which_on_path(name: &str) -> Option<std::path::PathBuf> {
 }
 
 fn pandoc_version_line(bin: &std::path::Path) -> String {
-    let Ok(out) = std::process::Command::new(bin).arg("--version").output() else {
+    let mut cmd = std::process::Command::new(bin);
+    cmd.arg("--version");
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    let Ok(out) = cmd.output() else {
         return String::new();
     };
     let text = String::from_utf8_lossy(&out.stdout);

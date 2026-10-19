@@ -29,6 +29,7 @@ body.mdn-menubar-on #mdn-menubar { display: flex; position: fixed; top: 0; left:
 .mdn-menu-sep { height: 1px; margin: 4px 0; background: rgba(127,127,127,.3); }
 .mdn-menu-sub > .mdn-submenu { display: none; top: -4px; left: 100%; }
 .mdn-menu-sub:hover > .mdn-submenu, .mdn-menu-sub:focus-within > .mdn-submenu { display: block; }
+#mdn-menubar .mdn-menu-sub:hover > .mdn-submenu, #mdn-menubar .mdn-menu-sub:focus-within > .mdn-submenu { display: block; }
 .mdn-menu-caret { opacity: .6; }
 body.mdn-menubar-on #typora-sidebar { top: var(--menubar-height); }
 body.mdn-menubar-on content, body.mdn-menubar-on #typora-source { top: var(--menubar-height); }

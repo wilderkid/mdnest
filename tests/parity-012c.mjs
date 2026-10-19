@@ -63,6 +63,11 @@ try {
   const labels = await page.locator("#mdn-menubar .mdn-submenu button").allTextContents();
   ok(labels.some((t) => /Word \(\.docx\)/.test(t)), "C1 export menu has Word (.docx)", labels.join(" | "));
   ok(labels.some((t) => /PDF/.test(t)) && labels.some((t) => /HTML/.test(t)), "C1 built-in PDF and HTML stay in Export");
+  const wordBtn = page.locator("#mdn-menubar .mdn-submenu button").filter({ hasText: /Word \(\.docx\)/ }).first();
+  ok(await wordBtn.isVisible(), "C1 Export flyout is visible beside the File menu (not clipped)");
+  const box = await wordBtn.boundingBox();
+  const parentBox = await exportRow.boundingBox();
+  ok(!!box && !!parentBox && box.x >= parentBox.x + parentBox.width - 2, "C1 Export flyout opens to the right of the row");
   await page.screenshot({ path: path.join(OUT, "export-menu.png") });
 
   await page.evaluate(() => window.mdnest.runCommand("file.exportDocx"));

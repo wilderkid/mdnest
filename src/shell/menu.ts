@@ -578,6 +578,22 @@ function renderNode(node: MenuNode, run: (id: string) => void, closeAll: () => v
     sub.className = "dropdown-menu mdn-submenu";
     sub.append(...node.submenu.map((n) => renderNode(n, run, closeAll, mac)));
     row.appendChild(sub);
+    // The parent dropdown scrolls (max-height), which would clip an absolutely
+    // positioned flyout; place it with fixed coordinates beside the row instead.
+    const place = () => {
+      const r = row.getBoundingClientRect();
+      sub.style.position = "fixed";
+      sub.style.left = `${Math.round(r.right)}px`;
+      sub.style.top = `${Math.round(r.top - 4)}px`;
+      sub.style.maxHeight = `${Math.max(120, window.innerHeight - r.top - 8)}px`;
+      requestAnimationFrame(() => {
+        const s = sub.getBoundingClientRect();
+        if (s.right > window.innerWidth) sub.style.left = `${Math.max(0, Math.round(r.left - s.width))}px`;
+        if (s.bottom > window.innerHeight) sub.style.top = `${Math.max(0, Math.round(window.innerHeight - s.height - 4))}px`;
+      });
+    };
+    row.addEventListener("mouseenter", place);
+    row.addEventListener("focusin", place);
     return row;
   }
   const row = document.createElement("button");
