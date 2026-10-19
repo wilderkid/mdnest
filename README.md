@@ -1,4 +1,6 @@
-# mdnest — Phase 1 prototype
+# MD Nest
+
+*Code name `mdnest`. Phase 2 prototype.*
 
 A clean-room, Typora-style live-preview Markdown editor: Tauri 2 + Vite + TypeScript, with ProseMirror for editing.
 No Typora code, base.css, built-in themes or translations are used. `src/styles/base.css` and `themes/mdnest*.css` are original work.
@@ -10,6 +12,8 @@ npm install
 npm run dev                      # browser dev mode, http://127.0.0.1:1420 (file API sandboxed to dev-data/workspace)
 npm run build && npx vite preview   # http://127.0.0.1:4173
 node tests/screenshots.mjs      # headless Playwright screenshots + smoke checks → screenshots/
+node tests/phase2.mjs           # Phase 2 E2E suite (35 checks; needs `npx vite preview` on :4173)
+npx tsx tests/markers.ts        # editable-marker unit tests
 npx tsx tests/roundtrip.ts samples/sample.md   # markdown round-trip check
 CARGO_BUILD_JOBS=4 npx tauri build   # desktop binary + .deb
 ```
@@ -19,7 +23,13 @@ CARGO_BUILD_JOBS=4 npx tauri build   # desktop binary + .deb
 |---|---|
 | `src/editor/schema.ts` | PM schema whose DOM output follows the Typora theme contract (`#write`, `[md-inline]`, `.md-fences`, `.md-toc`, `.md-task-list-item`, `mdtype=`…) |
 | `src/editor/markdown.ts` | md-bridge: markdown-it (CommonMark + GFM tables/strike + mark + math/front-matter/TOC/task rules) ⇄ prosemirror-markdown |
-| `src/editor/reveal.ts` | source reveal: `.md-expand` + `.md-meta` delimiter widgets, block `.md-focus` / `.md-focus-container` |
+| `src/editor/markers.ts` | Typora-style editable markers. A formatted span the caret touches is expanded to raw Markdown text (`md_src` mark, highlighted); the block is reparsed when the caret leaves. Also has `collapseAll` (run before save/export) and click→selection sync |
+| `src/editor/reveal.ts` | block `.md-focus` / `.md-focus-container`, heading `#` and image-src widgets |
+| `src/editor/tabletools.ts` | floating table toolbar: rows/cols, alignment, delete; `insertTable` |
+| `src/editor/search.ts`, `src/shell/findbar.ts` | find/replace (case, regex) for WYSIWYG (PM decorations mirrored into CodeMirror blocks) and source mode |
+| `src/shell/images.ts` | image paste/drop → assets folder (`./assets` or `${filename}.assets`, Settings → Images), relative src |
+| `src/shell/export.ts` | standalone HTML export (theme CSS inlined, fonts/images as data URIs, static code highlighting, SVG math/mermaid) and print |
+| `src-tauri/src/pdf.rs` | Linux PDF export via WebKitGTK `PrintOperation` (print-to-file) |
 | `src/editor/codeview.ts` | CodeMirror 5.65 node view (`cm-s-inner`) for fences, `$$` math and YAML front matter. Mermaid/math previews are shown when the block is not focused |
 | `src/editor/views.ts` | inline math, TOC, and HTML-block views |
 | `src/editor/rules.ts` | input rules (`#`, `>`, `-`, `1.`, `[ ]`, ```` ``` ````, `$$`, `---`, `**`, `*`, `` ` ``, `~~`, `==`, `$`) and keymaps |
@@ -33,3 +43,22 @@ CARGO_BUILD_JOBS=4 npx tauri build   # desktop binary + .deb
 ## Themes
 The theme folder holds `<name>.css` and an optional `<name>/` asset folder. Load order is `<name>.css` → `base.user.css` → `<name>.user.css`, using link ids `#theme_css`, `#base_user_css` and `#theme_user_css`. Dark themes are detected from the computed body background. The Mermaid theme comes from `--mermaid-theme`.
 Gallery themes used for testing are copied unmodified into `dev-data/themes` (gitignored, not shipped).
+
+## Phase 2 features
+- **Editable markers**: click into **bold**, *italic*, `code`, ~~strike~~, ==mark==, [links](…) or `$math$` and the delimiters become real text. Typing or deleting them changes the formatting. Inline math has a live preview popover.
+- **Tables**: a toolbar on the focused table (add/remove row/col, align left/center/right, delete table), `Ctrl+T` to insert, `Ctrl+Enter` for a new row. Alignment round-trips to `|:--:|`.
+- **Images**: paste or drop → written to the configured folder next to the document (unique names, `image-YYYYMMDD-HHMMSS.png` for clipboard images). A relative, URL-encoded path is inserted. Unsaved documents use the workspace root.
+- **Find/replace**: `Ctrl+F` / `Ctrl+H`, case-sensitive and regex toggles, `$1` back-references, highlighting in text, code blocks and source mode.
+- **Export**: *File → Export HTML* (self-contained) and *Export PDF*.
+- Autosave (Settings → Editor, 1.5 s after the last edit), recent files (sidebar → Recent), external-change detection (2 s mtime poll: silent reload if clean, toast if dirty), syntax-colour fallback for themes without CodeMirror colours (e.g. Vue, Purple).
+- CLI: `mdnest FILE [--theme NAME] [--export-html OUT] [--export-pdf OUT] [--quit]`.
+
+### PDF platform notes
+| Platform | Path |
+|---|---|
+| Linux (WebKitGTK) | native: hidden webview → `webkit2gtk::PrintOperation` with GTK print settings "Print to File", A4, PDF output. No dialog. Verified headless (Xvfb) with the CLI. |
+| macOS / Windows | for now, falls back to the system print dialog (`window.print()` on the export HTML; the user picks "Save as PDF"). Planned: `WKWebView.createPDF` (macOS) and WebView2 `PrintToPdfAsync` (Windows) through the same `export_pdf` command. |
+| Browser dev mode | print dialog fallback |
+
+### MathJax packaging
+Only the modular components are shipped: `startup.js`, `core.js`, `input/tex.js` (+ autoloaded `input/tex/extensions/`), `output/svg.js`, and the NewCM SVG font with its math-relevant dynamic ranges (see `FONT_RANGES` in `scripts/prepare-assets.sh`). The combined `tex-svg.js` bundle is not shipped because it hard-wires the a11y/SRE speech stack. The menu, speech, braille and enrichment are turned off. Glyphs from dropped ranges (Greek/Cyrillic text, Braille, …) need their file added to `FONT_RANGES`.
