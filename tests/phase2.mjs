@@ -75,7 +75,7 @@ ok((await md()).includes("$E = mc^2+1$"), "inline math: edit saved", (await md()
 // ---- 2. table toolbar ----
 try {await page.locator("#write td:text('Tables')").click(); await page.waitForTimeout(150);
 ok(await page.locator("#mdn-table-tools").isVisible(), "table: toolbar appears when caret in table");
-const btn = (c) => page.locator(`#mdn-table-tools button[data-cmd="${c}"]`).click();
+const btn = (c) => page.locator(`#mdn-table-tools > button[data-cmd="${c}"]`).click();
 await btn("row-below"); await btn("col-right"); await page.waitForTimeout(100);
 const dims = await page.evaluate(() => { const t = document.querySelector("#write table"); return [t.rows.length, t.rows[0].cells.length]; });
 ok(dims[0] === 4 && dims[1] === 4, "table: add row + column → 4×4", dims);
