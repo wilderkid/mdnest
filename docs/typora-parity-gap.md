@@ -261,9 +261,8 @@ Counted by `python3 scripts/parity-count.py` (163 rows; an empty After cell inhe
 
 ## Remaining gaps
 
-The menu inventory is done, partial, n/a, or win-broken with nothing left missing. Two behaviours stay partial, and one input rule was never a menu row of its own:
+The counted rows are done, n/a, or win-broken, with nothing missing. Two behaviours stay partial:
 
-- **`|a|b|` + Enter → table** (missing, empty After cell inherits Before). Tables come from the dialog, the slash menu, and Paragraph ▸ Table. Pressing Enter on a pipe row does not create a table. That input rule was outside the 0.1.2 work.
 - **Comment-only lines** (partial). An inline `<!-- note -->` is a mark and round-trips. A line that is only a comment parses as an HTML block, which is how markdown-it treats it.
 - **In-editor text drag on Windows** (partial). WebView2 HTML5 drops carry no paths, so folder and file drops use Tauri's drag-drop event. That turns off in-editor text drag-move on Windows.
 - **Import** (n/a). Opening Word or other office files is left to pandoc, which is not an importer here. Export can write those formats when pandoc is installed.
