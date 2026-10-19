@@ -33,8 +33,16 @@ function settingSpecs(): SettingSpec[] {
     { key: "dailyRequestLimit", title: "Daily request limit (0 = none)", type: "number", default: 0 },
     { key: "dailyTokenLimit", title: "Daily token limit (0 = none)", type: "number", default: 0 },
     { key: "exclude", title: "Excluded folders (one prefix per line)", type: "text", default: "" },
+    { key: "rewriteShortcut", title: "Rewrite shortcut", type: "string", default: "Mod-j" },
     { key: "privacy", title: "Privacy", type: "note", text: PRIVACY_NOTE },
   ];
+}
+
+/** prosemirror-keymap name for AI Rewrite. Empty disables the shortcut. Default is Mod-j (Ctrl/Cmd+J). */
+export function rewriteShortcut(ctx: PluginContext): string {
+  const raw = ctx.settings.get("rewriteShortcut");
+  if (raw == null) return "Mod-j";
+  return String(raw).trim();
 }
 
 const plugin: EditorPlugin = {
@@ -108,7 +116,17 @@ const plugin: EditorPlugin = {
     });
 
     const whenOn = () => isOn(ctx);
-    ctx.commands.add({ id: "rewrite", title: "AI: Rewrite…", key: "Mod-k", when: whenOn, run: () => load().then((m) => m.runRewrite(ctx, provider)) });
+    const syncRewrite = () => {
+      const key = rewriteShortcut(ctx);
+      ctx.commands.add({
+        id: "rewrite",
+        title: "AI: Rewrite…",
+        ...(key ? { key } : {}),
+        when: whenOn,
+        run: () => load().then((m) => m.runRewrite(ctx, provider)),
+      });
+    };
+    syncRewrite();
     ctx.commands.add({ id: "polish", title: "AI: Polish", when: whenOn, run: () => load().then((m) => m.runAction(ctx, provider, "polish")) });
     ctx.commands.add({ id: "translate", title: "AI: Translate", when: whenOn, run: () => load().then((m) => m.runAction(ctx, provider, "translate")) });
     ctx.commands.add({ id: "summarize", title: "AI: Summarize", when: whenOn, run: () => load().then((m) => m.runAction(ctx, provider, "summarize")) });
@@ -179,6 +197,7 @@ const plugin: EditorPlugin = {
     ctx.events.on("settings-changed", (owner: string, key: string) => {
       if (owner !== "ai") return;
       if (key === "preset") fillPreset(ctx);
+      if (key === "rewriteShortcut") syncRewrite();
       if (key === "enabled" && isOn(ctx)) ensureSlash();
     });
 
@@ -205,6 +224,7 @@ function seedDefaults(ctx: PluginContext) {
   if (ctx.settings.get("enabled") == null) ctx.settings.set("enabled", false);
   if (ctx.settings.get("localOnly") == null) ctx.settings.set("localOnly", false);
   if (ctx.settings.get("exclude") == null) ctx.settings.set("exclude", "");
+  if (ctx.settings.get("rewriteShortcut") == null) ctx.settings.set("rewriteShortcut", "Mod-j");
 }
 
 function fillPreset(ctx: PluginContext) {

@@ -152,7 +152,7 @@ Counted by `python3 scripts/parity-count.py` (163 rows; an empty After cell inhe
 | Inline math |  | partial | done | Format menu; $x$ input rule kept |
 | Superscript / Subscript |  | missing | done | ^x^ and ~x~; ~~strike~~ unchanged |
 | Comment `<!-- -->` |  | missing | done | inline comment mark; a comment-only line stays an HTML block |
-| Hyperlink | Ctrl+K | missing | done | Ctrl+K prompts for a URL; dropped while AI Rewrite owns Mod-k |
+| Hyperlink | Ctrl+K | missing | done | Ctrl+K always prompts for a URL; AI Rewrite is Ctrl+J (configurable) |
 | Image (insert from file) | Ctrl+Shift+I | missing | done | Ctrl+Shift+I file dialog, then image settings |
 | Image zoom / align |  | missing | partial | zoom 50/100/200% as an img style; no align |
 | Clear format | Ctrl+\ | missing | done | Ctrl+\ |
@@ -279,4 +279,4 @@ Still missing or only partial after 0.1.1. Each note says why.
 - **Find next / previous** (partial). Menu items and F3 / Shift+F3 step the existing find bar. The find-bar behaviour itself is unchanged.
 - **Comment-only lines** (partial). An inline `<!-- note -->` is a mark and round-trips. A line that is only a comment parses as an HTML block, which is how markdown-it treats it.
 - **In-editor text drag on Windows** (partial). WebView2 HTML5 drops carry no paths, so folder and file drops use Tauri's drag-drop event. That turns off in-editor text drag-move on Windows.
-- **Hyperlink vs AI Rewrite** (partial). Both want Ctrl+K. While AI Rewrite is enabled, the core hyperlink command drops its accelerator and the plugin keeps the key. Hyperlink stays in the menu.
+- **Hyperlink vs AI Rewrite** (done). Ctrl+K is always Hyperlink. AI Rewrite defaults to Ctrl+J and is configurable in AI settings ("Rewrite shortcut", a prosemirror-keymap name; empty disables it).

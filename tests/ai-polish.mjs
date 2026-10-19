@@ -57,7 +57,7 @@ try {
     v.focus();
   }, { a, b });
   const rewrite = async (reply) => {
-    await page.keyboard.press("Control+k");
+    await page.keyboard.press("Control+j");
     await page.locator(".mdn-prompt input").waitFor({ timeout: 4000 });
     await page.locator(".mdn-prompt input").fill("REPLY: " + reply);
     await page.keyboard.press("Enter");

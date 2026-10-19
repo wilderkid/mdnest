@@ -1,4 +1,11 @@
 import type { Command } from "../plugins/api";
+import { accelLabel, prosemirrorToAccel } from "./menu";
+
+function keyLabel(key: string | undefined): string {
+  if (!key) return "";
+  return accelLabel(key.includes("+") ? key : prosemirrorToAccel(key));
+}
+
 export function openPalette(cmds: Command[]) {
   document.getElementById("mdn-palette")?.remove();
   const box = document.createElement("div"); box.id = "mdn-palette";
@@ -13,7 +20,7 @@ export function openPalette(cmds: Command[]) {
       return c.title.toLowerCase().includes(q) || c.id.includes(q);
     }).slice(0, 30);
     sel = Math.min(sel, Math.max(0, shown.length - 1));
-    list.innerHTML = shown.map((c, i) => `<div class="pal-item${i === sel ? " sel" : ""}" data-i="${i}">${c.title}${c.key ? `<small>${c.key}</small>` : ""}</div>`).join("");
+    list.innerHTML = shown.map((c, i) => `<div class="pal-item${i === sel ? " sel" : ""}" data-i="${i}">${c.title}${c.key ? `<small>${keyLabel(c.key)}</small>` : ""}</div>`).join("");
   };
   const close = () => box.remove();
   const run = (i: number) => { const c = shown[i]; close(); c?.run(); };

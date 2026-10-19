@@ -296,8 +296,8 @@ export function displayTheme(stem: string): string {
 }
 
 /**
- * Keys claimed by an enabled plugin command. Core items drop the native accelerator while that
- * is true (AI Rewrite = Mod-k / CmdOrCtrl+K when AI is on). The plugin keeps the key.
+ * Keys claimed by an enabled plugin command. A core item drops its accelerator when a plugin
+ * owns the same key. Hyperlink always keeps CmdOrCtrl+K; AI Rewrite defaults to CmdOrCtrl+J.
  */
 export function occupiedAccels(commands: Command[], coreIds: Set<string>): Set<string> {
   const set = new Set<string>();
@@ -342,7 +342,6 @@ export function coreCommandIds(mac: boolean): Set<string> {
 export function buildMenuSpec(commands: Command[], state: MenuState, mac = MAC): MenuNode[] {
   const core = coreCommandIds(mac);
   const occupied = state.pluginKeyOwners.size ? state.pluginKeyOwners : occupiedAccels(commands, core);
-  // Hyperlink is CmdOrCtrl+K. Drop it while AI Rewrite (or any plugin) owns that key.
   return menuTemplate(mac).map((n) => applyState(n, state, commands, occupied));
 }
 

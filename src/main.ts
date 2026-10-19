@@ -40,9 +40,9 @@ import { pairBracketsOn, pairMarkdownOn, PAIR_BRACKETS_KEY, PAIR_MARKDOWN_KEY } 
 import { openContextMenu, type ContextItem } from "./shell/sidebar";
 import { APP_VERSION } from "./version";
 import {
-  installKeyboardDispatcher, installPageKeyGuard, installContextMenuGuard, runFocusAware, commandEnabled,
+  installKeyboardDispatcher, installPageKeyGuard, installContextMenuGuard, runFocusAware,
 } from "./shell/commands";
-import { buildMenuSpec, renderMenuBar, menuBarVisible, type MenuState } from "./shell/menu";
+import { buildMenuSpec, renderMenuBar, menuBarVisible, accelLabel, prosemirrorToAccel, type MenuState } from "./shell/menu";
 import { applyOsClass, osClass } from "./shell/os";
 import { handleNativeDrop, pathsFromUriList, type NativeDrop } from "./shell/drop";
 
@@ -625,7 +625,10 @@ function showHelp(title: string, body: string) {
   back.querySelector("button")!.onclick = () => back.remove();
 }
 function shortcutHelp(): string {
-  return commands.filter((c) => c.key).map((c) => `${c.key}  ${c.title}`).join("\n");
+  return commands.filter((c) => c.key).map((c) => {
+    const shown = accelLabel(c.key!.includes("+") ? c.key! : prosemirrorToAccel(c.key!));
+    return `${shown}  ${c.title}`;
+  }).join("\n");
 }
 
 [
@@ -692,10 +695,6 @@ function pmRun(fn: (state: any, dispatch?: any, view?: any) => boolean) {
 function inTableNow() {
   try { return isInTable(editor.view.state); } catch { return false; }
 }
-function aiOwnsHyperlink() {
-  const ai = commands.find((c) => c.id === "ai.rewrite" || c.id === "rewrite");
-  return !!(ai && commandEnabled(ai));
-}
 function togglePair(key: string, _defaultOn: boolean) {
   const on = key === PAIR_BRACKETS_KEY ? pairBracketsOn() : pairMarkdownOn();
   localStorage.setItem(key, on ? "0" : "1");
@@ -743,7 +742,6 @@ function wrapComment() {
   v.focus();
 }
 async function promptHyperlink() {
-  if (aiOwnsHyperlink()) return;
   const v = editor.view;
   const existing = linkAt(v.state);
   const url = await openPrompt(v, { placeholder: "https://", value: existing?.href || "https://" });
@@ -945,7 +943,7 @@ const markCmd = (name: string) => () => pmRun(toggleMark(schema.marks[name]));
   { id: "format.superscript", title: "Format: Superscript", run: markCmd("superscript") },
   { id: "format.subscript", title: "Format: Subscript", run: markCmd("subscript") },
   { id: "format.comment", title: "Format: Comment", run: () => wrapComment() },
-  { id: "format.link", title: "Format: Hyperlink", key: "CmdOrCtrl+K", when: () => !aiOwnsHyperlink(), run: () => promptHyperlink() },
+  { id: "format.link", title: "Format: Hyperlink", key: "CmdOrCtrl+K", run: () => promptHyperlink() },
   { id: "format.image", title: "Format: Insert Local Image…", key: "CmdOrCtrl+Shift+I", run: () => insertLocalImage() },
   { id: "format.image.zoom50", title: "Image: Zoom 50%", when: () => !!imageSelection(editor.view.state), run: () => pmRun(setImageZoom(50)) },
   { id: "format.image.zoom100", title: "Image: Zoom 100%", when: () => !!imageSelection(editor.view.state), run: () => pmRun(setImageZoom(100)) },
@@ -1048,13 +1046,10 @@ const dispatcher = installKeyboardDispatcher(() => commands, runCommand, () => {
   const set = new Set<string>();
   for (const c of commands) {
     if (!c.key || EDITOR_KEYS.has(c.id)) continue;
-    // A plugin that owns a key (AI Rewrite = Mod-k) keeps it. Do not also dispatch a core item.
     set.add(c.id);
   }
   // Focus-aware editing keys are dispatched here so an <input> or CodeMirror is edited in place.
-  // Hyperlink is CmdOrCtrl+K, the same key as AI Rewrite. While AI owns it, do not dispatch.
-  const ai = commands.find((c) => c.id === "ai.rewrite" || c.id === "rewrite");
-  if (ai && commandEnabled(ai)) set.delete("format.link");
+  // Ctrl+K is always Hyperlink. AI Rewrite uses its own setting (default CmdOrCtrl+J).
   set.add("edit.undo"); set.add("edit.redo"); set.add("edit.selectAll");
   return set;
 });
@@ -1351,7 +1346,7 @@ function onNativeDrop(drop: NativeDrop) {
     notify,
   });
 }
-(window as any).mdnest = { editor, host, notify, exportHtmlString, findBar, state, openAt, commands, runCommand, refreshMenu, dispatcher, handleNativeDrop: onNativeDrop, sidebar, confirmDirty, guard };
+(window as any).mdnest = { editor, host, notify, exportHtmlString, findBar, state, openAt, commands, runCommand, refreshMenu, dispatcher, handleNativeDrop: onNativeDrop, sidebar, confirmDirty, guard, plugins };
 
 window.addEventListener("beforeunload", (e) => { if (state.dirty && host.kind === "browser") e.preventDefault(); });
 

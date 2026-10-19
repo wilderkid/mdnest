@@ -418,24 +418,24 @@ try {
     await page.waitForTimeout(80);
   } catch (e) { ok(false, "EXCEPTION in f) invalidate", e.message.split("\n")[0]); }
 
-  // ---------- g) Mod-k custom instruction ----------
+  // ---------- g) Ctrl+J custom instruction (Rewrite shortcut) ----------
   try {
     await resetMock();
     await selectByText("The quick brown");
     await page.locator("#write").click();
     await selectByText("The quick brown");
-    await page.keyboard.press("Control+k");
+    await page.keyboard.press("Control+j");
     await page.locator(".mdn-prompt input").waitFor({ timeout: 4000 });
     await page.locator(".mdn-prompt input").fill("Please polish this paragraph tightly");
     await page.keyboard.press("Enter");
     await waitSug("ready");
     const diff = await page.locator("#write .md-sug-diff").last().innerText();
-    ok(diff.includes("Polished:"), "g) Mod-k prompt runs a custom polish instruction", diff);
+    ok(diff.includes("Polished:"), "g) Ctrl+J prompt runs a custom polish instruction", diff);
     const rec = await mockRequests();
     const last = rec.requests.at(-1);
     ok(last && /polish/i.test(last.user), "g) the request carries the custom instruction");
     await page.locator("#write .md-sug-bar button", { hasText: "Reject" }).last().click();
-  } catch (e) { ok(false, "EXCEPTION in g) Mod-k", e.message.split("\n")[0]); }
+  } catch (e) { ok(false, "EXCEPTION in g) Ctrl+J", e.message.split("\n")[0]); }
 
   // ---------- h) /ai slash generate ----------
   try {
@@ -613,7 +613,7 @@ try {
     await configure({ model: "mock-1" });
     await resetMock();
     await selectByText("The quick brown");
-    await page.keyboard.press("Control+k");
+    await page.keyboard.press("Control+j");
     await page.locator(".mdn-prompt input").waitFor();
     await page.locator(".mdn-prompt input").fill("slow please, take your time");
     await page.keyboard.press("Enter");
