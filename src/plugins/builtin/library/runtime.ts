@@ -3,7 +3,7 @@ import type { PluginContext } from "../../api";
 import type { AiProvider } from "../ai/provider";
 import type { Source } from "../ai/mentions";
 
-export interface Hit { id: number; path: string; rel: string; heading: string; anchor: string; lineStart: number; lineEnd: number; text: string; score: number; via: string[] }
+export interface Hit { id: number; path: string; rel: string; heading: string; anchor: string; lineStart: number; lineEnd: number; text: string; score: number; via: string[]; distance?: number }
 export interface Stats { root: string; files: number; chunks: number; embedded: number; model: string | null; dim: number | null; dbBytes: number }
 interface Status { phase: "idle" | "scanning" | "embedding" | "paused" | "error" | "off"; done: number; total: number; message: string; vectors: boolean }
 
@@ -119,16 +119,56 @@ async function queryVector(q: string, signal?: AbortSignal): Promise<number[] | 
   } catch { return undefined; }
 }
 
-/** Cosine-distance cut-off for meaning-only hits (model dependent; keyword hits are unaffected). */
+// ---------- meaning cut-offs (per embedding model) ----------
+
+export interface Cutoff { max: number; rel: number; source: "setting" | "model" | "default" }
+
+/** Built-in cut-offs, cosine distance. `max` drops weak matches, `rel` keeps only hits within that
+ *  much of the best vector hit. nomic-embed-text was calibrated with scripts/calibrate-cutoff.mjs on
+ *  tests/fixtures/library-calib.json (llama.cpp, v1.5 Q4_K_M): relevant notes at 0.13–0.38, best hit
+ *  of an unrelated question at 0.40–0.52. Other models are not calibrated and use the loose default. */
+export const MODEL_CUTOFFS: { match: RegExp; max: number; rel: number }[] = [
+  { match: /nomic-embed-text/i, max: 0.4, rel: 0.05 },
+];
+export const DEFAULT_CUTOFF = { max: 0.8, rel: 0.15 };
+
+const num = (v: unknown, lo: number, hi: number) => { const n = typeof v === "string" && !v.trim() ? NaN : Number(v); return Number.isFinite(n) && n > lo && n <= hi ? n : null; };
+
+/** "model = max [rel]" lines from the cutoffs setting (# comments, blank lines ignored). */
+export function parseCutoffs(text: string): { model: string; max: number; rel: number | null }[] {
+  const out: { model: string; max: number; rel: number | null }[] = [];
+  for (const raw of String(text ?? "").split(/\r?\n/)) {
+    const line = raw.replace(/#.*$/, "").trim();
+    const m = /^(.+?)\s*[=:]\s*([\d.]+)(?:\s*[,/ ]\s*([\d.]+))?$/.exec(line);
+    if (!m) continue;
+    const max = num(m[2], 0, 2); if (max == null) continue;
+    out.push({ model: m[1].trim(), max, rel: m[3] != null ? num(m[3], 0, 2) : null });
+  }
+  return out;
+}
+
+/** Cut-off for a model: the per-model setting line, else the global override, else the built-in table. */
+export function cutoffFor(model: string): Cutoff {
+  const builtIn = MODEL_CUTOFFS.find((c) => c.match.test(model)) ?? DEFAULT_CUTOFF;
+  const own = parseCutoffs(String(ctx.settings.get("cutoffs") ?? "")).find((c) => c.model.toLowerCase() === model.toLowerCase() || (c.model.endsWith("*") && model.toLowerCase().startsWith(c.model.slice(0, -1).toLowerCase())));
+  if (own) return { max: own.max, rel: own.rel ?? builtIn.rel, source: "setting" };
+  const g = num(ctx.settings.get("maxDistance"), 0, 2);
+  if (g != null) return { max: g, rel: builtIn.rel, source: "setting" };
+  return { max: builtIn.max, rel: builtIn.rel, source: MODEL_CUTOFFS.includes(builtIn as any) ? "model" : "default" };
+}
+
+/** Absolute cut-off for the configured embedding model (kept for callers/tests). */
 export function maxDistance(): number {
-  const v = Number(ctx.settings.get("maxDistance"));
-  return Number.isFinite(v) && v > 0 && v <= 2 ? v : 0.8;
+  let model = ""; try { model = ai.embedInfo().model; } catch { /* no provider */ }
+  return cutoffFor(model).max;
 }
 
 export async function search(q: string, k = 8, signal?: AbortSignal): Promise<Hit[]> {
   if (!q.trim()) return [];
   const vector = await queryVector(q, signal);
-  return ctx.index.call<Hit[]>("search", { query: q, k, maxDistance: maxDistance(), ...(vector ? { vector } : {}) });
+  let model = ""; try { model = ai.embedInfo().model; } catch { /* no provider */ }
+  const c = cutoffFor(model);
+  return ctx.index.call<Hit[]>("search", { query: q, k, maxDistance: c.max, relDistance: c.rel, ...(vector ? { vector } : {}) });
 }
 
 export const label = (h: Hit) => h.rel + (h.heading ? " › " + h.heading.split(" > ").join(" › ") : "");
@@ -170,6 +210,7 @@ export function mountPanel(host: HTMLElement) {
   const hitView = (h: Hit) => {
     const item = el("button", "mdn-lib-hit"); item.type = "button";
     const top = el("div", "mdn-lib-hit-top");
+    item.title = `${label(h)} · line ${h.lineStart}`;
     top.append(el("span", "mdn-lib-hit-title", label(h)), el("span", "mdn-lib-hit-line", `:${h.lineStart}`));
     for (const v of h.via) top.appendChild(el("span", "mdn-lib-via mdn-lib-via-" + v, v === "fts" ? "keyword" : "meaning"));
     const snip = h.text.replace(/^#{1,6} .*\n+/, "").replace(/\s+/g, " ").slice(0, 160);

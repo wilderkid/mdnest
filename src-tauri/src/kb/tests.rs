@@ -88,7 +88,7 @@ fn hybrid_search_rrf_lines_and_cjk() {
     assert_eq!(h[0].rel, "notes/rust.md");
     assert_eq!(h[0].via, vec!["fts", "vec"]);
     // unrelated vector beyond the distance cut-off finds nothing
-    assert!(idx.search_opts("zzz", Some(&[0.0, 0.0, 1.0]), 3, None, 0.05).unwrap().iter().all(|x| x.rel.ends_with("中文.md")));
+    assert!(idx.search_opts("zzz", Some(&[0.0, 0.0, 1.0]), 3, None, 0.05, f64::INFINITY).unwrap().iter().all(|x| x.rel.ends_with("中文.md")));
     // CJK substring
     let h = idx.search("语义", None, 3, None).unwrap();
     assert_eq!(h.len(), 1);
@@ -114,6 +114,14 @@ fn dispatch_json_and_queries() {
     let s = dispatch(&data, serde_json::json!({"op": "search", "root": root.to_string_lossy(), "query": "purr \"sleep\" (x) OR*", "k": 2})).unwrap();
     assert_eq!(s[0]["rel"], "cats.md");
     assert!(dispatch(&data, serde_json::json!({"op": "scan", "root": "relative/path"})).is_err());
+    // relDistance through the JSON dispatch: tail beyond best+rel dropped, distances reported
+    let p = dispatch(&data, serde_json::json!({"op": "pending", "root": root.to_string_lossy(), "limit": 50})).unwrap();
+    let items: Vec<serde_json::Value> = p.as_array().unwrap().iter().map(|c| serde_json::json!([c["id"], emb(c["input"].as_str().unwrap())])).collect();
+    dispatch(&data, serde_json::json!({"op": "putVectors", "root": root.to_string_lossy(), "model": "toy", "items": items})).unwrap();
+    let q = |rel: f64| dispatch(&data, serde_json::json!({"op": "search", "root": root.to_string_lossy(), "query": "", "vector": emb("cat"), "k": 10, "maxDistance": 2.0, "relDistance": rel})).unwrap();
+    let all = q(0.0); let near = q(0.05);
+    assert!(all.as_array().unwrap().len() > near.as_array().unwrap().len() && !near.as_array().unwrap().is_empty());
+    assert!(near.as_array().unwrap().iter().all(|h| h["rel"] == "cats.md" && h["distance"].as_f64().is_some()));
     assert_eq!(fts_query("  "), None);
     assert_eq!(fts_query("向量 db").unwrap(), "\"向 量\" OR \"db\"");
     fs::remove_dir_all(root.parent().unwrap()).ok();
@@ -124,4 +132,25 @@ fn fts_query_drops_stopwords() {
     assert_eq!(super::fts_query("when do we ship to customers?").unwrap(), "\"ship\" OR \"customers\"");
     assert_eq!(super::fts_query("to be").unwrap(), "\"to\" OR \"be\"");
     assert!(super::fts_query("  ").is_none());
+}
+
+#[test]
+fn relative_cutoff_and_distances() {
+    let (data, root) = ws("cutoff");
+    let mut idx = Index::open(&root, &db_path_for(&data, &root)).unwrap();
+    idx.scan(&["private".into()], None).unwrap();
+    embed_all(&mut idx, "toy");
+    // vector hits carry their distance; relative cut-off keeps only hits close to the best one
+    let loose = idx.search_opts("zzz", Some(&emb("cat")), 10, None, 2.0, f64::INFINITY).unwrap();
+    assert!(loose.len() >= 3 && loose.iter().all(|x| x.distance.is_some()), "all chunks are neighbours without cut-offs");
+    let best = loose.iter().filter_map(|x| x.distance).fold(f64::INFINITY, f64::min);
+    let tight = idx.search_opts("zzz", Some(&emb("cat")), 10, None, 2.0, 0.1).unwrap();
+    assert!(!tight.is_empty() && tight.len() < loose.len(), "relative cut-off drops the tail ({} of {})", tight.len(), loose.len());
+    assert!(tight.iter().all(|x| x.rel == "cats.md" && x.distance.unwrap() <= best + 0.1));
+    // absolute cut-off below the best hit → no vector hits at all
+    assert!(idx.search_opts("zzz", Some(&emb("cat")), 10, None, best * 0.5, 0.1).unwrap().is_empty());
+    // keyword hits ignore both cut-offs and have no distance
+    let kw = idx.search_opts("fish", Some(&emb("rust")), 5, None, 0.0001, 0.0001).unwrap();
+    assert!(kw.iter().any(|x| x.rel == "cats.md" && x.via == vec!["fts"] && x.distance.is_none()));
+    fs::remove_dir_all(root.parent().unwrap()).ok();
 }

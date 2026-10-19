@@ -12,7 +12,8 @@ const specs = (): SettingSpec[] => [
   { key: "exclude", title: "Also exclude (one folder per line)", type: "text", default: "" },
   { key: "embed", title: "Build vectors when AI is on", type: "boolean", default: true },
   { key: "k", title: "Sources per @library question", type: "number", default: 6 },
-  { key: "maxDistance", title: "Meaning match cut-off (cosine distance, 0–2; lower = stricter, model dependent)", type: "number", default: 0.8 },
+  { key: "maxDistance", title: "Meaning match cut-off for all models (cosine distance 0–2, lower = stricter; 0 = per-model default)", type: "number", default: 0 },
+  { key: "cutoffs", title: "Per-model cut-offs, one per line: model = max [relative] (e.g. nomic-embed-text = 0.4 0.05). Built-in: nomic-embed-text 0.4 / 0.05, others 0.8 / 0.15", type: "text", default: "" },
 ];
 
 const plugin: EditorPlugin = {

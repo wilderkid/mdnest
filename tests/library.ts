@@ -28,12 +28,12 @@ function fakeIndex(n: number) {
 function fakeCtx(index: any, settings: Record<string, unknown>) {
   return { settings: { get: (k: string) => settings[k], set: (k: string, v: unknown) => { settings[k] = v; } }, workspace: { root: () => "/w", openAt: async () => {} }, index, events: { on() {} } } as any;
 }
-function fakeAi(opts: { failAt?: number; enabled?: boolean } = {}) {
+function fakeAi(opts: { failAt?: number; enabled?: boolean; model?: string } = {}) {
   const batches: number[] = []; let n = 0;
   return {
     batches,
     info: () => ({ enabled: opts.enabled ?? true }),
-    embedInfo: () => ({ baseUrl: "http://e/v1", model: "toy" }),
+    embedInfo: () => ({ baseUrl: "http://e/v1", model: opts.model ?? "toy" }),
     excluded: () => ["private", "drafts/*.md"],
     registerMention: () => () => {},
     async embed(texts: string[], o: { signal?: AbortSignal } = {}) {
@@ -96,7 +96,28 @@ function fakeAi(opts: { failAt?: number; enabled?: boolean } = {}) {
   const r = await rt.resolveMention("cats");
   ok(r.sources[0].label === "a.md › A › B" && r.sources[0].line === 3 && r.sources[0].path === "/w/a.md", "source label/line/path");
   ok(r.context.startsWith("[1] a.md › A › B (lines 3–5)\n") && r.context.endsWith("…") && r.context.length < 1600, "context numbered and truncated");
-  rt.init(fakeCtx(ix, { maxDistance: "abc" }), ai); ok(rt.maxDistance() === 0.8, "bad cut-off falls back to 0.8");
+  rt.init(fakeCtx(ix, { maxDistance: "abc" }), ai); ok(rt.maxDistance() === 0.8, "bad cut-off falls back to the model default (0.8 for unknown models)");
+}
+// per-model cut-offs: built-in table, per-model setting lines, global override, relative cut-off sent
+{
+  const ix = fakeIndex(1);
+  rt.init(fakeCtx(ix, {}), fakeAi({ model: "nomic-embed-text" }));
+  let c = rt.cutoffFor("nomic-embed-text");
+  ok(c.max === 0.4 && c.rel === 0.05 && c.source === "model", "nomic-embed-text has a calibrated default → " + JSON.stringify(c));
+  ok(rt.cutoffFor("nomic-embed-text:v1.5").max === 0.4 && rt.cutoffFor("text-embedding-nomic-embed-text-v1.5@q4_k_m").max === 0.4, "nomic tags/aliases match the built-in");
+  c = rt.cutoffFor("toy-1"); ok(c.max === 0.8 && c.rel === 0.15 && c.source === "default", "unknown model → loose default");
+  ok(JSON.stringify(rt.parseCutoffs("# comment\nnomic-embed-text = 0.35 0.04\nbge-m3: 0.5\nbad line\nx = 3\nall-minilm=0.6/0.1")) ===
+    JSON.stringify([{ model: "nomic-embed-text", max: 0.35, rel: 0.04 }, { model: "bge-m3", max: 0.5, rel: null }, { model: "all-minilm", max: 0.6, rel: 0.1 }]), "cut-off lines parsed; invalid ones skipped");
+  rt.init(fakeCtx(ix, { cutoffs: "nomic-embed-text = 0.35 0.04\nbge-* = 0.5", maxDistance: 0.7 }), fakeAi({ model: "nomic-embed-text" }));
+  ok(JSON.stringify(rt.cutoffFor("nomic-embed-text")) === JSON.stringify({ max: 0.35, rel: 0.04, source: "setting" }), "per-model line wins over the global override");
+  ok(rt.cutoffFor("bge-m3").max === 0.5 && rt.cutoffFor("bge-m3").rel === 0.15, "wildcard line; relative falls back to the built-in");
+  ok(rt.cutoffFor("other").max === 0.7 && rt.cutoffFor("other").source === "setting", "global override for models without a line");
+  rt.init(fakeCtx(ix, { enabled: true, maxDistance: 0 }), fakeAi({ model: "nomic-embed-text" }));
+  ok(rt.maxDistance() === 0.4, "0 = per-model default");
+  await rt.runScan(); ix.calls.length = 0;
+  await rt.search("cats");
+  const a = ix.calls.find((x) => x.op === "search")!.args;
+  ok(a.maxDistance === 0.4 && a.relDistance === 0.05 && a.vector?.length === 3, "search sends the model's absolute and relative cut-offs → " + JSON.stringify({ m: a.maxDistance, r: a.relDistance }));
 }
 ok(rt.taskPrefix("nomic-embed-text", "query") === "search_query: " && rt.taskPrefix("nomic-embed-text:v1.5", "doc") === "search_document: " && rt.taskPrefix("text-embedding-3-small", "doc") === "", "task prefixes only for nomic models");
 // mention helpers

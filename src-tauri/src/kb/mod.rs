@@ -30,6 +30,9 @@ pub struct Hit {
     pub line_start: i64, pub line_end: i64, pub text: String, pub score: f64,
     /// "fts", "vec" or both
     pub via: Vec<String>,
+    /// cosine distance of a vector hit (0 = same direction, 2 = opposite)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub distance: Option<f64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
@@ -270,7 +273,7 @@ impl Index {
     fn hit(&self, id: i64) -> Option<Hit> {
         self.conn.query_row("SELECT path, heading, anchor, line_start, line_end, text FROM chunks WHERE id=?", [id], |r| {
             let path: String = r.get(0)?;
-            Ok(Hit { id, rel: self.rel(Path::new(&path)), path, heading: r.get(1)?, anchor: r.get(2)?, line_start: r.get(3)?, line_end: r.get(4)?, text: r.get(5)?, score: 0.0, via: vec![] })
+            Ok(Hit { id, rel: self.rel(Path::new(&path)), path, heading: r.get(1)?, anchor: r.get(2)?, line_start: r.get(3)?, line_end: r.get(4)?, text: r.get(5)?, score: 0.0, via: vec![], distance: None })
         }).optional().ok().flatten()
     }
 
@@ -283,12 +286,13 @@ impl Index {
 
     /// Hybrid search: FTS5 BM25 and vector kNN, fused with reciprocal rank fusion (k = 60).
     pub fn search(&self, query: &str, vector: Option<&[f32]>, k: usize, path_prefix: Option<&str>) -> Result<Vec<Hit>, String> {
-        self.search_opts(query, vector, k, path_prefix, 0.8)
+        self.search_opts(query, vector, k, path_prefix, 0.8, f64::INFINITY)
     }
 
-    /// `max_distance`: cosine distance cut-off for vector hits (kNN always returns neighbours,
-    /// even unrelated ones); keyword hits are not affected.
-    pub fn search_opts(&self, query: &str, vector: Option<&[f32]>, k: usize, path_prefix: Option<&str>, max_distance: f64) -> Result<Vec<Hit>, String> {
+    /// Cut-offs for vector hits (kNN always returns neighbours, even unrelated ones); keyword hits
+    /// are not affected. `max_distance`: absolute cosine distance. `rel_distance`: a vector hit must
+    /// also be within this much of the best vector hit (drops the long tail behind a clear match).
+    pub fn search_opts(&self, query: &str, vector: Option<&[f32]>, k: usize, path_prefix: Option<&str>, max_distance: f64, rel_distance: f64) -> Result<Vec<Hit>, String> {
         let depth = (k * 4).max(20);
         let mut fused: HashMap<i64, (f64, Vec<String>)> = HashMap::new();
         if let Some(q) = fts_query(query) {
@@ -300,11 +304,16 @@ impl Index {
                 e.1.push("fts".into());
             }
         }
+        let mut dist: HashMap<i64, f64> = HashMap::new();
         if let Some(v) = vector {
-            for (rank, (id, _dist)) in self.knn(v, depth).into_iter().filter(|(_, d)| *d <= max_distance).enumerate() {
+            let nn = self.knn(v, depth);
+            let best = nn.iter().map(|x| x.1).fold(f64::INFINITY, f64::min);
+            let limit = max_distance.min(best + rel_distance.max(0.0));
+            for (rank, (id, d)) in nn.into_iter().filter(|(_, d)| *d <= limit).enumerate() {
                 let e = fused.entry(id).or_insert((0.0, vec![]));
                 e.0 += 1.0 / (60.0 + rank as f64 + 1.0);
                 e.1.push("vec".into());
+                dist.insert(id, d);
             }
         }
         let mut list: Vec<(i64, f64, Vec<String>)> = fused.into_iter().map(|(id, (s, via))| (id, s, via)).collect();
@@ -313,7 +322,7 @@ impl Index {
         for (id, score, via) in list {
             if let Some(mut h) = self.hit(id) {
                 if let Some(pre) = path_prefix { if !h.path.starts_with(pre) && !h.rel.starts_with(pre) { continue; } }
-                h.score = score; h.via = via;
+                h.score = score; h.via = via; h.distance = dist.get(&id).copied();
                 out.push(h);
                 if out.len() >= k { break; }
             }
@@ -334,7 +343,7 @@ impl Index {
         for (id, dist) in self.knn(&mean, (k * 6).max(30)) {
             if let Some(mut h) = self.hit(id) {
                 if h.path == path || !seen.insert(h.path.clone()) { continue; }
-                h.score = 1.0 - dist; h.via = vec!["vec".into()];
+                h.score = 1.0 - dist; h.via = vec!["vec".into()]; h.distance = Some(dist);
                 out.push(h);
                 if out.len() >= k { break; }
             }
@@ -401,8 +410,10 @@ pub fn dispatch(data_dir: &Path, req: serde_json::Value) -> Result<serde_json::V
         "search" => {
             let vector: Option<Vec<f32>> = req.get("vector").and_then(|v| serde_json::from_value(v.clone()).ok());
             let k = req.get("k").and_then(|v| v.as_u64()).unwrap_or(8).min(50) as usize;
-            let maxd = req.get("maxDistance").and_then(|v| v.as_f64()).unwrap_or(0.8);
-            to_json(&idx.search_opts(req.get("query").and_then(|v| v.as_str()).unwrap_or(""), vector.as_deref(), k, req.get("pathPrefix").and_then(|v| v.as_str()), maxd)?)
+            let maxd = req.get("maxDistance").and_then(|v| v.as_f64()).filter(|d| *d > 0.0).unwrap_or(0.8);
+            // relDistance absent / 0 → no relative cut-off
+            let reld = req.get("relDistance").and_then(|v| v.as_f64()).filter(|d| *d > 0.0).unwrap_or(f64::INFINITY);
+            to_json(&idx.search_opts(req.get("query").and_then(|v| v.as_str()).unwrap_or(""), vector.as_deref(), k, req.get("pathPrefix").and_then(|v| v.as_str()), maxd, reld)?)
         }
         "related" => to_json(&idx.related(req.get("path").and_then(|v| v.as_str()).ok_or("missing path")?, req.get("k").and_then(|v| v.as_u64()).unwrap_or(5).min(20) as usize)?),
         "stats" => to_json(&idx.stats()),
