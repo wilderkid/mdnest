@@ -4,7 +4,7 @@ import { keymap } from "prosemirror-keymap";
 import { toggleMark, setBlockType, wrapIn, chainCommands, exitCode, baseKeymap } from "prosemirror-commands";
 import { undo, redo } from "prosemirror-history";
 import { splitListItem, liftListItem, sinkListItem, wrapInList } from "prosemirror-schema-list";
-import { goToNextCell } from "prosemirror-tables";
+import { goToNextCell, addRowAfter, isInTable } from "prosemirror-tables";
 import { arrowHandler } from "./codeview";
 import { inRawRegion } from "./markers";
 import { EditorState, TextSelection } from "prosemirror-state";
@@ -71,6 +71,7 @@ export function buildKeymaps(s: Schema, extra: { toggleSource: () => void; save:
   const n = s.nodes, m = s.marks;
   const heading = (l: number) => setBlockType(n.heading, { level: l });
   const keys: Record<string, any> = {
+    "Mod-Enter": (st: any, d: any) => isInTable(st) ? addRowAfter(st, d) : exitCode(st, d),
     "Mod-z": undo, "Shift-Mod-z": redo, "Mod-y": redo,
     "Mod-b": fmt(m.strong, "**"), "Mod-i": fmt(m.em, "*"), "Shift-Mod-`": fmt(m.code, "`"), "Alt-Shift-5": fmt(m.strike, "~~"),
     "Mod-0": setBlockType(n.paragraph), "Mod-1": heading(1), "Mod-2": heading(2), "Mod-3": heading(3), "Mod-4": heading(4), "Mod-5": heading(5), "Mod-6": heading(6),

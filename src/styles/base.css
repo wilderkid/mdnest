@@ -149,3 +149,32 @@ body.typora-sourceview-on content { visibility: hidden; }
 #write .md-src .md-url { color: #9a9a9a; }
 #write .md-src .md-math-src { font-family: var(--monospace); font-size: .9em; }
 #write .md-inline-math-preview { display: inline-block; margin-left: 4px; padding: 0 4px; border-radius: 3px; background: rgba(127,127,127,.12); vertical-align: middle; }
+/* table toolbar */
+.mdn-toolbar { position: absolute; z-index: 20; display: flex; gap: 2px; padding: 3px; border-radius: 6px; font-size: 12px;
+  background: var(--bg-color); color: var(--text-color); border: 1px solid rgba(127,127,127,.3); box-shadow: 0 2px 10px rgba(0,0,0,.12); }
+.mdn-toolbar button { font: inherit; color: inherit; background: transparent; border: 0; border-radius: 4px; padding: 2px 7px; cursor: pointer; white-space: nowrap; }
+.mdn-toolbar button:hover { background: var(--item-hover-bg-color, rgba(0,0,0,.06)); }
+.mdn-toolbar button.active { background: var(--active-file-bg-color, rgba(74,123,208,.15)); }
+/* find / replace */
+.mdn-findbar { position: fixed; top: 8px; right: 18px; z-index: 40; padding: 6px; border-radius: 8px; font-size: 13px;
+  background: var(--bg-color); color: var(--text-color); border: 1px solid rgba(127,127,127,.3); box-shadow: 0 4px 18px rgba(0,0,0,.15); }
+.mdn-findbar .fb-row { display: flex; align-items: center; gap: 3px; }
+.mdn-findbar .fb-replace-row { display: none; margin-top: 4px; } .mdn-findbar.with-replace .fb-replace-row { display: flex; }
+.mdn-findbar input { width: 220px; font: inherit; padding: 3px 7px; border: 1px solid rgba(127,127,127,.35); border-radius: 4px; background: transparent; color: inherit; outline: none; }
+.mdn-findbar input:focus { border-color: var(--primary-color); } .mdn-findbar input.fb-error { border-color: #d33; }
+.mdn-findbar.fb-none .fb-find { background: rgba(220,50,50,.08); }
+.mdn-findbar button { font: inherit; color: inherit; background: transparent; border: 1px solid transparent; border-radius: 4px; padding: 2px 7px; cursor: pointer; }
+.mdn-findbar button:hover { border-color: rgba(127,127,127,.35); } .mdn-findbar button.active { background: var(--active-file-bg-color, rgba(74,123,208,.18)); border-color: var(--primary-color); }
+.mdn-findbar .fb-count { min-width: 48px; text-align: center; opacity: .7; font-size: 12px; }
+#write .md-search-hit, .CodeMirror .md-search-hit { background: rgba(255, 200, 0, .45); border-radius: 2px; color: inherit; }
+#write .md-search-select, .CodeMirror .md-search-select { background: rgba(255, 140, 0, .75); box-shadow: 0 0 0 1px rgba(200,100,0,.8); }
+/* syntax-colour fallback for themes that don't colour CodeMirror tokens (body.mdn-cm-fallback) */
+.mdn-cm-fallback .cm-s-inner .cm-keyword { color: #a626a4; } .mdn-cm-fallback .cm-s-inner .cm-string, .mdn-cm-fallback .cm-s-inner .cm-string-2 { color: #50a14f; }
+.mdn-cm-fallback .cm-s-inner .cm-comment { color: #a0a1a7; font-style: italic; } .mdn-cm-fallback .cm-s-inner .cm-number, .mdn-cm-fallback .cm-s-inner .cm-atom { color: #c18401; }
+.mdn-cm-fallback .cm-s-inner .cm-def, .mdn-cm-fallback .cm-s-inner .cm-variable-2 { color: #4078f2; } .mdn-cm-fallback .cm-s-inner .cm-property, .mdn-cm-fallback .cm-s-inner .cm-builtin { color: #0184bc; }
+.mdn-cm-fallback .cm-s-inner .cm-tag { color: #e45649; } .mdn-cm-fallback .cm-s-inner .cm-attribute, .mdn-cm-fallback .cm-s-inner .cm-qualifier { color: #986801; }
+.mdn-cm-fallback .cm-s-inner .cm-meta { color: #a0a1a7; } .mdn-cm-fallback .cm-s-inner .cm-variable-3, .mdn-cm-fallback .cm-s-inner .cm-type { color: #c18401; }
+.mdn-cm-fallback.mdn-dark .cm-s-inner .cm-keyword { color: #c678dd; } .mdn-cm-fallback.mdn-dark .cm-s-inner .cm-string { color: #98c379; }
+.mdn-cm-fallback.mdn-dark .cm-s-inner .cm-comment { color: #7f848e; } .mdn-cm-fallback.mdn-dark .cm-s-inner .cm-number { color: #d19a66; }
+.mdn-cm-fallback.mdn-dark .cm-s-inner .cm-def, .mdn-cm-fallback.mdn-dark .cm-s-inner .cm-variable-2 { color: #61afef; }
+.recent-dir { font-size: 11px; opacity: .55; padding: 0 10px 4px 30px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

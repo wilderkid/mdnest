@@ -1,4 +1,6 @@
 mod commands;
+#[cfg(target_os = "linux")]
+mod pdf;
 mod protocols;
 
 use std::fs;
@@ -81,6 +83,11 @@ pub fn run() {
             commands::list_themes,
             commands::default_workspace,
             commands::cli_file,
+            commands::write_binary_file,
+            commands::file_mtime,
+            commands::cli_args,
+            commands::quit_app,
+            commands::export_pdf,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

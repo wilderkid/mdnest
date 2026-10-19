@@ -38,7 +38,23 @@ export class ThemeManager {
     // dark detection: some themes only set colors on body/#write — expose a hint class
     const bg = getComputedStyle(document.body).backgroundColor.match(/\d+/g)?.map(Number) ?? [255, 255, 255];
     document.body.classList.toggle("mdn-dark", (bg[0] * 299 + bg[1] * 587 + bg[2] * 114) / 1000 < 128);
+    document.body.classList.toggle("mdn-cm-fallback", !themeColorsCode());
     resetMermaidTheme();
     this.onChange(name);
   }
+}
+
+/** does the active theme colour CodeMirror tokens? (Vue, Purple… don't; then base.css supplies a palette) */
+function themeColorsCode(): boolean {
+  const host = document.getElementById("write") ?? document.body;
+  const probe = document.createElement("div");
+  probe.style.cssText = "position:absolute;visibility:hidden;pointer-events:none;left:-9999px";
+  probe.innerHTML = `<pre class="md-fences"><div class="CodeMirror cm-s-inner"><span class="cm-plain">x</span><span class="cm-keyword">x</span><span class="cm-string">x</span><span class="cm-comment">x</span></div></pre>`;
+  document.body.classList.remove("mdn-cm-fallback");
+  host.appendChild(probe);
+  const c = (sel: string) => getComputedStyle(probe.querySelector(sel)!).color;
+  const plain = c(".cm-plain");
+  const colored = [".cm-keyword", ".cm-string", ".cm-comment"].filter((k) => c(k) !== plain).length;
+  probe.remove();
+  return colored >= 2;
 }

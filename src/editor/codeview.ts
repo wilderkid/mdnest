@@ -1,21 +1,6 @@
 // CodeMirror 5.65 node view for fences, math blocks and YAML front matter.
 // Uses theme "inner" so the editor gets .cm-s-inner (the class Typora themes style).
 import CodeMirror from "codemirror";
-import "codemirror/mode/javascript/javascript";
-import "codemirror/mode/python/python";
-import "codemirror/mode/css/css";
-import "codemirror/mode/xml/xml";
-import "codemirror/mode/htmlmixed/htmlmixed";
-import "codemirror/mode/markdown/markdown";
-import "codemirror/mode/gfm/gfm";
-import "codemirror/mode/shell/shell";
-import "codemirror/mode/clike/clike";
-import "codemirror/mode/rust/rust";
-import "codemirror/mode/go/go";
-import "codemirror/mode/sql/sql";
-import "codemirror/mode/yaml/yaml";
-import "codemirror/mode/stex/stex";
-import "codemirror/mode/diff/diff";
 import { Node as PMNode } from "prosemirror-model";
 import { EditorView, NodeView } from "prosemirror-view";
 import { Selection, TextSelection } from "prosemirror-state";
@@ -23,12 +8,42 @@ import { exitCode } from "prosemirror-commands";
 import { undo, redo } from "prosemirror-history";
 import { renderTex, renderMermaid } from "./render";
 
+// Language modes are lazy-loaded chunks (Phase 2 size work): only the modes a document uses are fetched.
+const MODE_LOADERS: Record<string, () => Promise<unknown>> = {
+  javascript: () => import("codemirror/mode/javascript/javascript"), python: () => import("codemirror/mode/python/python"),
+  css: () => import("codemirror/mode/css/css"), xml: () => import("codemirror/mode/xml/xml"),
+  htmlmixed: () => import("codemirror/mode/htmlmixed/htmlmixed"), markdown: () => import("codemirror/mode/markdown/markdown"),
+  gfm: () => import("codemirror/mode/gfm/gfm"), shell: () => import("codemirror/mode/shell/shell"),
+  clike: () => import("codemirror/mode/clike/clike"), rust: () => import("codemirror/mode/rust/rust"),
+  go: () => import("codemirror/mode/go/go"), sql: () => import("codemirror/mode/sql/sql"),
+  yaml: () => import("codemirror/mode/yaml/yaml"), stex: () => import("codemirror/mode/stex/stex"),
+  diff: () => import("codemirror/mode/diff/diff"), ruby: () => import("codemirror/mode/ruby/ruby"),
+  php: () => import("codemirror/mode/php/php"), swift: () => import("codemirror/mode/swift/swift"),
+  lua: () => import("codemirror/mode/lua/lua"), dockerfile: () => import("codemirror/mode/dockerfile/dockerfile"),
+  toml: () => import("codemirror/mode/toml/toml"), powershell: () => import("codemirror/mode/powershell/powershell"),
+};
+const MIME_TO_MODULE: Record<string, string> = {
+  "text/typescript": "javascript", "application/json": "javascript", "text/x-csrc": "clike", "text/x-c++src": "clike",
+  "text/x-java": "clike", "text/x-csharp": "clike", "text/x-kotlin": "clike", "text/x-scala": "clike",
+};
+const loaded = new Map<string, Promise<unknown>>();
+/** ensure the CodeMirror mode for a fence language is loaded; resolves to the mode spec */
+export async function loadMode(lang: string): Promise<string> {
+  const spec = cmMode(lang);
+  const mod = MIME_TO_MODULE[spec] ?? spec;
+  const loader = MODE_LOADERS[mod];
+  if (loader) { if (!loaded.has(mod)) loaded.set(mod, loader().catch(() => {})); await loaded.get(mod); }
+  return spec;
+}
+
 const modeAlias: Record<string, string> = {
   js: "javascript", javascript: "javascript", ts: "text/typescript", typescript: "text/typescript", json: "application/json",
   py: "python", python: "python", css: "css", html: "htmlmixed", xml: "xml", md: "gfm", markdown: "gfm",
   sh: "shell", bash: "shell", shell: "shell", c: "text/x-csrc", cpp: "text/x-c++src", "c++": "text/x-c++src", java: "text/x-java",
   cs: "text/x-csharp", csharp: "text/x-csharp", rust: "rust", go: "go", sql: "sql", yaml: "yaml", yml: "yaml",
   tex: "stex", latex: "stex", diff: "diff", kotlin: "text/x-kotlin", scala: "text/x-scala",
+  rb: "ruby", ruby: "ruby", php: "php", swift: "swift", lua: "lua", dockerfile: "dockerfile", toml: "toml", ps1: "powershell", powershell: "powershell",
+  zsh: "shell", console: "shell", jsx: "javascript", tsx: "text/typescript", html5: "htmlmixed", vue: "htmlmixed", svg: "xml",
 };
 export const cmMode = (lang: string) => modeAlias[(lang || "").toLowerCase().split(/\s/)[0]] ?? "text/plain";
 
@@ -56,7 +71,7 @@ export class CodeView implements NodeView {
     this.dom.setAttribute("spellcheck", "false");
     this.cm = CodeMirror(this.dom, {
       value: node.textContent, theme: "inner", lineWrapping: true, viewportMargin: Infinity,
-      mode: kind === "math" ? "stex" : kind === "yaml" ? "yaml" : cmMode(node.attrs.params),
+      mode: "text/plain",
       extraKeys: this.keys(),
     });
     if (kind === "fence") {
@@ -68,11 +83,18 @@ export class CodeView implements NodeView {
       tip.appendChild(inp); this.dom.appendChild(tip); this.langInput = inp;
     }
     if (kind === "math" || this.isDiagram()) this.ensurePreview();
+    this.applyMode();
     this.cm.on("beforeChange", () => (this.incomingChanges = this.updating));
     this.cm.on("cursorActivity", () => { if (!this.updating && !this.incomingChanges) this.forwardSelection(); });
     this.cm.on("changes", () => { if (!this.updating) { this.valueChanged(); this.forwardSelection(); } this.incomingChanges = false; });
     this.cm.on("focus", () => this.forwardSelection());
     setTimeout(() => this.cm.refresh(), 0);
+  }
+  async applyMode() {
+    const lang = this.kind === "math" ? "tex" : this.kind === "yaml" ? "yaml" : this.node.attrs.params;
+    const want = lang; const spec = await loadMode(lang);
+    const cur = this.kind === "fence" ? this.node.attrs.params : want;
+    if (cur === want) this.cm.setOption("mode", spec);
   }
   isDiagram() { return this.kind === "fence" && /^(mermaid)\b/i.test(this.node.attrs.params); }
   ensurePreview() {
@@ -149,13 +171,25 @@ export class CodeView implements NodeView {
     this.view.dispatch(this.view.state.tr.setSelection(selection).scrollIntoView());
     this.view.focus();
   }
-  update(node: PMNode) {
+  private searchMarks: CodeMirror.TextMarker[] = [];
+  /** mirror search-hit decorations (inner decorations of this node) as CodeMirror marks */
+  private syncDecorations(inner: any) {
+    this.searchMarks.forEach((m) => m.clear()); this.searchMarks = [];
+    if (!inner?.forEachSet) return;
+    inner.forEachSet((set: any) => set.find().forEach((d: any) => {
+      const cls = d.spec?.mdSearch as string | undefined;
+      if (!cls) return;
+      this.searchMarks.push(this.cm.markText(this.cm.posFromIndex(d.from), this.cm.posFromIndex(d.to), { className: cls }));
+    }));
+  }
+  update(node: PMNode, _outer?: readonly any[], inner?: any) {
     if (node.type !== this.node.type) return false;
+    queueMicrotask(() => this.syncDecorations(inner));
     const langChanged = node.attrs.params !== this.node.attrs.params;
     this.node = node;
     if (this.kind === "fence") {
       this.dom.setAttribute("lang", node.attrs.params);
-      if (langChanged) { this.cm.setOption("mode", cmMode(node.attrs.params)); if (this.langInput) this.langInput.value = node.attrs.params; if (this.isDiagram()) this.ensurePreview(); }
+      if (langChanged) { this.applyMode(); if (this.langInput) this.langInput.value = node.attrs.params; if (this.isDiagram()) this.ensurePreview(); }
     }
     const change = computeChange(this.cm.getValue(), node.textContent);
     if (change) {

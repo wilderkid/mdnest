@@ -8,6 +8,7 @@ import { schema } from "./schema";
 import { parseMarkdown, serializeMarkdown } from "./markdown";
 import { revealPlugin } from "./reveal";
 import { markersPlugin, collapseAll } from "./markers";
+import { tableToolbarPlugin } from "./tabletools";
 import { nodeViews, tocViews } from "./views";
 import { buildInputRules, buildKeymaps } from "./rules";
 import type { DecorationProvider } from "../plugins/api";
@@ -16,6 +17,8 @@ export interface EditorHooks {
   onChange: () => void;
   keys: Parameters<typeof buildKeymaps>[1];
   decorationProviders: DecorationProvider[];
+  /** pasted / dropped image files; return true when handled */
+  onImageFiles?: (files: File[], pos: number | null) => boolean;
 }
 
 const extKey = new PluginKey("ext-decos");
@@ -37,7 +40,7 @@ function externalDecorations(hooks: EditorHooks) {
 export function createEditor(mount: HTMLElement, markdown: string, hooks: EditorHooks) {
   const plugins = [
     buildInputRules(schema), ...buildKeymaps(schema, hooks.keys), history(), dropCursor(), gapCursor(),
-    columnResizing(), tableEditing(), markersPlugin(), revealPlugin(), externalDecorations(hooks),
+    columnResizing(), tableEditing(), markersPlugin(), revealPlugin(), tableToolbarPlugin(), externalDecorations(hooks),
   ];
   const mkState = (md: string) => {
     const doc = parseMarkdown(md);
@@ -65,6 +68,18 @@ export function createEditor(mount: HTMLElement, markdown: string, hooks: Editor
       }
       if (node.type.name === "image") { view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, nodePos))); return true; }
       return false;
+    },
+    handlePaste(view, event) {
+      const files = [...(event.clipboardData?.files ?? [])].filter((f) => f.type.startsWith("image/"));
+      if (files.length && hooks.onImageFiles) return hooks.onImageFiles(files, null);
+      return false;
+    },
+    handleDrop(view, event) {
+      const files = [...((event as DragEvent).dataTransfer?.files ?? [])].filter((f) => f.type.startsWith("image/"));
+      if (!files.length || !hooks.onImageFiles) return false;
+      const p = view.posAtCoords({ left: (event as DragEvent).clientX, top: (event as DragEvent).clientY });
+      event.preventDefault();
+      return hooks.onImageFiles(files, p ? p.pos : null);
     },
     handleDOMEvents: {
       click(_v, e) {

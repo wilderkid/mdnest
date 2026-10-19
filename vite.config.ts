@@ -35,6 +35,15 @@ function devFs(): Plugin {
           const tmp = p + ".tmp-mdnest"; fs.writeFileSync(tmp, text); fs.renameSync(tmp, p); send(200, { ok: true });
         }); return;
       }
+      if (url.pathname === "/api/mtime") { const p = inside(ROOT, url.searchParams.get("path") ?? ""); return send(200, { mtime: p && fs.existsSync(p) ? fs.statSync(p).mtimeMs : null }); }
+      if (url.pathname === "/api/writeb" && req.method === "POST") {
+        let body = ""; req.on("data", (c: any) => (body += c)); req.on("end", () => {
+          const { path: fp, data, unique } = JSON.parse(body); let p = inside(ROOT, fp); if (!p) return send(403, "outside sandbox", "text/plain");
+          fs.mkdirSync(path.dirname(p), { recursive: true });
+          if (unique && fs.existsSync(p)) { const ext = path.extname(p), stem = p.slice(0, p.length - ext.length); let i = 1; while (fs.existsSync(`${stem}-${i}${ext}`)) i++; p = `${stem}-${i}${ext}`; }
+          fs.writeFileSync(p, Buffer.from(data, "base64")); send(200, { path: p });
+        }); return;
+      }
       if (url.pathname === "/api/themes") return send(200, { themes: fs.readdirSync(THEMES).filter((f) => f.endsWith(".css")) });
       if (url.pathname.startsWith("/themes/")) return serveFile(inside(THEMES, path.join(THEMES, decodeURIComponent(url.pathname.slice(8)))));
       if (url.pathname.startsWith("/fs/")) return serveFile(inside(ROOT, decodeURIComponent(url.pathname.slice(3))));

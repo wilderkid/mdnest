@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "mdnest",
+  "productName": "MD Nest",
   "version": "0.1.0",
   "identifier": "app.mdnest.editor",
   "build": {
@@ -12,10 +12,12 @@
   "app": {
     "windows": [
       {
-        "title": "mdnest",
+        "title": "MD Nest",
         "width": 1200,
         "height": 800,
-        "resizable": true
+        "resizable": true,
+        "dragDropEnabled": false,
+        "label": "main"
       }
     ],
     "security": {
@@ -37,5 +39,6 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
-  }
+  },
+  "mainBinaryName": "mdnest"
 }

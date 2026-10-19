@@ -1,5 +1,6 @@
 import { Node as PMNode } from "prosemirror-model";
 import { EditorView, NodeView } from "prosemirror-view";
+import { TextSelection } from "prosemirror-state";
 import { renderTex, escapeHtml } from "./render";
 import { CodeView } from "./codeview";
 
@@ -10,21 +11,23 @@ class InlineMathView implements NodeView {
     this.dom.className = "md-inline-math md-math-container";
     this.dom.setAttribute("md-inline", "inline_math");
     this.render();
-    this.dom.addEventListener("dblclick", () => this.edit());
+    this.dom.addEventListener("mousedown", (e) => { e.preventDefault(); this.edit(); });
   }
   async render() {
     this.dom.innerHTML = `<span class="md-math-preview">${await renderTex(this.node.attrs.tex, false)}</span>`;
   }
+  /** editing = put the caret next to the formula; the markers plugin swaps it for editable `$tex$`
+   *  source with a live rendered preview (inline popover) */
   edit() {
-    const tex = prompt("Inline math (TeX)", this.node.attrs.tex);
-    const p = this.getPos();
-    if (tex != null && p != null) this.view.dispatch(this.view.state.tr.setNodeMarkup(p, undefined, { tex }));
+    const p = this.getPos(); if (p == null) return;
+    this.view.dispatch(this.view.state.tr.setSelection(TextSelection.create(this.view.state.doc, p + this.node.nodeSize)));
+    this.view.focus();
   }
   selectNode() { this.dom.classList.add("md-expand", "ProseMirror-selectednode"); }
   deselectNode() { this.dom.classList.remove("md-expand", "ProseMirror-selectednode"); }
   update(n: PMNode) { if (n.type !== this.node.type) return false; const ch = n.attrs.tex !== this.node.attrs.tex; this.node = n; if (ch) this.render(); return true; }
   ignoreMutation() { return true; }
-  stopEvent(e: Event) { return e.type === "dblclick"; }
+  stopEvent(e: Event) { return e.type === "mousedown"; }
 }
 
 /** TOC block: rendered from document headings; refreshed by the editor on every doc change */

@@ -1749,7 +1749,9 @@ dependencies = [
 name = "mdnest"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "dirs 6.0.0",
+ "gtk",
  "http",
  "percent-encoding",
  "serde",
@@ -1757,6 +1759,8 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
+ "url",
+ "webkit2gtk",
 ]
 
 [[package]]

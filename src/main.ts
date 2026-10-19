@@ -13,10 +13,15 @@ import { PluginManager, Command, SettingSpec, DecorationProvider } from "./plugi
 import { countWords } from "./plugins/builtin/word-stats";
 import wordStats from "./plugins/builtin/word-stats";
 import readingGoal from "./plugins/builtin/reading-goal";
+import { FindBar, SourceSearch } from "./shell/findbar";
+import { EditorSearch } from "./editor/search";
+import { insertImageFiles, IMAGE_FOLDER_KEY, imageFolderPattern } from "./shell/images";
+import { buildExportHtml, printHtml } from "./shell/export";
+import { insertTable } from "./editor/tabletools";
 
-const WELCOME = `# Welcome to mdnest\n\nOpen a file (Ctrl+O) or a folder (Ctrl+Shift+O). Toggle source mode with Ctrl+/ and the command palette with Ctrl+Shift+P.\n`;
+const WELCOME = `# Welcome to MD Nest\n\nOpen a file (Ctrl+O) or a folder (Ctrl+Shift+O). Toggle source mode with Ctrl+/ and the command palette with Ctrl+Shift+P.\n`;
 
-const state = { path: null as string | null, dirty: false, lastSaved: "" };
+const state = { path: null as string | null, dirty: false, lastSaved: "", mtime: null as number | null, conflict: false };
 const commands: Command[] = [];
 const decorationProviders: DecorationProvider[] = [];
 const settingSpecs: { owner: string; specs: SettingSpec[] }[] = [];
@@ -26,7 +31,7 @@ const sidebar = new Sidebar(host, (p) => openFile(p));
 document.body.appendChild(sidebar.el);
 const content = document.createElement("content"); document.body.appendChild(content);
 const writeEl = document.createElement("div"); content.appendChild(writeEl);
-const source = new SourceMode(document.body);
+const source = new SourceMode(document.body, () => { setDirty(true); scheduleAutosave(); });
 const footer = document.createElement("footer"); footer.className = "ty-footer";
 footer.innerHTML = `<button id="sidebar-toggle" title="Toggle sidebar">☰</button><span id="file-title">Untitled</span><span class="footer-spacer"></span>
   <span id="footer-word-count"></span><select id="theme-select" title="Theme"></select><button id="source-toggle" title="Source mode (Ctrl+/)">&lt;/&gt;</button>`;
@@ -39,26 +44,27 @@ let changeTimer: any;
 const editor: Editor = createEditor(writeEl, WELCOME, {
   decorationProviders,
   onChange: () => {
-    setDirty(true);
+    setDirty(true); scheduleAutosave();
     clearTimeout(changeTimer);
     changeTimer = setTimeout(() => { sidebar.updateOutline(editor.view); updateCount(); plugins.emit("doc-changed"); }, 150);
   },
+  onImageFiles: (files, pos) => { insertImageFiles(editor.view, host, state.path, files, pos, notify); return true; },
   keys: { toggleSource, save: () => save(false), saveAs: () => save(true), open: pickAndOpen, openFolder: pickFolder, palette: () => openPalette(commands) },
 });
 editor.view.dom.id = "write";
-(window as any).mdnest = { editor, host, notify }; // for tests / debugging
 
 function setDirty(d: boolean) { state.dirty = d; document.getElementById("file-title")!.classList.toggle("dirty", d); }
 function updateCount() { const t = editor.view.state.doc.textContent; const { words } = countWords(t); document.getElementById("footer-word-count")!.textContent = `${words} words`; }
 function setTitle() {
   const name = state.path ? state.path.split(/[\\/]/).pop()! : "Untitled";
-  document.getElementById("file-title")!.textContent = name; document.title = name + " — mdnest";
+  document.getElementById("file-title")!.textContent = name; document.title = name + " — MD Nest";
 }
 
 function currentMarkdown() { return source.active ? source.value() : editor.getMarkdown(); }
 function toggleSource() {
   if (source.active) { const md = source.hide(); editor.setMarkdown(md); afterLoad(); editor.view.focus(); }
   else source.show(editor.getMarkdown());
+  findBar.refresh();
 }
 function afterLoad() { sidebar.updateOutline(editor.view); updateCount(); }
 
@@ -69,18 +75,95 @@ async function openFile(path: string) {
     setImageBase(host.fileUrl(dir + "/"));
     if (source.active) source.show(text); editor.setMarkdown(text);
     state.lastSaved = text; setDirty(false); setTitle(); afterLoad(); sidebar.markActive(path);
+    state.mtime = await host.mtime(path).catch(() => null); state.conflict = false; addRecent(path);
     localStorage.setItem("mdnest.lastFile", path); plugins.emit("file-opened", path);
   } catch (e: any) { notify("Open failed: " + (e.message ?? e)); }
 }
 async function pickAndOpen() { const p = await host.pickFile(); if (p) openFile(p); }
 async function pickFolder() { const p = await host.pickFolder(); if (p) { await sidebar.openFolder(p); localStorage.setItem("mdnest.lastFolder", p); } }
+let quietSave = false;
 async function save(as: boolean) {
   let p = state.path;
   if (as || !p) p = await host.pickSavePath(p ? p.split(/[\\/]/).pop() : "untitled.md");
   if (!p) return;
   const md = currentMarkdown();
-  try { await host.writeFile(p, md); state.path = p; state.lastSaved = md; setDirty(false); setTitle(); notify("Saved " + p); plugins.emit("file-saved", p); }
+  try {
+    await host.writeFile(p, md); const first = state.path !== p; state.path = p; state.lastSaved = md; setDirty(false); setTitle();
+    state.mtime = await host.mtime(p).catch(() => null); state.conflict = false;
+    if (first) { setImageBase(host.fileUrl(p.replace(/[\\/][^\\/]*$/, "") + "/")); addRecent(p); }
+    if (!quietSave) notify("Saved " + p); plugins.emit("file-saved", p);
+  }
   catch (e: any) { notify("Save failed: " + (e.message ?? e)); }
+}
+
+// ---------- autosave, recent files, file watching ----------
+const AUTOSAVE_KEY = "mdnest.autosave";
+let autosaveTimer: any;
+function scheduleAutosave() {
+  if (localStorage.getItem(AUTOSAVE_KEY) !== "1" || !state.path) return;
+  clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(async () => { if (state.dirty && state.path && !state.conflict) { quietSave = true; await save(false); quietSave = false; } }, 1500);
+}
+const RECENT_KEY = "mdnest.recent";
+const recent = (): string[] => JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]");
+function addRecent(p: string) {
+  const list = [p, ...recent().filter((x) => x !== p)].slice(0, 12);
+  localStorage.setItem(RECENT_KEY, JSON.stringify(list)); renderRecent();
+}
+let recentEl: HTMLElement | null = null;
+function renderRecent() {
+  if (!recentEl) return;
+  recentEl.innerHTML = recent().map((p) => `<div class="file-library-node file-tree-node recent-file" data-path="${p.replace(/"/g, "&quot;")}"><div class="file-node-content"><span class="file-node-icon">◦</span><span class="file-node-title">${p.split(/[\\/]/).pop()}</span></div><div class="recent-dir">${p.replace(/[\\/][^\\/]*$/, "")}</div></div>`).join("") || `<div class="outline-item" style="opacity:.6">No recent files</div>`;
+  recentEl.querySelectorAll<HTMLElement>(".recent-file").forEach((n) => (n.onclick = () => openFile(n.dataset.path!)));
+}
+async function reloadFromDisk(force = false) {
+  if (!state.path) return;
+  if (state.dirty && !force) { state.conflict = true; notify("File changed on disk — you have unsaved edits. Run “File: Reload from Disk” to discard them, or save to overwrite."); return; }
+  const scroll = content.scrollTop; const p = state.path;
+  await openFile(p); content.scrollTop = scroll; notify("Reloaded — file changed on disk");
+}
+setInterval(async () => {
+  if (!state.path || document.hidden) return;
+  const m = await host.mtime(state.path).catch(() => null);
+  if (m != null && state.mtime != null && m > state.mtime + 1) { state.mtime = m; reloadFromDisk(); }
+}, 2000);
+
+// ---------- find / replace ----------
+const editorSearch = new EditorSearch(editor.view);
+const sourceSearch = new SourceSearch(() => source.cm);
+const findBar = new FindBar(() => (source.active ? sourceSearch : editorSearch), notify);
+function openFind(replace: boolean) {
+  const seed = source.active ? source.cm?.getSelection() : editor.view.state.doc.textBetween(editor.view.state.selection.from, editor.view.state.selection.to);
+  findBar.open(replace, seed || undefined);
+}
+
+// ---------- export ----------
+const docStem = () => (state.path ? state.path.replace(/^.*[\\/]/, "").replace(/\.[^.]+$/, "") : "untitled");
+const docDir = () => (state.path ? state.path.replace(/[\\/][^\\/]*$/, "") : null);
+async function exportHtmlString(forPrint: boolean) {
+  if (source.active) editor.setMarkdown(source.value());
+  const dir = docDir();
+  return buildExportHtml(editor.getDoc(), host, {
+    theme: themes.current, themeFiles: themes.files, title: docStem(), keepRelativeImages: !forPrint,
+    baseHref: forPrint && dir ? new URL(host.fileUrl(dir + "/"), location.href).href : undefined,
+  });
+}
+async function exportHtml(out?: string) {
+  const p = out ?? (await host.pickSavePath(docStem() + ".html", "html")); if (!p) return;
+  notify("Exporting HTML…");
+  const html = await exportHtmlString(false);
+  await host.writeFile(p, html); notify("Exported " + p); return p;
+}
+async function exportPdf(out?: string) {
+  const html = await exportHtmlString(true);
+  try {
+    const p = out ?? (await host.pickSavePath(docStem() + ".pdf", "pdf")); if (!p) return;
+    notify("Exporting PDF…");
+    await host.exportPdf(html, p); notify("Exported " + p); return p;
+  } catch (e: any) {
+    if (String(e?.message ?? e).includes("unsupported")) { printHtml(html); return; } // system print dialog → "Save as PDF"
+    notify("PDF export failed: " + (e?.message ?? e));
+  }
 }
 
 // ---------- themes ----------
@@ -111,7 +194,15 @@ const plugins = new PluginManager({
   { id: "view.source", title: "View: Toggle Source Mode", key: "Ctrl+/", run: toggleSource },
   { id: "view.sidebar", title: "View: Toggle Sidebar", run: () => document.body.classList.toggle("pin-outline") },
   { id: "view.outline", title: "View: Show Outline", run: () => { document.body.classList.add("pin-outline"); sidebar.select("outline"); } },
-  { id: "view.settings", title: "Preferences: Plugin Settings", run: () => { document.body.classList.add("pin-outline"); sidebar.select("settings"); } },
+  { id: "edit.find", title: "Edit: Find…", key: "Ctrl+F", run: () => openFind(false) },
+  { id: "edit.replace", title: "Edit: Replace…", key: "Ctrl+H", run: () => openFind(true) },
+  { id: "insert.table", title: "Insert: Table (3×3)", key: "Ctrl+T", run: () => { insertTable(3, 3)(editor.view.state, editor.view.dispatch); editor.view.focus(); } },
+  { id: "file.exportHtml", title: "File: Export HTML…", run: () => exportHtml() },
+  { id: "file.exportPdf", title: "File: Export PDF…", run: () => exportPdf() },
+  { id: "file.reload", title: "File: Reload from Disk", run: () => reloadFromDisk(true) },
+  { id: "file.autosave", title: "File: Toggle Autosave", run: () => { const on = localStorage.getItem(AUTOSAVE_KEY) !== "1"; localStorage.setItem(AUTOSAVE_KEY, on ? "1" : "0"); notify("Autosave " + (on ? "on" : "off")); } },
+  { id: "view.recent", title: "View: Recent Files", run: () => { document.body.classList.add("pin-outline"); sidebar.select("recent"); } },
+  { id: "view.settings", title: "Preferences: Settings", run: () => { document.body.classList.add("pin-outline"); sidebar.select("settings"); } },
 ].forEach(addCmd);
 document.getElementById("sidebar-toggle")!.onclick = () => document.body.classList.toggle("pin-outline");
 document.getElementById("source-toggle")!.onclick = toggleSource;
@@ -122,24 +213,39 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "/" ) { e.preventDefault(); toggleSource(); }
   else if (e.key.toLowerCase() === "s" && source.active) { e.preventDefault(); save(e.shiftKey); }
   else if (e.key.toLowerCase() === "p" && e.shiftKey) { e.preventDefault(); openPalette(commands); }
+  else if (e.key.toLowerCase() === "f" && !e.shiftKey) { e.preventDefault(); openFind(false); }
+  else if (e.key.toLowerCase() === "h" && !e.shiftKey) { e.preventDefault(); openFind(true); }
+  else if (e.key.toLowerCase() === "t" && !e.shiftKey && !source.active) { e.preventDefault(); insertTable(3, 3)(editor.view.state, editor.view.dispatch); }
 }, true);
 
 plugins.activateAll([readingGoal, wordStats]); // order irrelevant: topo-sorted by depends
 sidebar.addTab("settings", "⚙", undefined, {
   id: "settings", title: "Settings", render: (el) => {
-    el.innerHTML = `<div class="mdn-settings">` + settingSpecs.map(({ owner, specs }) => `<h4>${owner}</h4>` + specs.map((s) => {
+    const folder = imageFolderPattern();
+    const core = `<h4>Editor</h4><label><input type="checkbox" id="set-autosave" ${localStorage.getItem(AUTOSAVE_KEY) === "1" ? "checked" : ""}> Autosave (1.5 s after edits)</label>
+      <h4>Images</h4><label>When pasting / dropping images, copy them to<br><select id="set-imgfolder">
+      ${["./assets", "./${filename}.assets"].map((o) => `<option value="${o}" ${o === folder ? "selected" : ""}>${o}</option>`).join("")}
+      <option value="custom" ${["./assets", "./${filename}.assets"].includes(folder) ? "" : "selected"}>custom…</option></select>
+      <input id="set-imgfolder-custom" type="text" value="${folder}" style="margin-top:4px"></label>`;
+    el.innerHTML = `<div class="mdn-settings">` + core + settingSpecs.map(({ owner, specs }) => `<h4>${owner}</h4>` + specs.map((s) => {
       const v = JSON.parse(localStorage.getItem(plugins.settingKey(owner, s.key)) ?? JSON.stringify(s.default));
       return s.type === "boolean" ? `<label><input type="checkbox" data-o="${owner}" data-k="${s.key}" ${v ? "checked" : ""}> ${s.title}</label>`
         : `<label>${s.title}<br><input type="${s.type === "number" ? "number" : "text"}" data-o="${owner}" data-k="${s.key}" value="${v}"></label>`;
     }).join("")).join("") + (plugins.errors.length ? `<h4>Plugin errors</h4>` + plugins.errors.map((e) => `<div>${e.id}: ${e.error}</div>`).join("") : "") + `</div>`;
-    el.querySelectorAll<HTMLInputElement>("input").forEach((inp) => inp.onchange = () => {
+    (el.querySelector("#set-autosave") as HTMLInputElement).onchange = (e) => localStorage.setItem(AUTOSAVE_KEY, (e.target as HTMLInputElement).checked ? "1" : "0");
+    const fsel = el.querySelector("#set-imgfolder") as HTMLSelectElement, fcus = el.querySelector("#set-imgfolder-custom") as HTMLInputElement;
+    fsel.onchange = () => { if (fsel.value !== "custom") { localStorage.setItem(IMAGE_FOLDER_KEY, fsel.value); fcus.value = fsel.value; } else fcus.focus(); };
+    fcus.onchange = () => { localStorage.setItem(IMAGE_FOLDER_KEY, fcus.value.trim() || "./assets"); fsel.value = ["./assets", "./${filename}.assets"].includes(fcus.value) ? fcus.value : "custom"; };
+    el.querySelectorAll<HTMLInputElement>("input[data-o]").forEach((inp) => inp.onchange = () => {
       const v = inp.type === "checkbox" ? inp.checked : inp.type === "number" ? +inp.value : inp.value;
       localStorage.setItem(plugins.settingKey(inp.dataset.o!, inp.dataset.k!), JSON.stringify(v));
       plugins.emit("settings-changed", inp.dataset.o, inp.dataset.k, v); editor.refreshDecorations();
     });
   },
 });
+sidebar.addTab("recent", "Recent", undefined, { id: "recent", title: "Recent", render: (el) => { recentEl = el; renderRecent(); return () => (recentEl = null); } });
 sidebar.select("files");
+(window as any).mdnest = { editor, host, notify, exportHtmlString, findBar, state };
 
 window.addEventListener("beforeunload", (e) => { if (state.dirty && host.kind === "browser") e.preventDefault(); });
 
@@ -154,4 +260,13 @@ window.addEventListener("beforeunload", (e) => { if (state.dirty && host.kind ==
   if (f) await openFile(f); else afterLoad();
   if (q.get("sidebar") === "0") document.body.classList.remove("pin-outline");
   document.body.classList.add("mdn-ready");
+  // CLI: mdnest doc.md [--theme name] [--export-html out.html] [--export-pdf out.pdf] [--quit]
+  const args = await host.cliArgs().catch(() => [] as string[]);
+  const arg = (k: string) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : null; };
+  if (arg("--theme")) { await themes.apply(arg("--theme")!); sel.value = themes.current; }
+  try {
+    if (arg("--export-html")) await exportHtml(arg("--export-html")!);
+    if (arg("--export-pdf")) await exportPdf(arg("--export-pdf")!);
+  } catch (e) { console.error(e); }
+  if (args.includes("--quit")) host.quit(0);
 })();

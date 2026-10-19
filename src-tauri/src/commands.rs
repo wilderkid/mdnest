@@ -43,10 +43,15 @@ pub async fn pick_folder(app: tauri::AppHandle) -> Option<String> {
 
 /// Native save dialog. `default_name` arrives as camelCase `defaultName` from invoke.
 #[tauri::command]
-pub async fn pick_save_path(app: tauri::AppHandle, default_name: String) -> Option<String> {
+pub async fn pick_save_path(app: tauri::AppHandle, default_name: String, ext: Option<String>) -> Option<String> {
+    let (label, exts): (&str, Vec<&str>) = match ext.as_deref() {
+        Some("html") => ("HTML", vec!["html", "htm"]),
+        Some("pdf") => ("PDF", vec!["pdf"]),
+        _ => ("Markdown", vec!["md", "markdown"]),
+    };
     app.dialog()
         .file()
-        .add_filter("Markdown", &["md", "markdown"])
+        .add_filter(label, &exts)
         .set_file_name(&default_name)
         .blocking_save_file()
         .and_then(path_string)
@@ -123,9 +128,7 @@ pub async fn list_themes(app: tauri::AppHandle) -> Result<Vec<String>, String> {
         if !lower.ends_with(".css") {
             continue;
         }
-        if lower == "base.user.css" || lower.ends_with(".user.css") {
-            continue;
-        }
+        // *.user.css files are listed too; the frontend applies them as overrides.
         if item.file_type().map(|t| t.is_file()).unwrap_or(false) {
             names.push(name);
         }
@@ -152,4 +155,49 @@ pub async fn cli_file() -> Option<String> {
     let p = std::path::PathBuf::from(arg);
     let abs = if p.is_absolute() { p } else { std::env::current_dir().ok()?.join(p) };
     abs.is_file().then(|| abs.to_string_lossy().into_owned())
+}
+
+
+/// Write base64 data (pasted/dropped images). With `unique`, picks "name-1.ext", "name-2.ext"…
+/// instead of overwriting. Returns the final absolute path.
+#[tauri::command]
+pub async fn write_binary_file(path: String, data: String, unique: bool) -> Result<String, String> {
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD.decode(data.as_bytes()).map_err(|e| e.to_string())?;
+    let mut dest = std::path::PathBuf::from(&path);
+    if let Some(parent) = dest.parent() { fs::create_dir_all(parent).map_err(|e| e.to_string())?; }
+    if unique && dest.exists() {
+        let stem = dest.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+        let ext = dest.extension().map(|s| format!(".{}", s.to_string_lossy())).unwrap_or_default();
+        let parent = dest.parent().map(|p| p.to_path_buf()).unwrap_or_default();
+        let mut i = 1;
+        loop { let cand = parent.join(format!("{stem}-{i}{ext}")); if !cand.exists() { dest = cand; break; } i += 1; }
+    }
+    fs::write(&dest, bytes).map_err(|e| e.to_string())?;
+    Ok(dest.to_string_lossy().into_owned())
+}
+
+/// Modification time in ms since the epoch (used by the frontend's file watcher), or None.
+#[tauri::command]
+pub async fn file_mtime(path: String) -> Option<u64> {
+    let m = fs::metadata(&path).ok()?.modified().ok()?;
+    Some(m.duration_since(std::time::UNIX_EPOCH).ok()?.as_millis() as u64)
+}
+
+#[tauri::command]
+pub async fn cli_args() -> Vec<String> { std::env::args().skip(1).collect() }
+
+#[tauri::command]
+pub async fn quit_app(app: tauri::AppHandle, code: i32) { app.exit(code); }
+
+/// Render `html` to a PDF at `out`.
+/// Linux: loads the HTML into a hidden WebKitGTK webview and prints it to file with
+/// webkit_print_operation (no dialog). Other platforms: not implemented here — the frontend
+/// falls back to the system print dialog (window.print), see README "PDF export".
+#[tauri::command]
+pub async fn export_pdf(app: tauri::AppHandle, html: String, out: String) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    { crate::pdf::export_pdf_linux(app, html, out).await }
+    #[cfg(not(target_os = "linux"))]
+    { let _ = (app, html, out); Err("unsupported".into()) }
 }
