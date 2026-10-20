@@ -51,6 +51,7 @@ export interface MenuState {
   windows?: { label: string; title: string; current?: boolean }[];
   /** UI language setting, for the checked item in View → Language */
   langSetting?: "auto" | "zh-CN" | "en";
+  autosave?: boolean;
 }
 
 export function laterPart(_id: string): 2 | 3 | null {
@@ -76,6 +77,7 @@ export function menuTemplate(mac: boolean): MenuNode[] {
       sep(),
       item("file.save", "Save", "CmdOrCtrl+S"),
       item("file.saveAs", "Save As…", "CmdOrCtrl+Shift+S"),
+      item("file.autosave", "Autosave"),
       item("file.moveTo", "Move To…"),
       item("file.rename", "Rename…"),
       item("file.duplicate", "Duplicate"),
@@ -399,6 +401,7 @@ function applyState(node: MenuNode, state: MenuState, commands: Command[], occup
   if (node.id && node.id.startsWith("format.image.zoom")) enabled = enabled && !!state.onImage;
   if (state.readonly && EDITING_IDS.has(node.id || "")) enabled = false;
   if (node.id?.startsWith("lang.")) return { ...node, enabled: true, checked: (state.langSetting ?? "auto") === node.id.slice(5) };
+  if (node.id === "file.autosave") return { ...node, enabled: true, checked: !!state.autosave };
   if (node.id === "view.source") return { ...node, enabled, checked: state.sourceMode, accel: accelFor(node, occupied) };
   if (node.id === "view.sidebar") return { ...node, enabled, checked: state.sidebar, accel: accelFor(node, occupied) };
   if (node.id === "view.outline") return { ...node, enabled, checked: state.outline, accel: accelFor(node, occupied) };

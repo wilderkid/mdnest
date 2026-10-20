@@ -1,0 +1,29 @@
+/* 0.2.2: save state chip, draft recovery card, block selection / gap caret / block handle, image toolbar.
+   Colours come from the shell tokens (--sh-*) with neutral fallbacks for the plain shell. */
+
+/* ---------- status-bar save state ---------- */
+.mdn-saved .saved-icon { display: inline-flex; align-items: center; }
+.mdn-saved .saved-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; display: inline-block; margin: 0 2px; }
+.mdn-saved[data-state="saving"] { opacity: .8; }
+.mdn-saved[data-state="saving"] .saved-icon svg { animation: mdn-spin 1s linear infinite; }
+.mdn-saved[data-state="draft"] { color: var(--sh-muted, #666); }
+.mdn-saved[data-state="failed"] { color: var(--sh-danger, #e5484d) !important; }
+body.shell-b .mdn-saved[data-state="draft"] { color: var(--sh-muted); background: color-mix(in srgb, var(--sh-muted) 12%, transparent); }
+body.shell-b .mdn-saved[data-state="failed"] { background: color-mix(in srgb, var(--sh-danger) 12%, transparent); }
+@keyframes mdn-spin { to { transform: rotate(360deg); } }
+
+/* ---------- draft recovery card ---------- */
+.mdn-draft {
+  position: fixed; right: 18px; bottom: calc(var(--footer-height, 26px) + 14px); z-index: 70;
+  display: flex; align-items: center; gap: 10px; padding: 10px 10px 10px 12px; max-width: 420px;
+  background: var(--sh-card, #fff); color: var(--sh-fg, #222); border: 1px solid var(--sh-line, #ddd);
+  border-radius: var(--sh-radius-md, 10px); box-shadow: var(--sh-shadow-pop, 0 8px 24px rgba(0,0,0,.15));
+  font: 13px var(--sh-font, system-ui, sans-serif); animation: mdn-pop .18s ease-out;
+}
+.mdn-draft-ic { color: var(--sh-accent, #2f7d6d); display: inline-flex; }
+.mdn-draft-txt { display: flex; flex-direction: column; min-width: 0; }
+.mdn-draft-txt small { color: var(--sh-muted, #777); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+.mdn-draft .btn { display: inline-flex; align-items: center; gap: 5px; }
+.mdn-draft .mdn-draft-x { padding: 4px 6px; background: transparent; border-color: transparent; color: var(--sh-muted, #777); }
+.mdn-draft .mdn-draft-x:hover { background: var(--sh-hover, #f2f2f2); }
+@keyframes mdn-pop { from { transform: translateY(6px); opacity: 0; } to { transform: none; opacity: 1; } }

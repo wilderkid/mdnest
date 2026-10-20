@@ -71,6 +71,15 @@ const P: Record<string, string> = {
   paste: '<rect x="5" y="4.5" width="14" height="16" rx="2"/><path d="M9 4.5V3h6v1.5"/><path d="M9 11h6M9 15h4"/>',
   table: '<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 10h17M3.5 15h17M10 4.5v15"/>',
   bold: '<path d="M7 5h6a3.5 3.5 0 0 1 0 7H7zM7 12h7a3.5 3.5 0 0 1 0 7H7z"/>',
+  alignLeft: '<path d="M4 5h16M4 19h16"/><rect x="4" y="9" width="9" height="6" rx="1"/>',
+  alignCenter: '<path d="M4 5h16M4 19h16"/><rect x="7.5" y="9" width="9" height="6" rx="1"/>',
+  alignRight: '<path d="M4 5h16M4 19h16"/><rect x="11" y="9" width="9" height="6" rx="1"/>',
+  zoomIn: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.6-4.6M10.5 8v5M8 10.5h5"/>',
+  actualSize: '<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M8 9.5l1.5-1v7M14.5 9.5l1.5-1v7"/><path d="M12 11v.01M12 14v.01"/>',
+  width: '<path d="M3 12h18M6.5 8.5L3 12l3.5 3.5M17.5 8.5L21 12l-3.5 3.5"/><path d="M3 4v3M21 4v3M3 17v3M21 17v3"/>',
+  grip: '<circle cx="9" cy="6" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="6" r="1.3" fill="currentColor" stroke="none"/><circle cx="9" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="9" cy="18" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="18" r="1.3" fill="currentColor" stroke="none"/>',
+  saveCloud: '<path d="M7 18a4.5 4.5 0 0 1-.6-9A6 6 0 0 1 18 9.5a4 4 0 0 1-.5 8.5z"/><path d="M9.5 13.5l2 2 3.5-3.5"/>',
+  paraAfter: '<path d="M4 4h16v7H4z"/><path d="M12 14v6M9 17h6"/>',
   key: '<circle cx="8" cy="15" r="4"/><path d="M11 12l8-8M16 7l2 2M14 9l2 2"/>',
 };
 

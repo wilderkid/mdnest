@@ -200,6 +200,12 @@ export const ZH: Record<string, string> = {
   // language switch
   "View: Language: Follow system": "视图：语言：跟随系统", "View: Language: 简体中文": "视图：语言：简体中文", "View: Language: English": "视图：语言：English",
   "Language / 语言": "语言 / Language",
+  // 0.2.2 autosave / drafts
+  "Saving…": "正在保存…", "Draft kept": "草稿已暂存", "Autosave failed": "自动保存失败", "Unsaved (changed on disk)": "未保存（磁盘上的文件已更改）",
+  "Auto-saved": "已自动保存", "Autosave is on": "自动保存已开启", "Autosave is off": "自动保存已关闭",
+  "Unsaved draft found": "发现未保存的草稿", "Discard draft": "丢弃草稿", "Draft restored — save it to keep it": "草稿已恢复，请保存以保留",
+  "Autosave failed: {error}": "自动保存失败：{error}", "restoring a draft": "恢复草稿",
+  "Saves 1.5 s after you stop typing, and when you switch files or leave the window. Untitled documents are kept as a recoverable draft.": "停止输入 1.5 秒后、切换文件或离开窗口时自动保存；未命名文档会暂存为可恢复的草稿。",
   // language endonym
   "English": "English",
 };

@@ -6,6 +6,7 @@ import "prosemirror-view/style/prosemirror.css";
 import "prosemirror-tables/style/tables.css";
 import "./styles/base.css";
 import "./styles/shell.css";
+import "./styles/blocks.css";
 import { host } from "./host";
 import { createEditor, Editor } from "./editor/editor";
 import { setImageBase, setLocalFileUrl } from "./editor/schema";
@@ -85,7 +86,7 @@ const source = new SourceMode(document.body, () => { setDirty(true); scheduleAut
 const footer = document.createElement("footer"); footer.className = "ty-footer";
 footer.innerHTML = `<button id="sidebar-toggle" title="${t("Toggle sidebar")} (Ctrl+Shift+L)" aria-label="${t("Toggle sidebar")}">${icon("panel", 15)}</button>
   <span class="mdn-crumbs" id="file-crumbs"><span class="crumb-path"></span><span id="file-title">${t("Untitled")}</span></span>
-  <span class="mdn-saved" id="footer-saved" hidden>${icon("check", 12, 2.2)}<span class="saved-text"></span></span>
+  <span class="mdn-saved" id="footer-saved" hidden><span class="saved-icon"></span><span class="saved-text"></span></span>
   <span class="footer-spacer"></span>
   <span id="footer-readonly" hidden>${t("Read-only")}</span>
   <span id="footer-word-count" class="sb-group" role="button" tabindex="0"></span>
@@ -129,14 +130,38 @@ const editor: Editor = createEditor(writeEl, EMPTY_DOC, {
 editor.view.dom.id = "write";
 editor.view.dom.addEventListener("pointerdown", () => { if (welcomeVisible() && !state.path) hideWelcome(); });
 
-function setDirty(d: boolean) { state.dirty = d; document.getElementById("file-title")!.classList.toggle("dirty", d); paintSaved(); }
+function setDirty(d: boolean) {
+  const changed = state.dirty !== d;
+  state.dirty = d; document.getElementById("file-title")!.classList.toggle("dirty", d); paintSaved();
+  if (changed) paintWindowTitle();
+}
+/** status-bar save state: saved ✓ / unsaved ● / saving… / draft kept (untitled) */
+let saveUi: "idle" | "saving" | "draft" | "failed" = "idle";
 function paintSaved() {
   const el = document.getElementById("footer-saved");
   if (!el) return;
-  el.hidden = !state.path;
-  el.classList.toggle("dirty", state.dirty);
-  el.querySelector(".saved-text")!.textContent = t(state.dirty ? "Unsaved" : "Saved");
-  el.querySelector("svg")?.setAttribute("style", state.dirty ? "display:none" : "");
+  const auto = autosaveOn();
+  const mode = saveUi === "saving" ? "saving" : saveUi === "failed" && state.dirty ? "failed"
+    : !state.path ? (state.dirty && saveUi === "draft" ? "draft" : "none") : state.dirty ? "dirty" : "saved";
+  el.hidden = mode === "none";
+  el.dataset.state = mode;
+  el.classList.toggle("dirty", mode === "dirty" || mode === "failed");
+  el.classList.toggle("auto", auto);
+  const label = mode === "saving" ? "Saving…" : mode === "draft" ? "Draft kept" : mode === "failed" ? "Autosave failed" : mode === "dirty" ? (auto && state.conflict ? "Unsaved (changed on disk)" : "Unsaved") : auto ? "Auto-saved" : "Saved";
+  el.querySelector(".saved-text")!.textContent = t(label);
+  el.title = t(auto ? "Autosave is on" : "Autosave is off");
+  const ic = el.querySelector(".saved-icon");
+  if (ic) ic.innerHTML = mode === "saved" ? icon("check", 12, 2.2) : mode === "saving" ? icon("refresh", 12, 2) : mode === "draft" ? icon("doc", 12, 2) : `<span class="saved-dot"></span>`;
+}
+let lastWinTitle = "";
+function paintWindowTitle() {
+  const name = state.path ? state.path.split(/[\\/]/).pop()! : t("Untitled");
+  const title = name + (state.dirty ? " •" : "") + " — MD Nest";
+  document.title = title;
+  if (host.kind === "tauri" && title !== lastWinTitle) {
+    lastWinTitle = title;
+    void import("@tauri-apps/api/window").then(({ getCurrentWindow }) => getCurrentWindow().setTitle(title)).catch(() => {});
+  }
 }
 function updateCount() {
   const { words } = countWords(editor.view.state.doc.textContent);
@@ -145,7 +170,7 @@ function updateCount() {
 }
 function setTitle() {
   const name = state.path ? state.path.split(/[\\/]/).pop()! : t("Untitled");
-  document.getElementById("file-title")!.textContent = name; document.title = name + " — MD Nest";
+  document.getElementById("file-title")!.textContent = name; paintWindowTitle();
   paintCrumbs();
   paintEncoding();
   paintSaved();
@@ -334,9 +359,15 @@ function confirmDirty(action: string): Promise<GuardChoice> {
     (back.querySelector("[data-c=save]") as HTMLButtonElement).focus();
   });
 }
+/** The change debounce (150 ms) may lag a fast click: recompute dirtiness before acting on it. */
+function syncDirty(): boolean { const d = currentMarkdown() !== state.lastSaved; if (d !== state.dirty) setDirty(d); return d; }
 async function guard(action: string): Promise<boolean> {
+  syncDirty();
+  // Autosave: a file that has a path is simply saved, no question asked
+  if (state.dirty && state.path && autosaveOn() && !state.conflict) { await flushAutosave(); if (!state.dirty) return true; }
   const c = await confirmDirty(action);
   if (c === "cancel") return false;
+  if (c === "discard" && !state.path) clearDraft();
   if (c === "save") {
     const before = state.path;
     await save(false);
@@ -396,7 +427,7 @@ async function reopenClosed() {
   const p = popClosed();
   if (!p) { notify("No closed file to reopen"); return; }
   if (!(await guard("reopening a file"))) { pushClosed(p); return; }
-  await openFile(p);
+  await openFile(p, undefined, true);
 }
 
 async function loadOpened(path: string, text: string, encoding: SaveEncoding, eol: "LF" | "CRLF") {
@@ -410,7 +441,9 @@ async function loadOpened(path: string, text: string, encoding: SaveEncoding, eo
   localStorage.setItem("mdnest.lastFile", path); plugins.emit("file-opened", path);
   scheduleMenu();
 }
-async function openFile(path: string, encoding?: string) {
+async function openFile(path: string, encoding?: string, guarded = false) {
+  // switching files: autosave flushes the current one; otherwise ask (the sidebar used to drop edits)
+  if (!guarded && path !== state.path && syncDirty() && !(await guard("opening a file"))) return;
   try {
     const bytes = b64ToBytes(await host.readFileBytes(path));
     const opened = openBytes(bytes, fallbackEncoding());
@@ -440,7 +473,7 @@ async function openAt(path: string, line?: number) {
   const mine = citeFlash;
   setTimeout(() => { if (citeFlash === mine) { citeFlash = null; editor.view.dispatch(editor.view.state.tr.setMeta("addToHistory", false)); } }, 1800);
 }
-async function pickAndOpen() { if (!(await guard("opening a file"))) return; const p = await host.pickFile(); if (p) await openFile(p); }
+async function pickAndOpen() { if (!(await guard("opening a file"))) return; const p = await host.pickFile(); if (p) await openFile(p, undefined, true); }
 let fsWatching = false;
 let fsWatchRoot: string | null = null;
 async function startFsWatch(root: string | null) {
@@ -454,11 +487,14 @@ async function startFsWatch(root: string | null) {
 async function pickFolderPath(p: string) { await sidebar.openFolder(p); localStorage.setItem("mdnest.lastFolder", p); plugins.emit("workspace-changed", p); void startFsWatch(p); }
 async function pickFolder() { const p = await host.pickFolder(); if (p) await pickFolderPath(p); }
 let quietSave = false;
+let saving = false;
 async function save(as: boolean) {
   let p = state.path;
   if (as || !p) p = await host.pickSavePath(p ? p.split(/[\\/]/).pop() : "untitled.md");
   if (!p) return;
   const md = currentMarkdown();
+  const wasUntitled = !state.path;
+  saving = true; if (quietSave) { saveUi = "saving"; paintSaved(); }
   try {
     const encoded = encodeText(applyEol(md, state.eol), state.encoding);
     if (encoded.unmapped.length) {
@@ -471,22 +507,104 @@ async function save(as: boolean) {
     } else {
       await host.writeFileBytes(p, bytesToB64(encoded.bytes));
     }
-    const first = state.path !== p; state.path = p; state.lastSaved = md; setDirty(false); setTitle();
     state.mtime = await host.mtime(p).catch(() => null); state.conflict = false;
+    const first = state.path !== p; state.path = p; state.lastSaved = md;
+    saving = false; saveUi = "idle";
+    // edits typed while the file was being written stay unsaved (and are picked up by the next autosave)
+    const still = currentMarkdown() !== md;
+    setDirty(still); setTitle();
+    if (still) scheduleAutosave();
     if (first) { setImageBase(host.fileUrl(p.replace(/[\\/][^\\/]*$/, "") + "/")); addRecent(p); }
+    if (wasUntitled) clearDraft();
     if (!quietSave) notify(t("Saved {path}", { path: p })); plugins.emit("file-saved", p);
   }
-  catch (e: any) { notify(t("Save failed: {error}", { error: String(e.message ?? e) })); }
+  catch (e: any) {
+    saving = false;
+    if (quietSave) { saveUi = "failed"; paintSaved(); if (!autosaveFailedShown) { autosaveFailedShown = true; notify(t("Autosave failed: {error}", { error: String(e.message ?? e) })); } }
+    else notify(t("Save failed: {error}", { error: String(e.message ?? e) }));
+    return;
+  }
+  autosaveFailedShown = false;
 }
 
 // ---------- autosave, recent files, file watching ----------
 const AUTOSAVE_KEY = "mdnest.autosave";
 const REOPEN_KEY = "mdnest.reopenLast"; // "0" = start with the welcome page (default: reopen last file)
+const AUTOSAVE_DELAY = 1500;
 let autosaveTimer: any;
+let autosaveFailedShown = false;
+/** Autosave is on unless the user turned it off ("0"). */
+function autosaveOn() { return localStorage.getItem(AUTOSAVE_KEY) !== "0"; }
+function setAutosave(on: boolean) {
+  localStorage.setItem(AUTOSAVE_KEY, on ? "1" : "0");
+  paintSaved(); scheduleMenu();
+  if (on) scheduleAutosave(); else clearTimeout(autosaveTimer);
+}
 function scheduleAutosave() {
-  if (localStorage.getItem(AUTOSAVE_KEY) !== "1" || !state.path) return;
+  if (!state.path) { scheduleDraft(); return; }
+  if (!autosaveOn()) return;
   clearTimeout(autosaveTimer);
-  autosaveTimer = setTimeout(async () => { if (state.dirty && state.path && !state.conflict) { quietSave = true; await save(false); quietSave = false; } }, 1500);
+  autosaveTimer = setTimeout(() => { void flushAutosave(); }, AUTOSAVE_DELAY);
+}
+/** Save now if autosave applies (window blur, file switch, close). Never prompts, never moves the caret. */
+async function flushAutosave() {
+  clearTimeout(autosaveTimer);
+  if (!autosaveOn() || !state.path || state.conflict) return;
+  if (saving) { await new Promise((r) => setTimeout(r, 60)); if (saving) return; }
+  if (!syncDirty()) return;
+  quietSave = true;
+  try { await save(false); } finally { quietSave = false; }
+}
+window.addEventListener("blur", () => { void flushAutosave(); });
+document.addEventListener("visibilitychange", () => { if (document.hidden) void flushAutosave(); });
+
+// ---------- untitled drafts: kept in localStorage so a crash or a forced quit loses nothing ----------
+let draftTimer: any;
+let draftKey = "mdnest.draft";
+function scheduleDraft() {
+  clearTimeout(draftTimer);
+  draftTimer = setTimeout(() => {
+    if (state.path) return;
+    const md = currentMarkdown();
+    if (!state.dirty || !md.trim()) { clearDraft(); return; }
+    try { localStorage.setItem(draftKey, JSON.stringify({ md, at: Date.now() })); saveUi = "draft"; paintSaved(); } catch { /* quota */ }
+  }, 800);
+}
+function scheduleDraftNow() { const md = currentMarkdown(); if (md.trim()) try { localStorage.setItem(draftKey, JSON.stringify({ md, at: Date.now() })); } catch { /* quota */ } }
+function clearDraft() { clearTimeout(draftTimer); localStorage.removeItem(draftKey); if (saveUi === "draft") { saveUi = "idle"; paintSaved(); } }
+function readDraft(): { md: string; at: number } | null {
+  try { const d = JSON.parse(localStorage.getItem(draftKey) || "null"); return d && typeof d.md === "string" && d.md.trim() ? d : null; } catch { return null; }
+}
+/** Non-modal offer to bring back an untitled draft from the last session. */
+function offerDraft() {
+  const d = readDraft();
+  if (!d) return;
+  document.getElementById("mdn-draft")?.remove();
+  const bar = document.createElement("div");
+  bar.id = "mdn-draft";
+  bar.className = "mdn-draft";
+  bar.setAttribute("role", "status");
+  const first = d.md.trim().split("\n")[0].replace(/^#+\s*/, "").slice(0, 40);
+  bar.innerHTML = `<span class="mdn-draft-ic">${icon("doc", 16)}</span><span class="mdn-draft-txt"><b>${escapeHtml(t("Unsaved draft found"))}</b><small>${escapeHtml(first)} · ${escapeHtml(relTime(d.at))}</small></span>
+    <button type="button" class="btn btn-primary" data-d="restore">${icon("refresh", 13)}<span>${escapeHtml(t("Restore"))}</span></button>
+    <button type="button" class="btn mdn-draft-x" data-d="discard" title="${escapeHtml(t("Discard draft"))}" aria-label="${escapeHtml(t("Discard draft"))}">${icon("x", 14)}</button>`;
+  document.body.appendChild(bar);
+  bar.querySelector<HTMLButtonElement>("[data-d=restore]")!.onclick = async () => {
+    bar.remove();
+    if (!(await guard("restoring a draft"))) { offerDraft(); return; }
+    const draft = readDraft(); if (!draft) return;
+    cancelPendingSuggestions(editor.view);
+    state.path = null; state.lastSaved = ""; state.conflict = false;
+    if (source.active) source.show(draft.md);
+    editor.setMarkdown(draft.md);
+    setImageBase("");
+    setDirty(true); setTitle(); afterLoad(); hideWelcome(); sidebar.markActive(null);
+    localStorage.removeItem("mdnest.lastFile");
+    saveUi = "draft"; paintSaved();
+    editor.view.focus(); scheduleMenu();
+    notify("Draft restored — save it to keep it");
+  };
+  bar.querySelector<HTMLButtonElement>("[data-d=discard]")!.onclick = () => { bar.remove(); clearDraft(); };
 }
 const RECENT_KEY = "mdnest.recent";
 const recent = (): string[] => JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]");
@@ -513,18 +631,27 @@ function setSaveEncoding(enc: SaveEncoding) {
 async function reopenWith(enc: string) {
   if (!state.path) { notify("No file to reopen"); return; }
   if (state.dirty && !(await guard("reopening with another encoding"))) return;
-  await openFile(state.path, enc);
+  await openFile(state.path, enc, true);
   notify(t("Reopened as {encoding}", { encoding: enc }));
 }
 async function reloadFromDisk(force = false) {
-  if (!state.path) return;
+  if (!state.path || saving) return;
+  // our own (auto)save, or an external write of identical text: nothing to reload, keep the caret
+  if (!force) {
+    try {
+      const bytes = b64ToBytes(await host.readFileBytes(state.path));
+      const text = openBytes(bytes, fallbackEncoding()).text.replace(/\r\n/g, "\n");
+      if (text === state.lastSaved || text === currentMarkdown()) return;
+    } catch { /* fall through */ }
+  }
   if (state.dirty && !force) { state.conflict = true; notify("File changed on disk — you have unsaved edits. Run “File: Reload from Disk” to discard them, or save to overwrite."); return; }
   const scroll = content.scrollTop; const p = state.path;
-  await openFile(p); content.scrollTop = scroll; notify("Reloaded — file changed on disk");
+  await openFile(p, undefined, true); content.scrollTop = scroll; notify("Reloaded — file changed on disk");
 }
 setInterval(async () => {
-  if (!state.path || document.hidden) return;
+  if (!state.path || document.hidden || saving) return;
   const m = await host.mtime(state.path).catch(() => null);
+  if (saving) return;
   if (m != null && state.mtime != null && m > state.mtime + 1) { state.mtime = m; reloadFromDisk(); }
 }, 2000);
 
@@ -734,7 +861,7 @@ const plugins = new PluginManager({
   { id: "file.saveenc.big5", title: "File: Save as Big5", run: () => setSaveEncoding("Big5") },
   { id: "file.saveenc.shiftjis", title: "File: Save as Shift_JIS", run: () => setSaveEncoding("Shift_JIS") },
   { id: "file.saveenc.utf16le", title: "File: Save as UTF-16LE", run: () => setSaveEncoding("UTF-16LE") },
-  { id: "file.autosave", title: "File: Toggle Autosave", run: () => { const on = localStorage.getItem(AUTOSAVE_KEY) !== "1"; localStorage.setItem(AUTOSAVE_KEY, on ? "1" : "0"); notify(t(on ? "Autosave on" : "Autosave off")); } },
+  { id: "file.autosave", title: "File: Toggle Autosave", run: () => { const on = !autosaveOn(); setAutosave(on); notify(t(on ? "Autosave on" : "Autosave off")); sidebar.rerender("settings"); } },
   { id: "view.recent", title: "View: Recent Files", run: () => { document.body.classList.add("pin-outline"); sidebar.select("recent"); } },
   { id: "view.settings", title: "Preferences: Settings", run: () => { document.body.classList.add("pin-outline"); sidebar.select("settings"); } },
 ].forEach(addCmd);
@@ -907,7 +1034,7 @@ async function quickOpen() {
     });
   };
   const close = () => box.remove();
-  const pick = async (path: string) => { close(); if (!(await guard("opening a file"))) return; await openFile(path); };
+  const pick = async (path: string) => { close(); if (!(await guard("opening a file"))) return; await openFile(path, undefined, true); };
   input.addEventListener("input", render);
   input.addEventListener("keydown", (e) => {
     if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); close(); }
@@ -1460,6 +1587,7 @@ function menuState(windows = openWindows): MenuState {
     themes: themes.themes(),
     currentTheme: themes.current,
     langSetting: langSetting(),
+    autosave: autosaveOn(),
     sourceMode: source.active,
     sidebar: document.body.classList.contains("pin-outline"),
     outline: document.body.classList.contains("ty-show-outline"),
@@ -1937,7 +2065,7 @@ sidebar.addTab("settings", "Settings", undefined, {
       selectRow("set-shell", "Shell style", [["b", "青屿 (B)"], ["plain", "Plain (theme only)"]], shellStyle(), "Window chrome around the editor; colours follow the theme"),
       ls === "auto" ? t("Follow system") : ls === "zh-CN" ? "简体中文" : "English", true);
     const editorGrp = settingsGroup("editor", "Editor", "pencil",
-      switchRow("set-autosave", "Autosave", localStorage.getItem(AUTOSAVE_KEY) === "1", "1.5 s after edits stop")
+      switchRow("set-autosave", "Autosave", autosaveOn(), "Saves 1.5 s after you stop typing, and when you switch files or leave the window. Untitled documents are kept as a recoverable draft.")
       + switchRow("set-reopen", "Reopen last file on startup", localStorage.getItem(REOPEN_KEY) !== "0")
       + switchRow("set-pair-brackets", "Auto-pair brackets and quotes", pairBracketsOn())
       + switchRow("set-pair-md", "Auto-pair Markdown syntax", pairMarkdownOn())
@@ -1983,7 +2111,7 @@ sidebar.addTab("settings", "Settings", undefined, {
       applyShellStyle(v);
       applyShellColors(themes.current !== "mdnest");
     };
-    (el.querySelector("#set-autosave") as HTMLInputElement).onchange = (e) => localStorage.setItem(AUTOSAVE_KEY, (e.target as HTMLInputElement).checked ? "1" : "0");
+    (el.querySelector("#set-autosave") as HTMLInputElement).onchange = (e) => setAutosave((e.target as HTMLInputElement).checked);
     (el.querySelector("#set-reopen") as HTMLInputElement).onchange = (e) => localStorage.setItem(REOPEN_KEY, (e.target as HTMLInputElement).checked ? "1" : "0");
     (el.querySelector("#set-pair-brackets") as HTMLInputElement).onchange = (e) => { localStorage.setItem(PAIR_BRACKETS_KEY, (e.target as HTMLInputElement).checked ? "1" : "0"); scheduleMenu(); };
     (el.querySelector("#set-pair-md") as HTMLInputElement).onchange = (e) => { localStorage.setItem(PAIR_MARKDOWN_KEY, (e.target as HTMLInputElement).checked ? "1" : "0"); scheduleMenu(); };
@@ -2103,9 +2231,11 @@ window.addEventListener("beforeunload", (e) => { if (state.dirty && host.kind ==
   const ws = q.get("folder") ?? (cli ? cli.replace(/[\\/][^\\/]*$/, "") : null) ?? (restore ? localStorage.getItem("mdnest.lastFolder") : null) ?? (await host.defaultWorkspace());
   if (ws) { await sidebar.openFolder(ws).catch(() => {}); if (sidebar.root) { plugins.emit("workspace-changed", sidebar.root); void startFsWatch(sidebar.root); } }
   const f = cli ?? q.get("file") ?? (restore ? localStorage.getItem("mdnest.lastFile") : null) ?? (restore && ws && host.kind === "browser" && !q.has("welcome") ? ws + "/sample.md" : null);
-  if (f) await openFile(f); else { editor.setMarkdown(EMPTY_DOC); state.lastSaved = editor.getMarkdown(); setDirty(false); afterLoad(); showWelcome(); }
+  if (host.kind === "tauri") { const label = await host.windowLabel().catch(() => "main"); if (label && label !== "main") draftKey = "mdnest.draft." + label; }
+  if (f) await openFile(f, undefined, true); else { editor.setMarkdown(EMPTY_DOC); state.lastSaved = editor.getMarkdown(); setDirty(false); afterLoad(); showWelcome(); }
   if (q.get("sidebar") === "0") document.body.classList.remove("pin-outline");
   document.body.classList.add("mdn-ready");
+  offerDraft();
   applySpellcheck();
   if (spellcheckOn()) void host.setSpellcheck(true).catch(() => {});
   await refreshMenu();
@@ -2121,6 +2251,7 @@ window.addEventListener("beforeunload", (e) => { if (state.dirty && host.kind ==
       const { getCurrentWindow } = await import("@tauri-apps/api/window");
       await getCurrentWindow().onCloseRequested(async (ev) => {
         ev.preventDefault();
+        clearTimeout(draftTimer); if (!state.path && state.dirty) scheduleDraftNow();
         if (!(await guard("closing"))) return;
         await host.closeWindow();
       });
