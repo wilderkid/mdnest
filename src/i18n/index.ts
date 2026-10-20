@@ -34,6 +34,8 @@ export function resolveLang(setting: LangSetting = langSetting(), langs?: readon
 }
 
 let LANG: Lang = resolveLang();
+// <html lang> also steers CJK font fallback
+if (typeof document !== "undefined") document.documentElement.lang = LANG === "zh-CN" ? "zh-CN" : "en";
 export function lang(): Lang { return LANG; }
 /** Switch language for strings rendered from now on (menus re-render; panels re-render on demand). */
 export function setLang(l: Lang) {
