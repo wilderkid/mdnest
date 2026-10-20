@@ -33,7 +33,7 @@ const c = edit(z50, { align: "center" });
 ok(c === '<img src="x.png" alt="a" style="display:block;margin:0 auto;zoom:50%;" />\n', "center + zoom", c);
 ok(edit(c, { zoom: null, align: null }) === "![a](x.png)\n", "restore + default align → plain ![]() again", edit(c, { zoom: null, align: null }));
 const w = edit("![a](x.png \"T\")\n", { width: "320", align: "right" });
-ok(w === '<img src="x.png" alt="a" title="T" style="display:block;margin-left:auto;" width="320" />\n', "custom width + right", w);
+ok(w === '<img src="x.png" alt="a" width="320" title="T" style="display:block;margin-left:auto;" />\n', "custom width + right", w);
 ok(serializeMarkdown(parseMarkdown(w)) === w, "custom width + right re-opens identically");
 const pw = parseImgTag(w)!;
 ok(pw.width === "320" && pw.align === "right" && pw.title === "T", "parsed back: width/align/title", pw);
