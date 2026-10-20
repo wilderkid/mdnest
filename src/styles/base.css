@@ -389,3 +389,11 @@ body.typora-sourceview-on content { visibility: hidden; }
 /* links inside a pending suggestion are previews, not navigation */
 #write .md-sug-diff a { pointer-events: none; }
 #write .md-sug-diff .md-inline-math .md-math-preview { display: inline; }
+
+/* Settings: language switch pinned above all groups */
+.mdn-settings .set-lang-top { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; margin: 0 0 8px; border-bottom: 1px solid var(--mdn-line, rgba(127,127,127,.25)); }
+.mdn-settings .set-lang-label { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.mdn-settings .set-seg { display: flex; border: 1px solid var(--mdn-line, rgba(127,127,127,.35)); border-radius: 6px; overflow: hidden; }
+.mdn-settings .set-seg-btn { flex: 1; padding: 4px 6px; border: 0; background: transparent; color: inherit; font: inherit; font-size: 12px; cursor: pointer; }
+.mdn-settings .set-seg-btn + .set-seg-btn { border-left: 1px solid var(--mdn-line, rgba(127,127,127,.35)); }
+.mdn-settings .set-seg-btn.on { background: var(--mdn-accent, #2f7d6d); color: #fff; }

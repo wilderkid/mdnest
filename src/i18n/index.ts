@@ -20,8 +20,10 @@ function defaultLangs(): string[] {
   if (typeof navigator !== "undefined") out.push(...(navigator.languages?.length ? navigator.languages : [navigator.language]));
   return out;
 }
+/** The default UI language is Chinese; only a clearly non-Chinese OS/webview locale switches to English. */
 export function systemLang(langs: readonly string[] = defaultLangs()): Lang {
-  const first = String(langs[0] || "en").toLowerCase();
+  const first = String(langs.find((l) => l && String(l).trim()) ?? "").toLowerCase();
+  if (!first) return "zh-CN";
   return first.startsWith("zh") ? "zh-CN" : "en";
 }
 

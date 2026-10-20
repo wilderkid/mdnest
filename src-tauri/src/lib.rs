@@ -69,6 +69,7 @@ fn bundled_themes_dir(app: &tauri::AppHandle) -> Option<PathBuf> {
 /// The desktop language from the POSIX locale variables ("zh_CN.UTF-8" → "zh-CN"). WebKitGTK only
 /// reports it as navigator.language when that locale is installed, so the UI language would fall
 /// back to English on some systems. Windows/macOS webviews report the OS language themselves.
+#[cfg_attr(any(windows, target_os = "macos"), allow(dead_code))]
 pub fn env_lang(get: impl Fn(&str) -> Option<String>) -> Option<String> {
     for var in ["LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG"] {
         let Some(v) = get(var) else { continue };
@@ -97,12 +98,35 @@ pub fn env_lang(get: impl Fn(&str) -> Option<String>) -> Option<String> {
 }
 
 /// Exposes the system language to every webview before page scripts run (read by src/i18n).
+/// Windows display language (the language the user sees Windows in), else the regional locale.
+#[cfg(windows)]
+fn windows_ui_lang() -> Option<String> {
+    use windows::Win32::Globalization::{GetUserDefaultLocaleName, GetUserDefaultUILanguage};
+    let ui = unsafe { GetUserDefaultUILanguage() };
+    // PRIMARYLANGID 0x04 = Chinese (zh-CN, zh-TW, zh-HK, zh-SG…)
+    if ui & 0x3ff == 0x04 {
+        return Some("zh-CN".into());
+    }
+    if ui & 0x3ff == 0x09 {
+        return Some("en-US".into());
+    }
+    let mut buf = [0u16; 85];
+    let n = unsafe { GetUserDefaultLocaleName(&mut buf) };
+    if n > 1 {
+        return Some(String::from_utf16_lossy(&buf[..(n as usize - 1)]));
+    }
+    None
+}
+
 fn locale_plugin<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
-    let lang = if cfg!(any(target_os = "windows", target_os = "macos")) {
-        None
-    } else {
-        env_lang(|k| std::env::var(k).ok())
-    };
+    // The OS locale, handed to the webview: WebView2 / WebKitGTK may report en-US through
+    // navigator.languages on a Chinese system, so the UI language would not follow the OS.
+    #[cfg(windows)]
+    let lang = windows_ui_lang();
+    #[cfg(target_os = "macos")]
+    let lang: Option<String> = None;
+    #[cfg(not(any(windows, target_os = "macos")))]
+    let lang = env_lang(|k| std::env::var(k).ok());
     let script = match lang {
         Some(l) => format!("window.__MDNEST_SYS_LANG__ = {:?};", l),
         None => String::new(),

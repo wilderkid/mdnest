@@ -49,6 +49,8 @@ export interface MenuState {
   onImage?: boolean;
   /** Open MD Nest windows. The current one is checked. */
   windows?: { label: string; title: string; current?: boolean }[];
+  /** UI language setting, for the checked item in View → Language */
+  langSetting?: "auto" | "zh-CN" | "en";
 }
 
 export function laterPart(_id: string): 2 | 3 | null {
@@ -268,6 +270,13 @@ export function menuTemplate(mac: boolean): MenuNode[] {
   };
   const view: MenuNode = {
     id: "menu.view", label: "View", submenu: [
+      // Bilingual on purpose: findable whichever language the UI is currently in
+      { id: "view.language", label: "Language / 语言", submenu: [
+        item("lang.auto", "Follow system"),
+        item("lang.zh-CN", "简体中文"),
+        item("lang.en", "English"),
+      ] },
+      sep(),
       item("view.source", "Source Code Mode", "CmdOrCtrl+/"),
       item("view.focus", "Focus Mode", "F8"),
       item("view.typewriter", "Typewriter Mode", "F9"),
@@ -389,6 +398,7 @@ function applyState(node: MenuNode, state: MenuState, commands: Command[], occup
   if (node.id && node.id.startsWith("format.image.align")) enabled = enabled && !!state.onImage;
   if (node.id && node.id.startsWith("format.image.zoom")) enabled = enabled && !!state.onImage;
   if (state.readonly && EDITING_IDS.has(node.id || "")) enabled = false;
+  if (node.id?.startsWith("lang.")) return { ...node, enabled: true, checked: (state.langSetting ?? "auto") === node.id.slice(5) };
   if (node.id === "view.source") return { ...node, enabled, checked: state.sourceMode, accel: accelFor(node, occupied) };
   if (node.id === "view.sidebar") return { ...node, enabled, checked: state.sidebar, accel: accelFor(node, occupied) };
   if (node.id === "view.outline") return { ...node, enabled, checked: state.outline, accel: accelFor(node, occupied) };
@@ -578,6 +588,7 @@ function renderNode(node: MenuNode, run: (id: string) => void, closeAll: () => v
   if (node.submenu) {
     const row = document.createElement("div");
     row.className = "mdn-menu-sub";
+    if (node.id) row.dataset.sub = node.id;
     const label = document.createElement("span");
     label.textContent = node.label || "";
     const caret = document.createElement("span");

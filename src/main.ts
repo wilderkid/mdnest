@@ -1459,6 +1459,7 @@ function menuState(windows = openWindows): MenuState {
     recent: recent(),
     themes: themes.themes(),
     currentTheme: themes.current,
+    langSetting: langSetting(),
     sourceMode: source.active,
     sidebar: document.body.classList.contains("pin-outline"),
     outline: document.body.classList.contains("ty-show-outline"),
@@ -1852,6 +1853,15 @@ function filterSettings(root: HTMLElement, q: string) {
   });
   root.querySelector(".set-none")?.classList.toggle("set-hidden", !needle || any);
 }
+/** switch the UI language now (menus, title, status bar, settings re-render; other panels on next paint) */
+function applyLanguage(v: LangSetting) {
+  saveLangSetting(v);
+  void refreshMenu();
+  setTitle(); updateCount();
+  sidebar.rerender("settings");
+  notify("Restart to apply everywhere");
+}
+for (const v of ["auto", "zh-CN", "en"] as LangSetting[]) addCmd({ id: "lang." + v, title: "View: Language: " + (v === "auto" ? "Follow system" : v === "zh-CN" ? "简体中文" : "English"), run: () => applyLanguage(v) });
 let settingsQuery = "";
 sidebar.addTab("settings", "Settings", undefined, {
   id: "settings", title: "Settings",
@@ -1870,9 +1880,12 @@ sidebar.addTab("settings", "Settings", undefined, {
     const folderOpts: [string, string][] = [["./assets", "./assets"], ["./${filename}.assets", "./${filename}.assets"], ["custom", "custom…"]];
     const folderVal = ["./assets", "./${filename}.assets"].includes(folder) ? folder : "custom";
     const ls = langSetting();
+    // Language sits above every group, always visible, labelled in both languages
+    const langBlock = `<div class="set-lang-top" role="radiogroup" aria-label="Language / 语言"><span class="set-lang-label">${icon("globe", 15)}<b>语言</b> / Language</span><div class="set-seg">`
+      + ([["auto", t("Follow system")], ["zh-CN", "简体中文"], ["en", "English"]] as [LangSetting, string][]).map(([v, l]) => `<button type="button" role="radio" class="set-seg-btn${v === ls ? " on" : ""}" aria-checked="${v === ls}" data-lang="${v}">${escapeHtml(l)}</button>`).join("")
+      + `</div></div>`;
     const appearance = settingsGroup("appearance", "Appearance", "palette",
-      selectRow("set-lang", "Language", [["auto", "Follow system"], ["zh-CN", "简体中文"], ["en", "English"]], ls)
-      + selectRow("set-shell", "Shell style", [["b", "青屿 (B)"], ["plain", "Plain (theme only)"]], shellStyle(), "Window chrome around the editor; colours follow the theme"),
+      selectRow("set-shell", "Shell style", [["b", "青屿 (B)"], ["plain", "Plain (theme only)"]], shellStyle(), "Window chrome around the editor; colours follow the theme"),
       ls === "auto" ? t("Follow system") : ls === "zh-CN" ? "简体中文" : "English", true);
     const editorGrp = settingsGroup("editor", "Editor", "pencil",
       switchRow("set-autosave", "Autosave", localStorage.getItem(AUTOSAVE_KEY) === "1", "1.5 s after edits stop")
@@ -1901,7 +1914,7 @@ sidebar.addTab("settings", "Settings", undefined, {
       return settingsGroup("p-" + owner, meta.title, meta.icon, specs.map((x) => renderSetting(owner, x)).join(""), summary);
     }).join("");
     const errors = plugins.errors.length ? settingsGroup("errors", "Plugin errors", "x", plugins.errors.map((e) => `<div class="set-row set-error">${escapeHtml(e.id)}: ${escapeHtml(e.error)}</div>`).join(""), String(plugins.errors.length), true) : "";
-    el.innerHTML = `<div class="mdn-settings">${appearance}${editorGrp}${filesGrp}${imagesGrp}${pluginGroups}${errors}<div class="set-none set-hidden">${t("No settings match")}</div></div>`;
+    el.innerHTML = `<div class="mdn-settings">${langBlock}${appearance}${editorGrp}${filesGrp}${imagesGrp}${pluginGroups}${errors}<div class="set-none set-hidden">${t("No settings match")}</div></div>`;
     const root = el.querySelector<HTMLElement>(".mdn-settings")!;
     root.querySelectorAll<HTMLElement>(".set-head").forEach((h) => {
       const toggle = () => {
@@ -1914,13 +1927,7 @@ sidebar.addTab("settings", "Settings", undefined, {
       h.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } };
     });
     if (settingsQuery) filterSettings(root, settingsQuery);
-    (el.querySelector("#set-lang") as HTMLSelectElement).onchange = (e) => {
-      saveLangSetting((e.target as HTMLSelectElement).value as LangSetting);
-      refreshMenu();
-      setTitle(); updateCount();
-      sidebar.rerender("settings");
-      notify("Restart to apply everywhere");
-    };
+    el.querySelectorAll<HTMLButtonElement>(".set-seg-btn[data-lang]").forEach((b) => b.onclick = () => applyLanguage(b.dataset.lang as LangSetting));
     (el.querySelector("#set-shell") as HTMLSelectElement).onchange = (e) => {
       const v = (e.target as HTMLSelectElement).value === "plain" ? "plain" : "b";
       localStorage.setItem(SHELL_KEY, v);

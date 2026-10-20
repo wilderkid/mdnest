@@ -197,4 +197,7 @@ export const ZH: Record<string, string> = {
   "Document": "文档", "{n} characters": "{n} 字符", "{n} lines": "{n} 行",
   // word count
   "~{n} min read": "约 {n} 分钟读完",
+  // language switch
+  "View: Language: Follow system": "视图：语言：跟随系统", "View: Language: 简体中文": "视图：语言：简体中文", "View: Language: English": "视图：语言：English",
+  "Language / 语言": "语言 / Language",
 };

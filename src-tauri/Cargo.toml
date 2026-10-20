@@ -56,7 +56,7 @@ reqwest = { version = "0.12", default-features = false, features = ["native-tls"
 
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.39"
-windows = { version = "0.62", features = ["Win32_UI_Shell", "Win32_Foundation"] }
+windows = { version = "0.62", features = ["Win32_UI_Shell", "Win32_Foundation", "Win32_Globalization"] }
 reqwest = { version = "0.12", default-features = false, features = ["native-tls", "stream"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]

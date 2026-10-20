@@ -13,6 +13,7 @@ const ok = (c: boolean, name: string, info = "") => {
 ok(systemLang(["zh-CN", "en"]) === "zh-CN", "zh system language → zh-CN");
 ok(systemLang(["zh-TW"]) === "zh-CN", "any zh variant → zh-CN");
 ok(systemLang(["en-US"]) === "en", "en-US → en");
+ok(systemLang([]) === "zh-CN", "no locale information → zh-CN default");
 ok(resolveLang("en", ["zh-CN"]) === "en", "explicit setting beats system");
 ok(resolveLang("auto", ["zh-CN"]) === "zh-CN", "auto follows system");
 
