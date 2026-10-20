@@ -346,32 +346,79 @@ fn platform_trash(path: &Path) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+/// The path form SHFileOperationW accepts: fully qualified, backslashes only, and no `\\?\` verbatim
+/// prefix. 0.2.0 passed `fs::canonicalize()` output, which on Windows is always `\\?\C:\…` — the shell
+/// API rejects that, so every delete failed there. Pure string function so it is unit-tested on Linux.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub fn win_shell_path(p: &str) -> String {
+    let s = p.replace('/', "\\");
+    if let Some(rest) = s.strip_prefix("\\\\?\\UNC\\") {
+        return format!("\\\\{rest}");
+    }
+    if let Some(rest) = s.strip_prefix("\\\\?\\") {
+        return rest.to_string();
+    }
+    // collapse doubled separators (not the leading `\\` of a UNC path)
+    let (head, tail) = if s.starts_with("\\\\") { s.split_at(2) } else { s.split_at(0) };
+    let mut out = String::from(head);
+    let mut prev = false;
+    for c in tail.chars() {
+        if c == '\\' && prev {
+            continue;
+        }
+        prev = c == '\\';
+        out.push(c);
+    }
+    if out.len() > 3 && out.ends_with('\\') {
+        out.pop();
+    }
+    out
+}
+
 #[cfg(windows)]
 fn platform_trash(path: &Path) -> Result<(), String> {
     use std::os::windows::ffi::OsStrExt;
     use windows::Win32::UI::Shell::{
-        SHFileOperationW, FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_SILENT, FO_DELETE, SHFILEOPSTRUCTW,
+        SHFileOperationW, FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_NOERRORUI, FOF_SILENT, FO_DELETE,
+        SHFILEOPSTRUCTW,
     };
-    let abs = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-    // Double-NUL terminated wide path, as SHFileOperation requires.
-    let mut wide: Vec<u16> = abs.as_os_str().encode_wide().collect();
-    wide.push(0);
-    wide.push(0);
-    let mut op = SHFILEOPSTRUCTW {
-        hwnd: windows::Win32::Foundation::HWND::default(),
-        wFunc: FO_DELETE,
-        pFrom: windows::core::PCWSTR(wide.as_ptr()),
-        pTo: windows::core::PCWSTR::null(),
-        fFlags: (FOF_ALLOWUNDO.0 | FOF_NOCONFIRMATION.0 | FOF_SILENT.0) as u16,
-        fAnyOperationsAborted: windows::core::BOOL(0),
-        hNameMappings: std::ptr::null_mut(),
-        lpszProgressTitle: windows::core::PCWSTR::null(),
-    };
-    let code = unsafe { SHFileOperationW(&mut op) };
-    if code != 0 {
-        return Err(format!("SHFileOperationW {code}"));
+    let abs = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
+    let shell = win_shell_path(&abs.to_string_lossy());
+    let mut last = 0i32;
+    // A file that was just saved can be briefly held by an indexer, antivirus or OneDrive sync: retry.
+    for attempt in 0..4 {
+        if attempt > 0 {
+            std::thread::sleep(std::time::Duration::from_millis(150 * attempt));
+        }
+        // Double-NUL terminated wide path, as SHFileOperation requires.
+        let mut wide: Vec<u16> = std::ffi::OsStr::new(&shell).encode_wide().collect();
+        wide.push(0);
+        wide.push(0);
+        let mut op = SHFILEOPSTRUCTW {
+            hwnd: windows::Win32::Foundation::HWND::default(),
+            wFunc: FO_DELETE,
+            pFrom: windows::core::PCWSTR(wide.as_ptr()),
+            pTo: windows::core::PCWSTR::null(),
+            fFlags: (FOF_ALLOWUNDO.0 | FOF_NOCONFIRMATION.0 | FOF_SILENT.0 | FOF_NOERRORUI.0) as u16,
+            fAnyOperationsAborted: windows::core::BOOL(0),
+            hNameMappings: std::ptr::null_mut(),
+            lpszProgressTitle: windows::core::PCWSTR::null(),
+        };
+        let code = unsafe { SHFileOperationW(&mut op) };
+        if code == 0 && op.fAnyOperationsAborted.0 == 0 && !path.exists() {
+            return Ok(());
+        }
+        last = code;
+        if code == 0 && !path.exists() {
+            return Ok(());
+        }
     }
-    Ok(())
+    Err(match last {
+        0x20 | 0x21 => format!("{shell}: the file is open in another program"),
+        0x5 | 0x78 | 0x10000 => format!("{shell}: access denied"),
+        0x7C | 0x402 => format!("{shell}: invalid path"),
+        c => format!("{shell}: could not move to the Recycle Bin (SHFileOperationW {c:#x})"),
+    })
 }
 
 #[cfg(target_os = "macos")]
@@ -808,6 +855,17 @@ pub fn recent_previews(paths: &[String]) -> Vec<Preview> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn win_shell_path_forms() {
+        use super::win_shell_path as w;
+        assert_eq!(w("\\\\?\\C:\\Users\\张三\\Documents\\a.md"), "C:\\Users\\张三\\Documents\\a.md");
+        assert_eq!(w("C:\\Users\\x\\OneDrive\\notes/sub/a.md"), "C:\\Users\\x\\OneDrive\\notes\\sub\\a.md");
+        assert_eq!(w("\\\\?\\UNC\\nas\\share\\a.md"), "\\\\nas\\share\\a.md");
+        assert_eq!(w("\\\\nas\\share\\dir\\"), "\\\\nas\\share\\dir");
+        assert_eq!(w("C:\\a\\\\b//c.md"), "C:\\a\\b\\c.md");
+        assert_eq!(w("C:\\"), "C:\\");
+    }
+
     #[test]
     fn preview_title_excerpt_words() {
         let text = "---\ntitle: x\n---\n# 本周开源模型盘点\n\n这周**开源**社区格外热闹。\n\n```js\ncode()\n```\nMore words here.\n";

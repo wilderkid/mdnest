@@ -1,6 +1,7 @@
 // Built-in Word (.docx) writer. STORE zip + CRC32, no dependencies.
 // document.xml, styles, numbering, media, and hyperlink relationships.
 
+import { localPathOfUrl } from "../host/fileurl";
 import { Node as PMNode } from "prosemirror-model";
 import type { Host } from "../host/types";
 
@@ -556,14 +557,8 @@ export async function readImageBytes(host: Host, src: string): Promise<Uint8Arra
       for (let n = 0; n < bin.length; n++) out[n] = bin.charCodeAt(n);
       return out;
     }
-    let path = src;
-    if (/^mdfile:|^http:\/\/mdfile/i.test(src) || src.startsWith("/fs/")) {
-      path = src.replace(/^https?:\/\/mdfile\.localhost\//i, "").replace(/^mdfile:\/\/localhost\//i, "").replace(/^\/fs/, "");
-      try { path = decodeURIComponent(path); } catch { /* keep */ }
-    } else if (/^https?:\/\/127\.0\.0\.1|^https?:\/\/localhost/i.test(src) && src.includes("/fs/")) {
-      path = src.replace(/^https?:\/\/[^/]+\/fs/, "");
-      try { path = decodeURIComponent(path); } catch { /* keep */ }
-    }
+    // 0.2.0 dropped the leading "/" of Linux paths here; fileurl.ts is the one inverse of host.fileUrl
+    const path = localPathOfUrl(src, navigator.userAgent.includes("Windows")) ?? src;
     const b64 = await host.readFileBytes(path);
     const bin = atob(b64);
     const out = new Uint8Array(bin.length);

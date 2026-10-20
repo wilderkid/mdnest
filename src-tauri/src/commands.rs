@@ -27,12 +27,27 @@ fn path_string(file: FilePath) -> Option<String> {
 
 /// Native open dialog filtered to Markdown. `None` if the user cancels.
 #[tauri::command]
-pub async fn pick_file(app: tauri::AppHandle) -> Option<String> {
-    app.dialog()
-        .file()
-        .add_filter("Markdown", &["md", "markdown", "mdown", "mkd"])
-        .blocking_pick_file()
-        .and_then(path_string)
+pub async fn pick_file(
+    app: tauri::AppHandle,
+    kind: Option<String>,
+    label: Option<String>,
+) -> Option<String> {
+    let dialog = app.dialog().file();
+    // "Insert image" used to share the Markdown-only filter, so no image could ever be chosen.
+    let dialog = if kind.as_deref() == Some("image") {
+        dialog
+            .add_filter(
+                label.as_deref().unwrap_or("Images"),
+                &["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "avif", "ico", "tif", "tiff"],
+            )
+            .add_filter("*", &["*"])
+    } else {
+        dialog.add_filter(
+            label.as_deref().unwrap_or("Markdown"),
+            &["md", "markdown", "mdown", "mkd", "txt"],
+        )
+    };
+    dialog.blocking_pick_file().and_then(path_string)
 }
 
 /// Native folder picker. `None` if the user cancels.

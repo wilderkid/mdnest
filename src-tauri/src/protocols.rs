@@ -79,15 +79,42 @@ fn decode_url_path(raw: &str) -> Result<String, ()> {
 /// `..` and NUL are rejected. The helper is platform-independent so both forms are unit-tested
 /// on Linux.
 pub fn decode_mdfile_path(raw: &str) -> Result<PathBuf, ()> {
-    let decoded = decode_url_path(raw)?;
+    decode_mdfile_path_for(raw, cfg!(windows)).map(PathBuf::from)
+}
+
+/// Platform-parameterised core of [`decode_mdfile_path`], so the Windows rules are unit-tested on Linux.
+///
+/// 0.2.0 ran every URL through `decode_url_path`, which rejects absolute paths — and on Windows
+/// `C:/Users/x/a.png` IS absolute, so every local image answered 400 there (pasted and inserted
+/// images never displayed). Windows forms accepted here:
+/// - `/C:/dir/a.png` → `C:\dir\a.png`
+/// - `/UNC/server/share/a.png` → `\\server\share\a.png` (network shares, see `fileUrl` in host/tauri.ts)
+pub fn decode_mdfile_path_for(raw: &str, windows: bool) -> Result<String, ()> {
+    let trimmed = raw.strip_prefix('/').unwrap_or(raw);
+    let decoded = percent_decode_str(trimmed)
+        .decode_utf8()
+        .map_err(|_| ())?
+        .into_owned();
     if decoded.is_empty() || decoded.contains('\0') {
         return Err(());
     }
-    // A Windows drive (`C:` / `C:/…`) is not absolute on Unix; keep it as given.
-    if is_windows_drive_path(&decoded) {
-        return Ok(PathBuf::from(decoded.replace('\\', "/")));
+    if decoded.split(['/', '\\']).any(|c| c == "..") {
+        return Err(());
     }
-    Ok(PathBuf::from("/").join(&decoded))
+    if is_windows_drive_path(&decoded) {
+        return Ok(if windows { decoded.replace('/', "\\") } else { decoded.replace('\\', "/") });
+    }
+    if windows {
+        if let Some(rest) = decoded.strip_prefix("UNC/") {
+            if rest.split('/').filter(|s| !s.is_empty()).count() < 2 {
+                return Err(());
+            }
+            return Ok(format!("\\\\{}", rest.replace('/', "\\")));
+        }
+        // anything else is not a Windows file path
+        return Err(());
+    }
+    Ok(format!("/{}", decoded.trim_start_matches('/')))
 }
 
 fn is_windows_drive_path(s: &str) -> bool {
@@ -192,6 +219,22 @@ mod tests {
         assert_eq!(p, PathBuf::from("C:/Users/x/a.png"));
         let q = decode_mdfile_path("/c:/Users/x/a.png").unwrap();
         assert_eq!(q, PathBuf::from("c:/Users/x/a.png"));
+    }
+
+    #[test]
+    fn windows_rules() {
+        assert_eq!(decode_mdfile_path_for("/C:/Users/x/a.png", true).unwrap(), "C:\\Users\\x\\a.png");
+        assert_eq!(
+            decode_mdfile_path_for("/C:/Users/%E5%BC%A0%E4%B8%89/OneDrive/%E6%96%87%E6%A1%A3/assets/image-1.png", true).unwrap(),
+            "C:\\Users\\张三\\OneDrive\\文档\\assets\\image-1.png"
+        );
+        assert_eq!(decode_mdfile_path_for("/UNC/nas/share/a%23b.png", true).unwrap(), "\\\\nas\\share\\a#b.png");
+        assert!(decode_mdfile_path_for("/UNC/nas", true).is_err());
+        assert!(decode_mdfile_path_for("/home/a.png", true).is_err());
+        assert!(decode_mdfile_path_for("/C:/a/../b.png", true).is_err());
+        assert!(decode_mdfile_path_for("/C:/a/..%5Cb.png", true).is_err());
+        // Linux keeps its absolute form
+        assert_eq!(decode_mdfile_path_for("/home/a/b.png", false).unwrap(), "/home/a/b.png");
     }
 
     #[test]

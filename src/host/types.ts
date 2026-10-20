@@ -5,7 +5,8 @@ export interface ListedFile { path: string; name: string; mtime: number; ctime: 
 export interface SearchHit { path: string; line: number; snippet: string }
 export interface Host {
   kind: "tauri" | "browser";
-  pickFile(): Promise<string | null>;
+  /** native open dialog; `kind: "image"` filters to images (label = localized filter name) */
+  pickFile(kind?: "markdown" | "image", label?: string): Promise<string | null>;
   pickFolder(): Promise<string | null>;
   pickSavePath(defaultName?: string, ext?: string): Promise<string | null>;
   readFile(path: string): Promise<string>;

@@ -1,11 +1,12 @@
 import type { Host, DirEntry, ListedFile, SearchHit, StreamEvent, StreamRequest, FilePreview } from "./types";
 import { invoke, Channel } from "@tauri-apps/api/core";
+import { fileUrlPath } from "./fileurl";
 // Custom URI schemes registered in src-tauri: "mdtheme" (theme folder) and "mdfile" (local files).
 const isWin = navigator.userAgent.includes("Windows");
 const scheme = (s: string) => (isWin ? `http://${s}.localhost/` : `${s}://localhost/`);
 export const tauriHost: Host = {
   kind: "tauri",
-  pickFile: () => invoke<string | null>("pick_file"),
+  pickFile: (kind, label) => invoke<string | null>("pick_file", { kind: kind ?? null, label: label ?? null }),
   pickFolder: () => invoke<string | null>("pick_folder"),
   pickSavePath: (defaultName, ext) => invoke<string | null>("pick_save_path", { defaultName: defaultName ?? "untitled.md", ext: ext ?? "md" }),
   readFile: (path) => invoke<string>("read_text_file", { path }),
@@ -15,9 +16,9 @@ export const tauriHost: Host = {
   listDir: (path) => invoke<DirEntry[]>("list_dir", { path }),
   listThemes: () => invoke<string[]>("list_themes"),
   themeUrl: (file) => scheme("mdtheme") + encodeURIComponent(file).replace(/%2F/g, "/"),
-  // Always forward slashes. A Windows path `C:\Users\x\a.png` becomes
-  // `http://mdfile.localhost/C:/Users/x/a.png` (drive letter kept; the handler accepts it).
-  fileUrl: (abs) => scheme("mdfile") + encodeURI(abs.replace(/\\/g, "/").replace(/^\//, "")),
+  // Forward slashes, every segment percent-encoded. A Windows path `C:\Users\x\a.png` becomes
+  // `http://mdfile.localhost/C:/Users/x/a.png` (WebView2 serves custom schemes as http://<scheme>.localhost/).
+  fileUrl: (abs) => scheme("mdfile") + fileUrlPath(abs),
   defaultWorkspace: () => invoke<string | null>("default_workspace"),
   cliFile: () => invoke<string | null>("cli_file"),
   cliArgs: () => invoke<string[]>("cli_args"),

@@ -8,7 +8,7 @@ import "./styles/base.css";
 import "./styles/shell.css";
 import { host } from "./host";
 import { createEditor, Editor } from "./editor/editor";
-import { setImageBase } from "./editor/schema";
+import { setImageBase, setLocalFileUrl } from "./editor/schema";
 import { SourceMode } from "./shell/source";
 import { Sidebar } from "./shell/sidebar";
 import { ThemeManager, displayName, applyShellStyle, applyShellColors, shellStyle, SHELL_KEY } from "./shell/themes";
@@ -76,6 +76,7 @@ const settingSpecs: { owner: string; specs: SettingSpec[] }[] = [];
 document.body.classList.add(osClass(), "pin-outline");
 applyShellStyle();
 applyOsClass();
+setLocalFileUrl((abs) => host.fileUrl(abs));
 const sidebar = new Sidebar(host, (p) => openFile(p));
 document.body.appendChild(sidebar.el);
 const content = document.createElement("content"); document.body.appendChild(content);
@@ -828,26 +829,38 @@ async function trashPath(path: string) {
   const ok = await new Promise<boolean>((resolve) => {
     const back = document.createElement("div");
     back.className = "modal-backdrop";
-    back.innerHTML = `<div class="modal" role="dialog"><h3>Delete ${escapeHtml(name)}?</h3><p>Move to the trash?</p>
-      <div class="modal-actions"><button type="button" class="btn" data-c="no">Cancel</button><button type="button" class="btn btn-primary" data-c="yes">Delete</button></div></div>`;
+    back.innerHTML = `<div class="modal" role="dialog" aria-modal="true"><h3>${escapeHtml(t("Delete {name}?", { name }))}</h3><p>${escapeHtml(t("Move to the trash?"))}</p>
+      <div class="modal-actions"><button type="button" class="btn" data-c="no">${escapeHtml(t("Cancel"))}</button><button type="button" class="btn btn-primary" data-c="yes">${escapeHtml(t("Delete"))}</button></div></div>`;
+    const prevFocus = document.activeElement as HTMLElement | null;
     document.body.appendChild(back);
-    const done = (v: boolean) => { back.remove(); resolve(v); };
+    const done = (v: boolean) => { document.removeEventListener("keydown", onKey, true); back.remove(); prevFocus?.focus?.(); resolve(v); };
+    // Enter confirms, Esc cancels (the dialog used to ignore the keyboard entirely)
+    const onKey = (e: KeyboardEvent) => {
+      if (e.isComposing) return;
+      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); done(false); }
+      else if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); done((document.activeElement as HTMLElement)?.dataset?.c !== "no"); }
+    };
+    document.addEventListener("keydown", onKey, true);
     back.querySelector("[data-c=no]")!.addEventListener("click", () => done(false));
     back.querySelector("[data-c=yes]")!.addEventListener("click", () => done(true));
+    back.addEventListener("mousedown", (e) => { if (e.target === back) done(false); });
+    (back.querySelector("[data-c=yes]") as HTMLElement).focus();
   });
   if (!ok) return;
+  const sameOrInside = (p: string | null) => !!p && (p === path || p.startsWith(path + "/") || p.startsWith(path + "\\")
+    || p.toLowerCase().replace(/\\/g, "/") === path.toLowerCase().replace(/\\/g, "/"));
   try {
     await host.trashPath(path);
-    if (state.path === path || (state.path && (state.path.startsWith(path + "/") || state.path.startsWith(path + "\\")))) {
-      pushClosed(state.path);
+    if (sameOrInside(state.path)) {
+      pushClosed(state.path!);
       state.path = null; state.lastSaved = ""; setDirty(false);
       editor.setMarkdown(EMPTY_DOC); state.lastSaved = editor.getMarkdown(); setTitle(); afterLoad(); sidebar.markActive(null);
       localStorage.removeItem("mdnest.lastFile");
       showWelcome();
     }
     await sidebar.refresh();
-    notify("Moved to trash");
-  } catch (e: any) { notify("Delete failed: " + (e.message ?? e)); }
+    notify(t("Moved to trash"));
+  } catch (e: any) { notify(t("Delete failed: {error}", { error: String(e?.message ?? e) })); }
 }
 function copyPath(path: string) {
   void navigator.clipboard?.writeText(path).then(() => notify("Copied path")).catch(() => notify(path));
@@ -1129,9 +1142,9 @@ async function promptHyperlink() {
   v.focus();
 }
 async function insertLocalImage() {
-  const path = await host.pickFile();
+  const path = await host.pickFile("image", t("Images"));
   if (!path) return;
-  if (!/\.(png|jpe?g|gif|webp|svg|bmp|avif|ico|tiff?)$/i.test(path)) { notify("Not an image"); return; }
+  if (!/\.(png|jpe?g|gif|webp|svg|bmp|avif|ico|tiff?)$/i.test(path)) { notify(t("Not an image")); return; }
   await insertImageFiles(editor.view, host, state.path, [{ path }], editor.view.state.selection.from, notify);
 }
 function openTableDialog() {

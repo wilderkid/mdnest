@@ -34,6 +34,61 @@ async function open(file, text, { lang = "en", theme = "" } = {}) {
 /** click at the end of the last paragraph and start a new line */
 async function newLine(page) { await page.locator("#write p").last().click(); await page.keyboard.press("End"); await page.keyboard.press("Enter"); }
 
+// ---------- bug 1: images (clipboard paste, Insert Image, absolute paths) ----------
+{
+  // a real PNG on disk for "Insert Image" and the absolute-path case
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAHElEQVR4nGP8z8DwnwEJMDGgAcYRCRgFAABmLwIfyPo0uQAAAABJRU5ErkJggg==", "base64");
+  fs.mkdirSync(path.join(WS, "pics"), { recursive: true });
+  fs.writeFileSync(path.join(WS, "pics", "红色 图#1.png"), png);
+  const page = await open("i.md", `Intro\n\n![abs](${path.join(WS, "pics", "红色 图#1.png").replace(/ /g, "%20").replace(/#/g, "%23")})\n`);
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  const loaded = (sel) => page.evaluate((sel) => [...document.querySelectorAll(sel)].map((i) => i.complete && i.naturalWidth > 0), sel);
+  await page.waitForTimeout(300);
+  ok((await loaded("#write img:not(.ProseMirror-separator)")).every(Boolean) && (await loaded("#write img:not(.ProseMirror-separator)")).length === 1, "bug1: image with an absolute local path displays", await page.evaluate(() => document.querySelector("#write img")?.src));
+  // clipboard image → Ctrl+V
+  await page.evaluate(async () => {
+    const c = document.createElement("canvas"); c.width = 24; c.height = 16; const g = c.getContext("2d"); g.fillStyle = "#3a7"; g.fillRect(0, 0, 24, 16);
+    const blob = await new Promise((r) => c.toBlob(r, "image/png"));
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+  });
+  await page.locator("#write p").first().click(); await page.keyboard.press("End");
+  await page.keyboard.press("Control+v"); await page.waitForTimeout(800);
+  const md = await page.md();
+  const m = /!\[[^\]]*\]\((assets\/image-[^)]+\.png)\)/.exec(md);
+  ok(!!m && fs.existsSync(path.join(WS, decodeURIComponent(m[1]))), "bug1: pasted clipboard image saved to ./assets and inserted", md);
+  await page.waitForTimeout(300);
+  ok((await loaded("#write img:not(.ProseMirror-separator)")).length === 2 && (await loaded("#write img:not(.ProseMirror-separator)")).every(Boolean), "bug1: pasted image displays", await loaded("#write img:not(.ProseMirror-separator)"));
+  // Insert Image… via the slash menu (browser host asks for a path with a prompt)
+  page.once("dialog", (d) => d.accept(path.join(WS, "pics", "红色 图#1.png")));
+  await page.locator("#write p").last().click(); await page.keyboard.press("End"); await page.keyboard.press("Enter");
+  await page.keyboard.type("/image"); await page.waitForTimeout(150); await page.keyboard.press("Enter"); await page.waitForTimeout(800);
+  ok(/!\[[^\]]*\]\(assets\/[^)]+\.png\)[\s\S]*!\[[^\]]*\]\(assets\/[^)]+\.png\)/.test(await page.md()), "bug1: Insert Image copies the file into ./assets", await page.md());
+  await page.waitForTimeout(300);
+  ok((await loaded("#write img:not(.ProseMirror-separator)")).length === 3 && (await loaded("#write img:not(.ProseMirror-separator)")).every(Boolean), "bug1: inserted image displays", await loaded("#write img:not(.ProseMirror-separator)"));
+  await page.context().close();
+}
+
+// ---------- bug 3: delete a file from the sidebar ----------
+{
+  fs.writeFileSync(path.join(WS, "gone.md"), "# bye\n");
+  fs.writeFileSync(path.join(WS, "gone2.md"), "# bye2\n");
+  const page = await open("keep.md", "# keep\n");
+  const node = page.locator('.file-node-content:has-text("gone.md")').first();
+  await node.click({ button: "right" }); await page.waitForTimeout(150);
+  await page.locator('.context-menu .mdn-menu-item[data-id="delete"]').click(); await page.waitForTimeout(100);
+  await page.locator('.modal [data-c="yes"]').click(); await page.waitForTimeout(500);
+  ok(!fs.existsSync(path.join(WS, "gone.md")), "bug3: context menu → Delete removes the file");
+  ok(await page.locator('.file-node-content:has-text("gone.md")').count() === 0, "bug3: sidebar no longer lists it");
+  // keyboard: select + Delete key + Enter confirms
+  await page.locator('.file-node-content:has-text("gone2.md")').first().click(); await page.waitForTimeout(300);
+  await page.locator('.file-node-content:has-text("gone2.md")').first().focus().catch(() => {});
+  await page.keyboard.press("Delete"); await page.waitForTimeout(150);
+  await page.keyboard.press("Enter"); await page.waitForTimeout(500);
+  ok(!fs.existsSync(path.join(WS, "gone2.md")), "bug3: deleting the open file with Del + Enter");
+  ok((await page.locator("#write").textContent()).trim() === "" || await page.locator(".mdn-welcome, #mdn-welcome").count() > 0, "bug3: the deleted open document is closed");
+  await page.context().close();
+}
+
 // ---------- bug 2 + 6: heading marker ----------
 {
   const page = await open("h.md", "# 标题一\n\nBody text\n");

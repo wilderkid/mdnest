@@ -1,8 +1,14 @@
+import { t } from "../i18n";
+import { fileUrlPath } from "./fileurl";
 import type { Host, DirEntry, ListedFile, SearchHit, StreamEvent, StreamRequest } from "./types";
 const j = async (r: Response) => { if (!r.ok) throw new Error(await r.text()); return r.json(); };
 export const browserHost: Host = {
   kind: "browser",
-  async pickFile() { return prompt("Path of a Markdown file (inside the dev workspace):", (await this.defaultWorkspace()) + "/sample.md"); },
+  async pickFile(kind?: "markdown" | "image") {
+    return kind === "image"
+      ? prompt(t("Path of an image file (inside the dev workspace):"), (await this.defaultWorkspace()) + "/")
+      : prompt(t("Path of a Markdown file (inside the dev workspace):"), (await this.defaultWorkspace()) + "/sample.md");
+  },
   async pickFolder() { return prompt("Folder path:", (await this.defaultWorkspace()) ?? ""); },
   async pickSavePath(name = "untitled.md", _ext?: string) { return prompt("Save as:", (await this.defaultWorkspace()) + "/" + name); },
   async readFile(path) { return (await j(await fetch("/api/read?path=" + encodeURIComponent(path)))).text; },
@@ -12,11 +18,11 @@ export const browserHost: Host = {
   async listDir(path): Promise<DirEntry[]> { return (await j(await fetch("/api/list?path=" + encodeURIComponent(path)))).entries; },
   async listThemes() { return (await j(await fetch("/api/themes"))).themes; },
   themeUrl(file) { return "/themes/" + file; },
-  fileUrl(abs) { return "/fs" + abs; },
+  fileUrl(abs) { return "/fs/" + fileUrlPath(abs); },
   async cliFile() { return null; },
   async cliArgs() { return []; },
   async copyFile(src, dest, unique) { // dev server: only inside the sandboxed workspace
-    const r = await fetch("/fs" + src); if (!r.ok) throw new Error("cannot read " + src);
+    const r = await fetch(this.fileUrl(src)); if (!r.ok) throw new Error("cannot read " + src);
     const b = new Uint8Array(await r.arrayBuffer()); let bin = ""; for (let i = 0; i < b.length; i += 0x8000) bin += String.fromCharCode(...b.subarray(i, i + 0x8000));
     return this.writeBinary(dest, btoa(bin), unique);
   },

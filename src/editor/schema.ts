@@ -169,9 +169,23 @@ const marks: Record<string, MarkSpec> = {
 
 export let imageBase = "";
 export function setImageBase(b: string) { imageBase = b; }
+/** absolute local path → URL the webview can load (host.fileUrl); set by the shell */
+let localUrl: ((abs: string) => string) | null = null;
+export function setLocalFileUrl(f: (abs: string) => string) { localUrl = f; }
 export function resolveImageSrc(src: string) {
-  if (!src || /^(https?:|data:|blob:|\/)/.test(src) || !imageBase) return src;
-  return imageBase + src;
+  if (!src || /^(https?:|data:|blob:|mdfile:)/i.test(src)) return src;
+  // absolute local images: file:// URLs, Windows drive / UNC paths, Unix absolute paths
+  if (localUrl) {
+    if (/^file:\/\//i.test(src)) {
+      let p = src.replace(/^file:\/\/(localhost)?/i, "");
+      try { p = decodeURIComponent(p); } catch { /* keep */ }
+      return localUrl(/^\/[A-Za-z]:/.test(p) ? p.slice(1) : p);
+    }
+    if (/^[A-Za-z]:[\\/]|^\\\\/.test(src)) { let p = src; try { p = decodeURIComponent(src); } catch { /* keep */ } return localUrl(p); }
+    if (src.startsWith("/") && !src.startsWith("/fs/")) { let p = src; try { p = decodeURIComponent(src); } catch { /* keep */ } return localUrl(p); }
+  }
+  if (src.startsWith("/") || !imageBase) return src;
+  return imageBase + src.replace(/\\/g, "/").replace(/^\.\//, "");
 }
 
 export const schema = new Schema({ nodes, marks });
