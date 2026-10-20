@@ -36,10 +36,10 @@ async function open(lang, theme = "mdnest", extra = "") {
   await page.waitForTimeout(400);
   return page;
 }
-const rail = async (page, id) => { await page.locator(`.mdn-rail-btn[data-id="${id}"]`).click(); await page.waitForTimeout(350); };
+const rail = async (page, id) => { await page.locator(`.mdn-rail-btn[data-id="${id}"]`).click(); await page.mouse.move(700, 420); await page.waitForTimeout(350); };
 const shot = (page, name) => page.screenshot({ path: path.join(OUT, name + ".png") });
 
-for (const lang of ["zh", "en"]) {
+async function panels(lang) {
   const page = await open(lang);
   await rail(page, "files");
   const docs = page.locator('.file-node-content:has(.file-node-title:text-is("notes"))');
@@ -62,7 +62,7 @@ for (const lang of ["zh", "en"]) {
   const input = page.locator(".mdn-ai-input");
   if (await input.count()) {
     await input.fill(lang === "zh" ? "帮我总结这篇文档" : "Summarise this document");
-    await page.locator(".mdn-ai-actions button").first().click();
+    await page.locator(".mdn-ai-actions button").first().click({ timeout: 4000 }).catch(() => input.press("Enter"));
     await page.waitForTimeout(2500);
   }
   await shot(page, `${lang}-ai`);
@@ -85,13 +85,17 @@ for (const lang of ["zh", "en"]) {
   await page.context().close();
 }
 
-for (const theme of ["drake-dark", "vue-dark", "lapis-dark", "lapis", "purple", "drake-light"]) {
+const THEMES = (process.env.THEMES ?? "drake-dark,vue-dark,lapis-dark,lapis,purple,drake-light").split(",");
+for (const lang of process.env.SKIP_LANGS ? [] : ["zh", "en"]) await panels(lang);
+for (const theme of THEMES) {
   const page = await open("zh", theme);
   await rail(page, "files"); await shot(page, `theme-${theme}-files`);
   await rail(page, "outline"); await shot(page, `theme-${theme}-outline`);
   if (theme === "drake-dark" || theme === "lapis") {
     await rail(page, "p-ai");
-    await page.locator(".mdn-ai-input").fill("你好"); await page.locator(".mdn-ai-actions button").first().click(); await page.waitForTimeout(2500);
+    await page.locator(".mdn-ai-input").fill("你好");
+    await page.locator(".mdn-ai-actions button").first().click({ timeout: 4000 }).catch(() => page.locator(".mdn-ai-input").press("Enter"));
+    await page.waitForTimeout(2500);
     await shot(page, `theme-${theme}-ai`);
     await rail(page, "settings"); await shot(page, `theme-${theme}-settings`);
   }

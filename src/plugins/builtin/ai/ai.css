@@ -58,11 +58,6 @@
 .mdn-ai-actions button.mdn-ai-stop { background: var(--sh-fg); color: var(--sh-card); }
 .mdn-ai-note { font-size: 10.5px; margin-top: 6px; text-align: center; color: var(--sh-faint); }
 
-.mdn-ai-off, .mdn-lib-off { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; padding: 28px 18px; height: auto; color: var(--sh-muted); }
-.mdn-ai-off p, .mdn-lib-off p { margin: 0; line-height: 1.5; font-size: 12.5px; }
-.mdn-off-art { width: 56px; height: 56px; border-radius: 16px; display: grid; place-items: center; background: var(--sh-tint); color: var(--sh-accent); }
-.mdn-primary-btn { font: inherit; font-size: 12.5px; padding: 6px 14px; border-radius: 9px; border: 0; background: var(--sh-accent); color: var(--sh-on-accent); cursor: pointer; }
-.mdn-primary-btn:hover { filter: brightness(1.06); }
 .mdn-ai-loading { padding: 16px; color: var(--sh-muted); }
 .mdn-sb-v2 #sidebar-content > .sidebar-content-content[data-panel="p-ai"].active { height: 100%; }
 .mdn-sb-v2[data-panel="p-ai"] #sidebar-content { padding-bottom: 0; overflow: hidden; display: flex; flex-direction: column; }

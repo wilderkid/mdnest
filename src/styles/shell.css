@@ -19,7 +19,7 @@ body {
   --sh-bg: color-mix(in srgb, var(--mdn-tbg) 93%, #5e6a9a);
   --sh-fg: var(--mdn-tfg);
   --sh-muted: color-mix(in srgb, var(--mdn-tfg) 62%, var(--mdn-tbg));
-  --sh-faint: color-mix(in srgb, var(--mdn-tfg) 40%, var(--mdn-tbg));
+  --sh-faint: color-mix(in srgb, var(--mdn-tfg) 48%, var(--mdn-tbg));
   --sh-line: color-mix(in srgb, var(--mdn-tfg) 9%, var(--mdn-tbg));
   --sh-hover: color-mix(in srgb, var(--mdn-tfg) 6%, var(--sh-card));
   --sh-hover-shell: color-mix(in srgb, var(--mdn-tfg) 6%, var(--sh-bg));
@@ -46,11 +46,14 @@ body.mdn-dark {
   --sh-ok: #4ade80; --sh-danger: #ff6b6b;
   --sh-shadow: 0 1px 2px rgba(0,0,0,.35), 0 8px 24px rgba(0,0,0,.25);
   --sh-shadow-pop: 0 18px 44px rgba(0,0,0,.5), 0 2px 6px rgba(0,0,0,.3);
-  --sh-tip-bg: #2b2f3a;
+  --sh-tip-bg: color-mix(in srgb, var(--mdn-tfg) 24%, #1a1d24);
+  /* dark themes: keep secondary text readable (≥ ~4:1 muted, ≥ ~3:1 faint on the panel card) */
+  --sh-muted: color-mix(in srgb, var(--mdn-tfg) 78%, var(--sh-card));
+  --sh-faint: color-mix(in srgb, var(--mdn-tfg) 58%, var(--sh-card));
 }
 
 /* ---------- structure: rail + panel ---------- */
-#typora-sidebar.mdn-sb-v2 { flex-direction: row; padding: 0; font-family: var(--sh-font); }
+#typora-sidebar.mdn-sb-v2 { flex-direction: row; padding: 0; font-family: var(--sh-font); height: auto; }
 .mdn-rail { width: var(--rail-width); flex: none; display: flex; flex-direction: column; align-items: center; padding: 8px 0; gap: 4px; box-sizing: border-box; }
 .rail-spacer { flex: 1; order: 90; }
 .mdn-rail-btn { position: relative; width: 36px; height: 36px; display: grid; place-items: center; border: 0; background: transparent; cursor: pointer;
@@ -59,6 +62,7 @@ body.mdn-dark {
 .mdn-tip { display: none; position: absolute; left: calc(100% + 8px); top: 50%; transform: translateY(-50%); white-space: nowrap; font-size: 12px;
   padding: 4px 8px; z-index: 40; pointer-events: none; border-radius: 8px; background: var(--sh-tip-bg); color: #fff; box-shadow: 0 6px 16px rgba(0,0,0,.2); }
 .mdn-rail-btn:hover .mdn-tip, .mdn-rail-btn:focus-visible .mdn-tip { display: block; animation: mdn-tip-in .12s ease .35s both; }
+.mdn-rail-btn.tip-off .mdn-tip { display: none !important; }
 @keyframes mdn-tip-in { from { opacity: 0; } to { opacity: 1; } }
 .mdn-panel { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
 .mdn-head { display: none; flex: none; } .mdn-head.active { display: block; }
@@ -423,3 +427,10 @@ body.shell-b #mdn-welcome { background: var(--mdn-tbg); border-radius: var(--sh-
 #mdn-welcome .mdn-wel h1::before, #mdn-welcome .mdn-wel h1::after, #mdn-welcome .mdn-wel h2::before, #mdn-welcome .mdn-wel h2::after { content: none; display: none; }
 #mdn-welcome .mdn-wel kbd { box-shadow: none; border: 0; font-family: var(--sh-font); font-size: 10.5px; line-height: 16px; padding: 0 5px; margin: 0; background: var(--sh-hover); color: var(--sh-muted); }
 #mdn-welcome .mdn-wel .wel-action.primary kbd { background: rgba(255,255,255,.2); color: #fff; }
+
+/* plugin off states (AI / library): here, not in ai.css, because the AI panel code loads lazily */
+.mdn-ai-off, .mdn-lib-off { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; padding: 28px 18px; height: auto; color: var(--sh-muted); }
+.mdn-ai-off p, .mdn-lib-off p { margin: 0; line-height: 1.5; font-size: 12.5px; }
+.mdn-off-art { width: 56px; height: 56px; border-radius: 16px; display: grid; place-items: center; background: var(--sh-tint); color: var(--sh-accent); }
+.mdn-primary-btn { font: inherit; font-size: 12.5px; padding: 6px 14px; border-radius: 9px; border: 0; background: var(--sh-accent); color: var(--sh-on-accent); cursor: pointer; }
+.mdn-primary-btn:hover { filter: brightness(1.06); }

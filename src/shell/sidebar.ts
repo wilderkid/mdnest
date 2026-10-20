@@ -464,7 +464,9 @@ export class Sidebar {
     tab.setAttribute("aria-label", label);
     tab.style.order = String(RAIL_ORDER[id] ?? 50);
     tab.innerHTML = (hasIcon(name) ? icon(name, 20) : `<span class="rail-letter">${escapeHtml(label.slice(0, 1))}</span>`) + `<span class="mdn-tip">${escapeHtml(label)}</span>`;
-    tab.onclick = () => this.select(id);
+    // a click answers the tooltip's question: hide it until the pointer leaves the button
+    tab.onclick = () => { tab.classList.add("tip-off"); this.select(id); };
+    tab.onmouseleave = () => tab.classList.remove("tip-off");
     this.rail.appendChild(tab);
 
     const head = document.createElement("div");
