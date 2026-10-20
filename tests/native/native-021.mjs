@@ -21,6 +21,9 @@ try {
   await n.waitFor(() => document.body.classList.contains("mdn-ready") && !!document.querySelector("#write h1"));
   await sleep(800);
   const md = () => n.exec(() => window.mdnest.editor.getMarkdown());
+  // bug 10: default language follows the OS locale (LANG=zh_CN) with no saved setting
+  const ui = await n.exec(() => ({ sys: window.__MDNEST_SYS_LANG__ ?? null, saved: localStorage.getItem("mdnest.lang"), file: document.querySelector('#mdn-menubar .mdn-menu[data-menu="file"] > .mdn-menu-label')?.textContent ?? document.documentElement.lang }));
+  ok(/^zh/i.test(ui.sys ?? "") && (ui.file === "文件" || /^zh/.test(ui.file)), "native bug10: zh-CN UI by default from the OS locale", ui);
   // bug 1: local images through the mdfile protocol (CJK, space, # in the name; relative and absolute)
   const imgs = await n.waitFor(() => { const l = [...document.querySelectorAll("#write img:not(.ProseMirror-separator)")]; return l.length === 2 && l.every((i) => i.complete) ? l.map((i) => [i.naturalWidth, i.src]) : null; });
   ok(imgs.every(([w]) => w > 0), "native bug1: relative + absolute local images display", imgs);
@@ -61,7 +64,8 @@ try {
   await n.press("Escape"); await sleep(200);
   ok((await md()).includes("块 ok"), "native bug8: edits kept", (await md()).slice(0, 200));
   // bug 9: slash menu scroll
-  await n.click("#write p:last-of-type"); await n.press("End"); await n.press("Enter"); await n.type("/"); await sleep(300);
+  // top-level paragraph only: mermaid renders its labels as <p> inside the SVG
+  await n.click("#write > p:last-of-type"); await n.press("End"); await n.press("Enter"); await n.type("/"); await sleep(300);
   let hidden = 0;
   for (let i = 0; i < 18; i++) { await n.press("ArrowDown"); if (!(await n.exec(() => { const m = document.querySelector(".mdn-slash"), s = m?.querySelector(".sel"); if (!s) return false; const A = m.getBoundingClientRect(), B = s.getBoundingClientRect(); return B.top >= A.top - 1 && B.bottom <= A.bottom + 1; }))) hidden++; }
   ok(hidden === 0, "native bug9: slash ↓ keeps the active item visible", hidden);

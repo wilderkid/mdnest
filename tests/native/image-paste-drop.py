@@ -11,7 +11,8 @@ BIN = sys.argv[1]; DISP = sys.argv[2] if len(sys.argv) > 2 and not sys.argv[2].s
 FOLDER_MODE = "--filename-assets" in sys.argv
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 SHOTS = os.path.join(ROOT, "screenshots/fixes"); os.makedirs(SHOTS, exist_ok=True)
-env = dict(os.environ, DISPLAY=DISP, WEBKIT_DISABLE_DMABUF_RENDERER="1", NO_AT_BRIDGE="1")
+# no session bus: the single-instance plugin would hand off to an instance on another display
+env = dict(os.environ, DISPLAY=DISP, WEBKIT_DISABLE_DMABUF_RENDERER="1", NO_AT_BRIDGE="1", DBUS_SESSION_BUS_ADDRESS="disabled:")
 work = tempfile.mkdtemp(prefix="mdn-native-"); prof = tempfile.mkdtemp(prefix="mdn-prof-")
 penv = dict(env, XDG_DATA_HOME=prof + "/data", XDG_CONFIG_HOME=prof + "/config", XDG_CACHE_HOME=prof + "/cache")
 doc = os.path.join(work, "My Notes.md")
@@ -40,7 +41,7 @@ app = sp.Popen([BIN, doc, "--debug-log", DBG], env=penv, stdout=sp.DEVNULL, stde
 try:
     win = ""
     for _ in range(40):
-        time.sleep(0.5); win = x("search", "--onlyvisible", "--name", "^MD Nest$")
+        time.sleep(0.5); win = x("search", "--onlyvisible", "--name", "MD Nest$")
         if win: break
     ok(win, "app window found", win)
     win = win.split("\n")[0]
