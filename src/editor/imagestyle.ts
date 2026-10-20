@@ -87,8 +87,8 @@ export function imgTag(a: ImgAttrs, orig?: string | null): string {
   const style = [ours, ...keep].filter(Boolean).join(";");
   set("style", style ? style + ";" : null);
   set("width", a.width);
-  // Typora order: src, alt, then the rest
-  const order = (k: string) => ({ src: 0, alt: 1 } as Record<string, number>)[k.toLowerCase()] ?? 2;
+  // Typora order: src, alt, (width), then the rest
+  const order = (k: string) => ({ src: 0, alt: 1, width: 2 } as Record<string, number>)[k.toLowerCase()] ?? 3;
   attrs.sort((x, y) => order(x[0]) - order(y[0]));
   return "<img " + attrs.map(([k, v]) => (v == null ? k : `${k}="${enc(v)}"`)).join(" ") + " />";
 }

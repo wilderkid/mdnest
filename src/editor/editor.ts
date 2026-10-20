@@ -113,6 +113,9 @@ export function createEditor(mount: HTMLElement, markdown: string, hooks: Editor
       if (sel instanceof NodeSelection && sel.node.isBlock) {
         try { return serializeMarkdown(schema.node("doc", null, [sel.node])).replace(/\n+$/, "\n"); } catch { /* fall through */ }
       }
+      if (sel instanceof NodeSelection && sel.node.type.name === "image") {
+        try { return serializeMarkdown(schema.node("doc", null, [schema.nodes.paragraph.create(null, sel.node)])).trim(); } catch { /* fall through */ }
+      }
       return slice.content.textBetween(0, slice.content.size, "\n\n");
     },
     // paragraphs keep newlines ("pre"): HTML pasted from elsewhere has source-formatting newlines that

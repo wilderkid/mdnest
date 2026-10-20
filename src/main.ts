@@ -363,14 +363,19 @@ function confirmDirty(action: string): Promise<GuardChoice> {
   });
 }
 /** The change debounce (150 ms) may lag a fast click: recompute dirtiness before acting on it. */
-function syncDirty(): boolean { const d = currentMarkdown() !== state.lastSaved; if (d !== state.dirty) setDirty(d); return d; }
+function syncDirty(): boolean {
+  const cur = currentMarkdown();
+  // an empty untitled doc serializes as "\n" while lastSaved is "": that is not an unsaved change
+  const d = cur !== state.lastSaved && !(cur.trim() === "" && state.lastSaved.trim() === "");
+  if (d !== state.dirty) setDirty(d); return d; }
 async function guard(action: string): Promise<boolean> {
   syncDirty();
   // Autosave: a file that has a path is simply saved, no question asked
   if (state.dirty && state.path && autosaveOn() && !state.conflict) { await flushAutosave(); if (!state.dirty) return true; }
+  const wasDirty = state.dirty;
   const c = await confirmDirty(action);
   if (c === "cancel") return false;
-  if (c === "discard" && !state.path) clearDraft();
+  if (c === "discard" && wasDirty && !state.path) clearDraft();
   if (c === "save") {
     const before = state.path;
     await save(false);
@@ -569,11 +574,14 @@ function scheduleDraft() {
   draftTimer = setTimeout(() => {
     if (state.path) return;
     const md = currentMarkdown();
-    if (!state.dirty || !md.trim()) { clearDraft(); return; }
-    try { localStorage.setItem(draftKey, JSON.stringify({ md, at: Date.now() })); saveUi = "draft"; paintSaved(); } catch { /* quota */ }
+    // only drop a draft this session wrote: the one from a previous session waits for Restore/Discard
+    if (!state.dirty || !md.trim()) { if (draftOwned) clearDraft(); return; }
+    if (document.getElementById("mdn-draft")) return;
+    try { localStorage.setItem(draftKey, JSON.stringify({ md, at: Date.now() })); draftOwned = true; saveUi = "draft"; paintSaved(); } catch { /* quota */ }
   }, 800);
 }
-function scheduleDraftNow() { const md = currentMarkdown(); if (md.trim()) try { localStorage.setItem(draftKey, JSON.stringify({ md, at: Date.now() })); } catch { /* quota */ } }
+let draftOwned = false;
+function scheduleDraftNow() { const md = currentMarkdown(); if (md.trim() && !document.getElementById("mdn-draft")) try { localStorage.setItem(draftKey, JSON.stringify({ md, at: Date.now() })); } catch { /* quota */ } }
 function clearDraft() { clearTimeout(draftTimer); localStorage.removeItem(draftKey); if (saveUi === "draft") { saveUi = "idle"; paintSaved(); } }
 function readDraft(): { md: string; at: number } | null {
   try { const d = JSON.parse(localStorage.getItem(draftKey) || "null"); return d && typeof d.md === "string" && d.md.trim() ? d : null; } catch { return null; }
@@ -600,6 +608,7 @@ function offerDraft() {
     state.path = null; state.lastSaved = ""; state.conflict = false;
     if (source.active) source.show(draft.md);
     editor.setMarkdown(draft.md);
+    draftOwned = true;
     setImageBase("");
     setDirty(true); setTitle(); afterLoad(); hideWelcome(); sidebar.markActive(null);
     localStorage.removeItem("mdnest.lastFile");

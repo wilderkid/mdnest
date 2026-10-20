@@ -75,6 +75,14 @@ export function paragraphAfterTr(state: EditorState, pos: number, size: number):
   return paragraphAt(state.tr, pos + size);
 }
 
+/** a paragraph holding only images (and whitespace) behaves like a block at the document edges */
+function imageOnly(n: PMNode): boolean {
+  if (n.type.name !== "paragraph" || !n.childCount) return false;
+  let img = false, other = false;
+  n.forEach((c) => { if (c.type.name === "image") img = true; else if (!(c.isText && !c.text!.trim()) && c.type.name !== "hard_break") other = true; });
+  return img && !other;
+}
+
 function tableRowInfo($h: ReturnType<EditorState["doc"]["resolve"]>): { row: number; rows: number } | null {
   for (let d = $h.depth; d > 0; d--) if ($h.node(d).type.spec.tableRole === "row") return { row: $h.index(d - 1), rows: $h.node(d - 1).childCount };
   return null;
@@ -105,12 +113,29 @@ export function blockArrow(dir: Dir) {
       dispatch?.(tr);
       return true;
     }
+    // a selected image in an image-only first/last paragraph: ↑/↓ steps out into a new paragraph
+    if (sel instanceof NodeSelection && sel.node.type.name === "image" && (dir === "up" || dir === "down")) {
+      const $p = sel.$from;
+      if ($p.depth === 1 && imageOnly($p.parent) && (fwd ? $p.index(0) === state.doc.childCount - 1 : $p.index(0) === 0)) {
+        const at = fwd ? state.doc.content.size : 0;
+        if (!canParagraphAt(state.doc, at)) return false;
+        dispatch?.(paragraphAt(state.tr, at));
+        return true;
+      }
+      return false;
+    }
     if (!sel.empty || !view || !view.endOfTextblock(dir)) return false;
     const $h = sel.$head;
     if ($h.parent.type.spec.code || $h.depth === 0) return false;
     // last (first) top-level block, caret on its last (first) line, nothing to move to → new paragraph
     const top = $h.index(0);
     const edgeTop = fwd ? top === state.doc.childCount - 1 : top === 0;
+    if (edgeTop && $h.depth === 1 && imageOnly($h.parent)) {
+      const at = fwd ? state.doc.content.size : 0;
+      if (!canParagraphAt(state.doc, at)) return false;
+      dispatch?.(paragraphAt(state.tr, at));
+      return true;
+    }
     if (edgeTop && $h.depth > 1) {
       const tbl = tableRowInfo($h);
       const vertical = dir === "up" || dir === "down";
@@ -176,9 +201,25 @@ export function deleteSelectedBlock(state: EditorState, dispatch: Dispatch, dir:
   return true;
 }
 
+/** removing the only image of a paragraph removes the paragraph too (no empty line left behind) */
+function deleteImageParagraph(state: EditorState, dispatch: Dispatch, dir: -1 | 1): boolean {
+  const sel = state.selection as NodeSelection;
+  const $p = sel.$from;
+  if ($p.depth < 1 || $p.parent.type.name !== "paragraph" || $p.parent.childCount !== 1) return false;
+  if (!dispatch) return true;
+  const from = $p.before(), to = $p.after();
+  const tr = $p.node($p.depth - 1).childCount === 1
+    ? state.tr.replaceWith(from, to, state.schema.nodes.paragraph.create())
+    : state.tr.delete(from, to);
+  const at = Math.min(tr.mapping.map(from), tr.doc.content.size);
+  dispatch(tr.setSelection(Selection.near(tr.doc.resolve(at), dir === -1 ? 1 : -1)).scrollIntoView());
+  return true;
+}
+
 function backspace(state: EditorState, dispatch: Dispatch): boolean {
   const sel = state.selection;
   if (sel instanceof NodeSelection && sel.node.isBlock) return deleteSelectedBlock(state, dispatch, -1);
+  if (sel instanceof NodeSelection && sel.node.type.name === "image") return deleteImageParagraph(state, dispatch, -1);
   if (sel instanceof GapCursor) {
     const before = sel.$head.nodeBefore;
     if (!before) return false;
@@ -196,6 +237,12 @@ function backspace(state: EditorState, dispatch: Dispatch): boolean {
   }
   if ($c.parentOffset !== 0) return false;
   const sib = siblingBlock(state, -1);
+  if (sib && imageOnly(sib.node) && sib.node.lastChild?.type.name === "image") {
+    let tr = state.tr;
+    if ($c.parent.type.name === "paragraph" && $c.parent.content.size === 0) tr = tr.delete($c.before(), $c.after());
+    dispatch?.(tr.setSelection(NodeSelection.create(tr.doc, sib.pos + sib.node.nodeSize - 1 - sib.node.lastChild.nodeSize)).scrollIntoView());
+    return true;
+  }
   if (!sib || !SELECT_BLOCKS.has(sib.node.type.name)) return false;
   if (dispatch) {
     let tr = state.tr;
@@ -209,6 +256,7 @@ function backspace(state: EditorState, dispatch: Dispatch): boolean {
 function del(state: EditorState, dispatch: Dispatch): boolean {
   const sel = state.selection;
   if (sel instanceof NodeSelection && sel.node.isBlock) return deleteSelectedBlock(state, dispatch, 1);
+  if (sel instanceof NodeSelection && sel.node.type.name === "image") return deleteImageParagraph(state, dispatch, 1);
   if (sel instanceof GapCursor) {
     const after = sel.$head.nodeAfter;
     if (!after) return false;
@@ -225,6 +273,12 @@ function del(state: EditorState, dispatch: Dispatch): boolean {
   }
   if ($c.parentOffset !== $c.parent.content.size) return false;
   const sib = siblingBlock(state, 1);
+  if (sib && imageOnly(sib.node) && sib.node.firstChild?.type.name === "image") {
+    let tr = state.tr, pos = sib.pos;
+    if ($c.parent.type.name === "paragraph" && $c.parent.content.size === 0) { tr = tr.delete($c.before(), $c.after()); pos = $c.before(); }
+    dispatch?.(tr.setSelection(NodeSelection.create(tr.doc, pos + 1)).scrollIntoView());
+    return true;
+  }
   if (!sib || !SELECT_BLOCKS.has(sib.node.type.name)) return false;
   if (dispatch) {
     let tr = state.tr;
