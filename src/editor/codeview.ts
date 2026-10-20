@@ -10,6 +10,7 @@ import { renderTex, renderMermaid } from "./render";
 import { attachLangPicker } from "./langpicker";
 import { userTouched } from "./headingsrc";
 import { t } from "../i18n";
+import { leaveBlock, paragraphAfterTr, quietBlockSelection } from "./blocknav";
 
 // Language modes are lazy-loaded chunks (Phase 2 size work): only the modes a document uses are fetched.
 const MODE_LOADERS: Record<string, () => Promise<unknown>> = {
@@ -185,29 +186,39 @@ export class CodeView implements NodeView {
       // Leave the block below it, even when ProseMirror's selection has not caught up with CodeMirror yet
       "Ctrl-Enter": () => this.exitBelow(),
       "Ctrl-Z": () => undo(view.state, view.dispatch), "Shift-Ctrl-Z": () => redo(view.state, view.dispatch), "Ctrl-Y": () => redo(view.state, view.dispatch),
+      // Backspace in an empty block turns it into an empty paragraph (Typora); undo brings it back
       Backspace: (cm: CodeMirror.Editor) => {
-        if (cm.getValue() === "") { const p = this.getPos()!; view.dispatch(view.state.tr.delete(p, p + this.node.nodeSize).scrollIntoView()); view.focus(); return; }
-        return CodeMirror.Pass;
+        if (cm.getValue() !== "" || cm.somethingSelected()) return CodeMirror.Pass;
+        const p = this.getPos(); if (p == null) return CodeMirror.Pass;
+        const tr = view.state.tr.replaceWith(p, p + this.node.nodeSize, view.state.schema.nodes.paragraph.create());
+        view.focus();
+        view.dispatch(tr.setSelection(TextSelection.create(tr.doc, p + 1)).scrollIntoView());
+        view.focus();
       },
     } as any;
   }
   exitBelow() {
     const view = this.view, p = this.getPos();
     if (p == null) { if (exitCode(view.state, view.dispatch)) view.focus(); return; }
-    const after = p + this.node.nodeSize;
-    const tr = view.state.tr.insert(after, view.state.schema.nodes.paragraph.create());
-    view.dispatch(tr.setSelection(TextSelection.create(tr.doc, after + 1)).scrollIntoView());
+    view.focus();
+    view.dispatch(paragraphAfterTr(view.state, p, this.node.nodeSize));
     view.focus();
   }
   maybeEscape(unit: "line" | "char", dir: number): any {
     const cm = this.cm; const pos = cm.getCursor();
-    if (cm.somethingSelected() || pos.line !== (dir < 0 ? cm.firstLine() : cm.lastLine()) ||
-      (unit === "char" && pos.ch !== (dir < 0 ? 0 : cm.getLine(pos.line).length))) return CodeMirror.Pass;
-    this.view.focus();
-    const targetPos = this.getPos()! + (dir < 0 ? 0 : this.node.nodeSize);
-    const selection = Selection.near(this.view.state.doc.resolve(targetPos), dir);
-    this.view.dispatch(this.view.state.tr.setSelection(selection).scrollIntoView());
-    this.view.focus();
+    if (cm.somethingSelected()) return CodeMirror.Pass;
+    if (unit === "char") {
+      if (pos.line !== (dir < 0 ? cm.firstLine() : cm.lastLine()) || pos.ch !== (dir < 0 ? 0 : cm.getLine(pos.line).length)) return CodeMirror.Pass;
+    } else {
+      // visual lines: a wrapped last line still moves inside CodeMirror until its last row
+      if (pos.line !== (dir < 0 ? cm.firstLine() : cm.lastLine())) return CodeMirror.Pass;
+      const r: any = (cm as any).findPosV(pos, dir, "line");
+      if (r && !r.hitSide && (r.line !== pos.line || r.ch !== pos.ch)) return CodeMirror.Pass;
+    }
+    const p = this.getPos(); if (p == null) return CodeMirror.Pass;
+    // YAML front matter has nothing above it
+    if (dir < 0 && this.kind === "yaml") return undefined;
+    if (!leaveBlock(this.view, p, this.node.nodeSize, dir < 0 ? -1 : 1)) return CodeMirror.Pass;
   }
   private searchMarks: CodeMirror.TextMarker[] = [];
   /** mirror search-hit decorations (inner decorations of this node) as CodeMirror marks */
@@ -241,7 +252,14 @@ export class CodeView implements NodeView {
     if (this.preview) this.schedulePreview();
     return true;
   }
-  selectNode() { if (userTouched(this.view.state)) this.cm.focus(); }
+  // Block selection (grip handle / Backspace next to the block): highlight it and keep the keyboard in
+  // ProseMirror so Delete/Backspace/Ctrl+X act on the whole block. Otherwise a selected block is edited.
+  selectNode() {
+    this.dom.classList.add("ProseMirror-selectednode");
+    if (quietBlockSelection(this.view.state)) { this.dom.classList.add("mdn-block-selected"); this.cm.getInputField().blur(); return; }
+    if (userTouched(this.view.state)) this.cm.focus();
+  }
+  deselectNode() { this.dom.classList.remove("ProseMirror-selectednode", "mdn-block-selected"); }
   stopEvent() { return true; }
   ignoreMutation() { return true; }
   destroy() { clearTimeout(this.renderTimer); }

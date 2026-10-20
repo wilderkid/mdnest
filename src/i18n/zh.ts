@@ -206,6 +206,8 @@ export const ZH: Record<string, string> = {
   "Unsaved draft found": "发现未保存的草稿", "Discard draft": "丢弃草稿", "Draft restored — save it to keep it": "草稿已恢复，请保存以保留",
   "Autosave failed: {error}": "自动保存失败：{error}", "restoring a draft": "恢复草稿",
   "Saves 1.5 s after you stop typing, and when you switch files or leave the window. Untitled documents are kept as a recoverable draft.": "停止输入 1.5 秒后、切换文件或离开窗口时自动保存；未命名文档会暂存为可恢复的草稿。",
+  // 0.2.2 blocks
+  "Select block (then Delete to remove)": "选中整个块（再按 Delete 删除）", "Select block": "选中块",
   // language endonym
   "English": "English",
 };

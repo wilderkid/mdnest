@@ -5,6 +5,7 @@ import { NodeSelection, TextSelection, Selection } from "prosemirror-state";
 import CodeMirror from "codemirror";
 import { renderTex, escapeHtml } from "./render";
 import { CodeView, loadMode } from "./codeview";
+import { leaveBlock, paragraphAfterTr, quietBlockSelection } from "./blocknav";
 
 class InlineMathView implements NodeView {
   dom: HTMLElement;
@@ -126,7 +127,16 @@ class HtmlBlockView implements NodeView {
       extraKeys: {
         Up: () => this.escape(-1, "line"), Down: () => this.escape(1, "line"),
         Left: () => this.escape(-1, "char"), Right: () => this.escape(1, "char"),
-        "Ctrl-Enter": () => this.escape(1, "force"), Esc: () => this.escape(1, "force"),
+        "Ctrl-Enter": () => this.paragraphAfter(), "Cmd-Enter": () => this.paragraphAfter(), Esc: () => this.escape(1, "force"),
+        Backspace: (cm: CodeMirror.Editor) => {
+          if (cm.getValue().trim() !== "" || cm.somethingSelected()) return CodeMirror.Pass;
+          const p = this.getPos(); if (p == null) return CodeMirror.Pass;
+          const tr = this.view.state.tr.replaceWith(p, p + this.node.nodeSize, this.view.state.schema.nodes.paragraph.create());
+          this.setEditing(false);
+          this.view.focus();
+          this.view.dispatch(tr.setSelection(TextSelection.create(tr.doc, p + 1)).scrollIntoView());
+          this.view.focus();
+        },
       },
     });
     this.cm.on("changes", () => { if (!this.updating) this.commit(); });
@@ -161,15 +171,17 @@ class HtmlBlockView implements NodeView {
       if (unit === "char" && pos.ch !== (dir < 0 ? 0 : cm.getLine(pos.line).length)) return CodeMirror.Pass;
     }
     const p = this.getPos(); if (p == null) return CodeMirror.Pass;
-    const state = this.view.state;
-    const target = dir < 0 ? p : p + this.node.nodeSize;
-    let sel = Selection.findFrom(state.doc.resolve(target), dir, true);
-    let tr = state.tr;
-    if (!sel && dir > 0) { tr = tr.insert(state.doc.content.size, state.schema.nodes.paragraph.create()); sel = Selection.findFrom(tr.doc.resolve(target), 1, true); }
-    if (!sel) return CodeMirror.Pass;
+    this.setEditing(false);
+    if (!leaveBlock(this.view, p, this.node.nodeSize, dir < 0 ? -1 : 1)) { this.setEditing(true); return CodeMirror.Pass; }
+    return undefined;
+  }
+  /** Ctrl/Cmd+Enter: leave the source editor into a new paragraph below the block */
+  private paragraphAfter() {
+    const p = this.getPos(); if (p == null) return CodeMirror.Pass;
     this.setEditing(false);
     this.view.focus();
-    this.view.dispatch(tr.setSelection(sel).scrollIntoView());
+    this.view.dispatch(paragraphAfterTr(this.view.state, p, this.node.nodeSize));
+    this.view.focus();
     return undefined;
   }
   /** Put the ProseMirror caret inside this atom so menus know which block is active. */
@@ -223,8 +235,12 @@ class HtmlBlockView implements NodeView {
   }
   ignoreMutation() { return true; }
   // A freshly opened file whose first block is HTML starts with this node selected: stay rendered until the user acts
-  selectNode() { this.dom.classList.add("ProseMirror-selectednode"); if (userTouched(this.view.state)) this.focusInside(); }
-  deselectNode() { this.dom.classList.remove("ProseMirror-selectednode"); if (!this.cm.hasFocus()) this.setEditing(false); }
+  selectNode() {
+    this.dom.classList.add("ProseMirror-selectednode");
+    if (quietBlockSelection(this.view.state)) { this.dom.classList.add("mdn-block-selected"); this.setEditing(false); return; }
+    if (userTouched(this.view.state) && !this.cm.hasFocus()) this.focusInside();
+  }
+  deselectNode() { this.dom.classList.remove("ProseMirror-selectednode", "mdn-block-selected"); if (!this.cm.hasFocus()) this.setEditing(false); }
 }
 
 export function htmlBlockTemplate(): string {

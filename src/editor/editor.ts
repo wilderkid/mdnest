@@ -1,5 +1,6 @@
 import { EditorState, Plugin, PluginKey, NodeSelection, TextSelection } from "prosemirror-state";
 import { EditorView, DecorationSet } from "prosemirror-view";
+import { Fragment, Node as PMNode, Slice } from "prosemirror-model";
 import { history } from "prosemirror-history";
 import { dropCursor } from "prosemirror-dropcursor";
 import { gapCursor } from "prosemirror-gapcursor";
@@ -23,6 +24,7 @@ import type { Command, DecorationProvider } from "../plugins/api";
 import { suggestPlugin } from "./suggest";
 import { slashPlugin, slashItems, registerSlashItem } from "./slash";
 import { liveCommandKeymap } from "./plugin-keys";
+import { blockNavPlugin } from "./blocknav";
 
 export interface EditorHooks {
   onChange: () => void;
@@ -36,6 +38,16 @@ export interface EditorHooks {
   onSelect?: () => void;
 }
 
+let foreignHtml = false;
+function collapseNewlines(frag: Fragment): Fragment {
+  const out: PMNode[] = [];
+  frag.forEach((n) => {
+    if (n.isText) out.push(/\n/.test(n.text!) ? n.type.schema.text(n.text!.replace(/[ \t]*\n[ \t]*/g, " "), n.marks) : n);
+    else if (n.type.spec.code || n.type.name === "html_block") out.push(n);
+    else out.push(n.copy(collapseNewlines(n.content)));
+  });
+  return Fragment.from(out);
+}
 const extKey = new PluginKey("ext-decos");
 function externalDecorations(hooks: EditorHooks) {
   return new Plugin({
@@ -59,8 +71,8 @@ export function createEditor(mount: HTMLElement, markdown: string, hooks: Editor
     slashPlugin(),
     liveCommandKeymap(() => hooks.commands?.() ?? []),
     defsPlugin(), defsKeymap(),
-    autoPairPlugin(), smartPunctPlugin(), emojiPlugin(), buildInputRules(schema), ...buildKeymaps(schema, hooks.keys), history(), dropCursor(), gapCursor(),
-    columnResizing(), tableEditing(), revealPlugin(), headingSrcPlugin(), tableToolbarPlugin(), searchPlugin(), externalDecorations(hooks),
+    autoPairPlugin(), smartPunctPlugin(), emojiPlugin(), buildInputRules(schema), ...buildKeymaps(schema, hooks.keys), history(), dropCursor(), blockNavPlugin(), gapCursor(),
+    columnResizing(), tableEditing({ allowTableNodeSelection: true }), revealPlugin(), headingSrcPlugin(), tableToolbarPlugin(), searchPlugin(), externalDecorations(hooks),
   ];
   const mkState = (md: string) => {
     const doc = parseMarkdown(md);
@@ -93,6 +105,22 @@ export function createEditor(mount: HTMLElement, markdown: string, hooks: Editor
       }
       if (node.type.name === "image") { view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, nodePos))); return true; }
       return false;
+    },
+    // A selected block (code, math, table, HTML…) copies as its Markdown source
+    clipboardTextSerializer(slice, view) {
+      const sel = view.state.selection;
+      if (sel instanceof NodeSelection && sel.node.isBlock) {
+        try { return serializeMarkdown(schema.node("doc", null, [sel.node])).replace(/\n+$/, "\n"); } catch { /* fall through */ }
+      }
+      return slice.content.textBetween(0, slice.content.size, "\n\n");
+    },
+    // paragraphs keep newlines ("pre"): HTML pasted from elsewhere has source-formatting newlines that
+    // a browser would collapse, so collapse them here (our own copies keep their soft breaks)
+    transformPastedHTML(html) { foreignHtml = !/data-pm-slice/.test(html); return html; },
+    transformPasted(slice) {
+      if (!foreignHtml) return slice;
+      foreignHtml = false;
+      return new Slice(collapseNewlines(slice.content), slice.openStart, slice.openEnd);
     },
     handlePaste(view, event, slice) {
       if (!editorEditable(view)) { event.preventDefault(); return true; }

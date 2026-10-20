@@ -18,7 +18,9 @@ const nodes: Record<string, NodeSpec> = {
     toDOM: () => ["pre", { class: "md-meta-block md-end-block", mdtype: "meta_block" }, 0],
   },
   paragraph: {
-    content: "inline*", group: "block",
+    // "pre": a soft line break ("\n", Shift+Enter or a wrapped source line) survives typing in the
+    // paragraph (ProseMirror re-reads the DOM text and otherwise turns every newline into a space)
+    content: "inline*", group: "block", whitespace: "pre",
     parseDOM: [{ tag: "p" }],
     toDOM: () => ["p", { mdtype: "paragraph", class: "md-end-block md-p" }, 0],
   },
@@ -36,12 +38,12 @@ const nodes: Record<string, NodeSpec> = {
     toDOM: () => ["hr", { mdtype: "hr" }],
   },
   code_block: {
-    attrs: { params: { default: "" } }, content: "text*", marks: "", group: "block", code: true, defining: true,
+    attrs: { params: { default: "" } }, content: "text*", marks: "", group: "block", code: true, defining: true, createGapCursor: true,
     parseDOM: [{ tag: "pre", preserveWhitespace: "full", getAttrs: (d: any) => ({ params: d.getAttribute("lang") || "" }) }],
     toDOM: (n) => ["pre", { class: "md-fences md-end-block", mdtype: "fences", lang: n.attrs.params }, ["code", 0]],
   },
   math_block: {
-    content: "text*", marks: "", group: "block", code: true, defining: true,
+    content: "text*", marks: "", group: "block", code: true, defining: true, createGapCursor: true,
     parseDOM: [{ tag: "div.md-math-block", preserveWhitespace: "full" }],
     toDOM: () => ["div", { class: "md-math-block md-end-block", mdtype: "math_block" }, ["pre", 0]],
   },
@@ -51,7 +53,9 @@ const nodes: Record<string, NodeSpec> = {
   },
   html_block: {
     attrs: { html: { default: "" } }, group: "block", atom: true,
-    toDOM: () => ["div", { class: "md-htmlblock md-rawblock", mdtype: "html_block" }],
+    // data-html carries the source through copy/cut → paste
+    parseDOM: [{ tag: "div.md-htmlblock[data-html]", getAttrs: (d: any) => ({ html: d.getAttribute("data-html") || "" }) }],
+    toDOM: (n) => ["div", { class: "md-htmlblock md-rawblock", mdtype: "html_block", "data-html": n.attrs.html }],
   },
   // footnote definition [^label]: text — stays where it is written (.md-def-footnote/.md-def-name/.md-def-content)
   footnote_def: {

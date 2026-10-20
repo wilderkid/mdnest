@@ -137,6 +137,7 @@ function setDirty(d: boolean) {
 }
 /** status-bar save state: saved ✓ / unsaved ● / saving… / draft kept (untitled) */
 let saveUi: "idle" | "saving" | "draft" | "failed" = "idle";
+let lastSaveAuto = false;
 function paintSaved() {
   const el = document.getElementById("footer-saved");
   if (!el) return;
@@ -147,7 +148,7 @@ function paintSaved() {
   el.dataset.state = mode;
   el.classList.toggle("dirty", mode === "dirty" || mode === "failed");
   el.classList.toggle("auto", auto);
-  const label = mode === "saving" ? "Saving…" : mode === "draft" ? "Draft kept" : mode === "failed" ? "Autosave failed" : mode === "dirty" ? (auto && state.conflict ? "Unsaved (changed on disk)" : "Unsaved") : auto ? "Auto-saved" : "Saved";
+  const label = mode === "saving" ? "Saving…" : mode === "draft" ? "Draft kept" : mode === "failed" ? "Autosave failed" : mode === "dirty" ? (auto && state.conflict ? "Unsaved (changed on disk)" : "Unsaved") : auto && lastSaveAuto ? "Auto-saved" : "Saved";
   el.querySelector(".saved-text")!.textContent = t(label);
   el.title = t(auto ? "Autosave is on" : "Autosave is off");
   const ic = el.querySelector(".saved-icon");
@@ -436,7 +437,7 @@ async function loadOpened(path: string, text: string, encoding: SaveEncoding, eo
   setImageBase(host.fileUrl(dir + "/"));
   state.encoding = encoding; state.eol = eol;
   if (source.active) source.show(text); editor.setMarkdown(text);
-  state.lastSaved = editor.getMarkdown(); setDirty(false); setTitle(); afterLoad(); sidebar.markActive(path); hideWelcome();
+  state.lastSaved = editor.getMarkdown(); lastSaveAuto = false; setDirty(false); setTitle(); afterLoad(); sidebar.markActive(path); hideWelcome();
   state.mtime = await host.mtime(path).catch(() => null); state.conflict = false; addRecent(path);
   localStorage.setItem("mdnest.lastFile", path); plugins.emit("file-opened", path);
   scheduleMenu();
@@ -509,7 +510,7 @@ async function save(as: boolean) {
     }
     state.mtime = await host.mtime(p).catch(() => null); state.conflict = false;
     const first = state.path !== p; state.path = p; state.lastSaved = md;
-    saving = false; saveUi = "idle";
+    saving = false; saveUi = "idle"; lastSaveAuto = quietSave;
     // edits typed while the file was being written stay unsaved (and are picked up by the next autosave)
     const still = currentMarkdown() !== md;
     setDirty(still); setTitle();

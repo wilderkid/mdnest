@@ -5,7 +5,7 @@ import { toggleMark, setBlockType, wrapIn, chainCommands, exitCode, baseKeymap }
 import { undo, redo } from "prosemirror-history";
 import { splitListItem, liftListItem, sinkListItem, wrapInList } from "prosemirror-schema-list";
 import { goToNextCell, addRowAfter, isInTable } from "prosemirror-tables";
-import { arrowHandler } from "./codeview";
+import { blockArrow, blockKeys, modEnter, softBreak } from "./blocknav";
 import { inRawRegion } from "./markers";
 import { EditorState, TextSelection } from "prosemirror-state";
 import { blockEnterRule, taskListFromParagraph } from "./blockenter";
@@ -77,7 +77,7 @@ export function buildKeymaps(s: Schema, extra: { toggleSource: () => void; save:
   // The shell dispatcher owns these. Skip when it already ran the matching command.
   const skip = (id: string, fn: any) => (st: any, d: any, v: any) => extra.claimed?.(id) ? true : fn(st, d, v);
   const keys: Record<string, any> = {
-    "Mod-Enter": (st: any, d: any) => isInTable(st) ? addRowAfter(st, d) : exitCode(st, d),
+    "Mod-Enter": modEnter,
     // The shell dispatcher also binds Mod-z. If it already undid, swallow this so one Ctrl+Z
     // reverts a single conversion instead of two history steps.
     "Mod-z": (st: any, d: any, v: any) => undo(st, d, v),
@@ -95,8 +95,9 @@ export function buildKeymaps(s: Schema, extra: { toggleSource: () => void; save:
     Enter: chainCommands(blockEnterRule, splitListItem(n.list_item)),
     "Mod-[": liftListItem(n.list_item), "Mod-]": sinkListItem(n.list_item),
     Tab: chainCommands(goToNextCell(1), sinkListItem(n.list_item)), "Shift-Tab": chainCommands(goToNextCell(-1), liftListItem(n.list_item)),
-    "Shift-Enter": chainCommands(exitCode, (st: any, d: any) => { d?.(st.tr.replaceSelectionWith(n.hard_break.create()).scrollIntoView()); return true; }),
-    ArrowLeft: arrowHandler("left"), ArrowRight: arrowHandler("right"), ArrowUp: arrowHandler("up"), ArrowDown: arrowHandler("down"),
+    "Shift-Enter": chainCommands(exitCode, softBreak),
+    ArrowLeft: blockArrow("left"), ArrowRight: blockArrow("right"), ArrowUp: blockArrow("up"), ArrowDown: blockArrow("down"),
+    ...blockKeys,
     "Mod-/": () => { extra.toggleSource(); return true; },
     "Mod-s": () => { extra.save(); return true; }, "Shift-Mod-s": () => { extra.saveAs(); return true; },
     "Mod-o": () => { extra.open(); return true; }, "Shift-Mod-o": () => { extra.openFolder(); return true; },
