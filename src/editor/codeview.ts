@@ -176,13 +176,22 @@ export class CodeView implements NodeView {
     const k = (unit: "line" | "char", dir: number) => () => this.maybeEscape(unit, dir);
     return {
       Up: k("line", -1), Left: k("char", -1), Down: k("line", 1), Right: k("char", 1),
-      "Ctrl-Enter": () => { if (exitCode(view.state, view.dispatch)) view.focus(); },
+      // Leave the block below it, even when ProseMirror's selection has not caught up with CodeMirror yet
+      "Ctrl-Enter": () => this.exitBelow(),
       "Ctrl-Z": () => undo(view.state, view.dispatch), "Shift-Ctrl-Z": () => redo(view.state, view.dispatch), "Ctrl-Y": () => redo(view.state, view.dispatch),
       Backspace: (cm: CodeMirror.Editor) => {
         if (cm.getValue() === "") { const p = this.getPos()!; view.dispatch(view.state.tr.delete(p, p + this.node.nodeSize).scrollIntoView()); view.focus(); return; }
         return CodeMirror.Pass;
       },
     } as any;
+  }
+  exitBelow() {
+    const view = this.view, p = this.getPos();
+    if (p == null) { if (exitCode(view.state, view.dispatch)) view.focus(); return; }
+    const after = p + this.node.nodeSize;
+    const tr = view.state.tr.insert(after, view.state.schema.nodes.paragraph.create());
+    view.dispatch(tr.setSelection(TextSelection.create(tr.doc, after + 1)).scrollIntoView());
+    view.focus();
   }
   maybeEscape(unit: "line" | "char", dir: number): any {
     const cm = this.cm; const pos = cm.getCursor();

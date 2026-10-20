@@ -2,12 +2,15 @@
 // Running an item deletes the "/query" text, then calls the item with the cursor position.
 import { Plugin, PluginKey, EditorState, TextSelection } from "prosemirror-state";
 import { EditorView } from "prosemirror-view";
+import { t, lang } from "../i18n";
 
 export interface SlashItem {
   id: string;
   title: string;
   hint?: string;
   owner: string;
+  /** extra search terms (any language), e.g. Chinese names and pinyin initials */
+  keywords?: string;
   run: (ctx: { from: number; to: number; query: string }) => void;
 }
 
@@ -117,26 +120,37 @@ export function slashPlugin() {
       menu.className = "mdn-slash";
       menu.style.display = "none";
       document.body.appendChild(menu);
+      let lastKey = "";
       const place = () => {
         const st = slashKey.getState(editorView.state);
-        if (!st?.session || !editorView.hasFocus()) { menu.style.display = "none"; menu.innerHTML = ""; return; }
+        if (!st?.session || !editorView.hasFocus()) { menu.style.display = "none"; menu.innerHTML = ""; lastKey = ""; return; }
         const shown = filterItems(st.items, st.session.query);
+        const key = st.session.slash + "|" + st.session.query + "|" + shown.map((i) => i.id).join(",");
+        if (key === lastKey) {
+          // only the highlighted row moved: restyle and keep it scrolled into view (no rebuild → no scroll reset)
+          menu.querySelectorAll<HTMLElement>(".mdn-slash-item").forEach((r, i) => r.classList.toggle("sel", i === st.session!.index));
+          keepVisible(menu);
+          return;
+        }
+        lastKey = key;
         menu.innerHTML = "";
         if (!shown.length) {
           const empty = document.createElement("div");
           empty.className = "mdn-slash-empty";
-          empty.textContent = st.items.length ? "No matches" : "No slash commands";
+          empty.textContent = t(st.items.length ? "No matches" : "No slash commands");
           menu.appendChild(empty);
         } else {
           shown.forEach((it, i) => {
             const row = document.createElement("div");
             row.className = "mdn-slash-item" + (i === st.session!.index ? " sel" : "");
             const title = document.createElement("span");
-            title.textContent = it.title;
+            title.textContent = t(it.title);
             row.appendChild(title);
-            if (it.hint) {
+            row.dataset.id = it.id;
+            const hintText = slashHint(it);
+            if (hintText) {
               const hint = document.createElement("small");
-              hint.textContent = it.hint;
+              hint.textContent = hintText;
               row.appendChild(hint);
             }
             row.onmousedown = (e) => { e.preventDefault(); runItem(editorView, it); };
@@ -148,6 +162,8 @@ export function slashPlugin() {
         menu.style.display = "block";
         menu.style.left = Math.max(8, box.left) + "px";
         menu.style.top = (box.bottom + 4) + "px";
+        menu.scrollTop = 0;
+        keepVisible(menu);
       };
       return {
         update: place,
@@ -155,6 +171,15 @@ export function slashPlugin() {
       };
     },
   });
+}
+
+/** scroll the menu so the highlighted row is fully visible */
+function keepVisible(menu: HTMLElement) {
+  const row = menu.querySelector<HTMLElement>(".mdn-slash-item.sel");
+  if (!row) return;
+  const top = row.offsetTop, bottom = top + row.offsetHeight;
+  if (top < menu.scrollTop) menu.scrollTop = top - 4;
+  else if (bottom > menu.scrollTop + menu.clientHeight) menu.scrollTop = bottom - menu.clientHeight + 4;
 }
 
 function queryInDoc(doc: EditorState["doc"], slash: number): string | null {
@@ -168,10 +193,34 @@ function queryInDoc(doc: EditorState["doc"], slash: number): string | null {
   return text.slice(1);
 }
 
+/** Chinese search terms + pinyin initials for the core items (English titles/ids/hints always match too) */
+const ZH_KEYWORDS: Record<string, string> = {
+  h1: "一级标题 标题 bt yjbt", h2: "二级标题 标题 bt ejbt", h3: "三级标题 标题 bt sjbt", h4: "四级标题 标题 bt", h5: "五级标题 标题 bt", h6: "六级标题 标题 bt",
+  paragraph: "段落 正文 dl zw", bullet: "无序列表 列表 项目符号 wxlb lb", numbered: "有序列表 编号 列表 yxlb lb", task: "任务列表 待办 复选框 rwlb db",
+  quote: "引用 块引用 yy", table: "表格 bg", code: "代码块 代码 dmk dm", math: "公式块 数学 公式 gsk sx gs", mermaid: "图表 流程图 mermaid tb lct",
+  html: "HTML 块 网页 html", hr: "分割线 水平线 fgx spx", toc: "目录 mulu ml", footnote: "脚注 jz", linkref: "链接引用 引用链接 ljyy",
+  image: "图片 插入图片 tp", link: "链接 超链接 lj clj", frontmatter: "元数据 前言 yaml ysj", alert: "提示 标注 警告 callout ts bz",
+};
+/** the words a slash item can be found by: English title/id/hint, the localized title and Chinese keywords */
+export function slashSearchText(it: SlashItem): string {
+  return [it.title, t(it.title), it.id, it.hint ?? "", it.keywords ?? "", ZH_KEYWORDS[it.id] ?? ""].join(" ").toLowerCase();
+}
 export function filterItems(items: SlashItem[], query: string): SlashItem[] {
   const q = query.trim().toLowerCase();
   if (!q) return items.slice();
-  return items.filter((it) => it.title.toLowerCase().includes(q) || it.id.toLowerCase().includes(q) || (it.hint ?? "").toLowerCase().includes(q));
+  const words = q.split(/\s+/);
+  return items.filter((it) => { const hay = slashSearchText(it); return words.every((w) => hay.includes(w)); });
+}
+/** the hint shown under an item: Chinese keywords in the Chinese UI, the English hint otherwise */
+export function slashHint(it: SlashItem): string {
+  if (lang() === "zh-CN") {
+    // Chinese synonyms that are not already the visible title, plus the English command word
+    const title = t(it.title);
+    const zh = (ZH_KEYWORDS[it.id] ?? "").split(" ").filter((w) => /[\u4e00-\u9fff]/.test(w) && !title.includes(w));
+    const en = (it.hint ?? "").split(" ")[0] ?? "";
+    return [...zh.slice(0, 2), en].filter(Boolean).join(" · ");
+  }
+  return it.hint ?? "";
 }
 
 function close(view: EditorView) {

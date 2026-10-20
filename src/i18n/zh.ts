@@ -144,4 +144,7 @@ export const ZH: Record<string, string> = {
   "Unsaved changes": "未保存的更改", "Do you want to save the changes to {name} before {action}?": "在{action}之前，是否保存对 {name} 的更改？",
   "opening a file": "打开文件", "closing": "关闭", "creating a new file": "新建文件", "quitting": "退出",
   "Type a command…": "输入命令…", "Insert Table": "插入表格", Rows: "行", Columns: "列", Exported: "已导出",
+  // slash menu
+  "Bullet List": "无序列表", "Numbered List": "有序列表", "Code Block": "代码块", "Image…": "图片…", Link: "链接",
+  "Front Matter": "元数据（Front Matter）", "Callout/Alert": "提示块", "No slash commands": "没有可用的斜杠命令",
 };

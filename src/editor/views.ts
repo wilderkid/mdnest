@@ -1,7 +1,7 @@
 import { Node as PMNode } from "prosemirror-model";
 import { headingText } from "./headingsrc";
 import { EditorView, NodeView } from "prosemirror-view";
-import { NodeSelection, TextSelection } from "prosemirror-state";
+import { NodeSelection, TextSelection, Selection } from "prosemirror-state";
 import CodeMirror from "codemirror";
 import { renderTex, escapeHtml } from "./render";
 import { CodeView, loadMode } from "./codeview";
@@ -110,6 +110,7 @@ class HtmlBlockView implements NodeView {
     this.dom.className = "md-htmlblock md-rawblock md-end-block";
     this.dom.setAttribute("mdtype", "html_block");
     this.dom.contentEditable = "false";
+    (this.dom as any).__mdnHtml = this;
     const editor = document.createElement("div");
     editor.className = "md-htmlblock-editor";
     this.dom.appendChild(editor);
@@ -119,16 +120,54 @@ class HtmlBlockView implements NodeView {
       theme: "inner",
       lineWrapping: true,
       viewportMargin: Infinity,
+      extraKeys: {
+        Up: () => this.escape(-1, "line"), Down: () => this.escape(1, "line"),
+        Left: () => this.escape(-1, "char"), Right: () => this.escape(1, "char"),
+        "Ctrl-Enter": () => this.escape(1, "force"), Esc: () => this.escape(1, "force"),
+      },
     });
     this.cm.on("changes", () => { if (!this.updating) this.commit(); });
-    this.cm.on("focus", () => this.placeCaret());
+    // Typora: the source is shown only while editing; otherwise the rendered HTML
+    this.cm.on("focus", () => { this.setEditing(true); this.placeCaret(); });
+    this.cm.on("blur", () => setTimeout(() => { if (!this.cm.hasFocus()) this.setEditing(false); }, 0));
     const preview = document.createElement("div");
     preview.className = "md-htmlblock-container";
     preview.contentEditable = "false";
+    // ProseMirror ignores events inside this view (stopEvent), so a click on the preview enters edit mode here
+    preview.addEventListener("mousedown", (e) => {
+      if ((e.target as HTMLElement).closest("a[href]") && (e.ctrlKey || e.metaKey)) return;
+      e.preventDefault();
+      this.setEditing(true);
+      requestAnimationFrame(() => { this.cm.refresh(); this.focusInside(false); });
+    });
     this.dom.appendChild(preview);
     this.paint(preview, node.attrs.html || "");
     void loadMode("html").then(() => this.cm.setOption("mode", "htmlmixed"));
     setTimeout(() => this.cm.refresh(), 0);
+  }
+  private setEditing(on: boolean) {
+    if (this.dom.classList.contains("md-htmlblock-editing") === on) return;
+    this.dom.classList.toggle("md-htmlblock-editing", on);
+    if (on) this.cm.refresh();
+  }
+  /** leave the source editor with the arrow keys at its edges (like code blocks) */
+  private escape(dir: number, unit: "line" | "char" | "force"): any {
+    const cm = this.cm, pos = cm.getCursor();
+    if (unit !== "force") {
+      if (cm.somethingSelected() || pos.line !== (dir < 0 ? cm.firstLine() : cm.lastLine())) return CodeMirror.Pass;
+      if (unit === "char" && pos.ch !== (dir < 0 ? 0 : cm.getLine(pos.line).length)) return CodeMirror.Pass;
+    }
+    const p = this.getPos(); if (p == null) return CodeMirror.Pass;
+    const state = this.view.state;
+    const target = dir < 0 ? p : p + this.node.nodeSize;
+    let sel = Selection.findFrom(state.doc.resolve(target), dir, true);
+    let tr = state.tr;
+    if (!sel && dir > 0) { tr = tr.insert(state.doc.content.size, state.schema.nodes.paragraph.create()); sel = Selection.findFrom(tr.doc.resolve(target), 1, true); }
+    if (!sel) return CodeMirror.Pass;
+    this.setEditing(false);
+    this.view.focus();
+    this.view.dispatch(tr.setSelection(sel).scrollIntoView());
+    return undefined;
   }
   /** Put the ProseMirror caret inside this atom so menus know which block is active. */
   private placeCaret() {
@@ -147,15 +186,18 @@ class HtmlBlockView implements NodeView {
   private paint(preview: HTMLElement, html: string) {
     const tpl = document.createElement("template");
     tpl.innerHTML = html;
+    // an empty / invisible block still needs something to click on
+    preview.classList.toggle("md-htmlblock-empty", !html.replace(/<[^>]*>/g, "").trim() && !/<(img|svg|video|audio|hr|br|input|canvas|table)\b/i.test(html));
     tpl.content.querySelectorAll("script,iframe,object,embed").forEach((e) => e.remove());
     tpl.content.querySelectorAll("*").forEach((e) => [...e.attributes].forEach((a) => { if (a.name.startsWith("on")) e.removeAttribute(a.name); }));
     preview.replaceChildren(tpl.content);
   }
   /** Move the CodeMirror caret between the template tags (`<div>\\n|\\n</div>`). */
-  focusInside() {
+  focusInside(template = true) {
+    this.setEditing(true);
     const text = this.cm.getValue();
     const nl = text.indexOf("\n");
-    const line = nl < 0 ? 0 : this.cm.posFromIndex(nl + 1);
+    const line = template && nl >= 0 ? this.cm.posFromIndex(nl + 1) : { line: 0, ch: 0 };
     this.cm.focus();
     this.cm.setCursor(line);
     this.placeCaret();
@@ -177,7 +219,7 @@ class HtmlBlockView implements NodeView {
   }
   ignoreMutation() { return true; }
   selectNode() { this.dom.classList.add("ProseMirror-selectednode"); this.focusInside(); }
-  deselectNode() { this.dom.classList.remove("ProseMirror-selectednode"); }
+  deselectNode() { this.dom.classList.remove("ProseMirror-selectednode"); if (!this.cm.hasFocus()) this.setEditing(false); }
 }
 
 export function htmlBlockTemplate(): string {

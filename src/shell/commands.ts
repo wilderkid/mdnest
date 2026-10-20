@@ -160,6 +160,11 @@ export function focusOutsideEditor(el: Element | null): boolean {
   return isTextField(el) || !!codeMirrorOf(el);
 }
 
+/** Focus is in a CodeMirror node view inside the WYSIWYG document (fence, math, diagram, HTML block). */
+export function inBlockCodeMirror(el: Element | null): boolean {
+  return !!el?.closest?.("#write .CodeMirror");
+}
+
 function isTextField(el: Element | null): el is HTMLInputElement | HTMLTextAreaElement {
   if (!el) return false;
   const tag = el.tagName;
@@ -248,6 +253,9 @@ export function installKeyboardDispatcher(
     // commands (paragraph/format/insert/edit.*) stay out of it. Global commands (file, view, find,
     // replace, palette, themes) still run from there, e.g. Ctrl+S in source mode or Ctrl+H in the find bar.
     if (focusOutsideEditor(target) && !TEXT_EDIT.has(cmd.id) && editsDocument(cmd.id)) return;
+    // A code / math / mermaid / HTML block's CodeMirror inside the document owns its editing keys
+    // (Ctrl+End, Ctrl+Home, Ctrl+B, Ctrl+1…6, Ctrl+Enter…); undo/redo/select-all reach it via its keymap.
+    if (inBlockCodeMirror(target) && (TEXT_EDIT.has(cmd.id) || editsDocument(cmd.id))) return;
     // Undo/redo/select-all inside the editor stay with ProseMirror history (one undo step).
     // Outside it (find bar, prompts, CodeMirror source) the dispatcher edits that field.
     if (TEXT_EDIT.has(cmd.id) && !focusOutsideEditor(target)) {

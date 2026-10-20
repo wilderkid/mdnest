@@ -154,6 +154,18 @@ footer .footer-spacer { flex: 1; } #footer-word-count { opacity: .85; white-spac
 #footer-encoding:hover { border-color: rgba(127,127,127,.35); }
 body.ty-readonly #write { cursor: default; }
 .md-htmlblock-editor { border: 1px dashed rgba(127,127,127,.45); border-radius: 4px; margin: 4px 0; }
+/* Typora: rendered HTML normally, the source only while the block is being edited */
+.md-htmlblock:not(.md-htmlblock-editing) > .md-htmlblock-editor { display: none; }
+.md-htmlblock.md-htmlblock-editing > .md-htmlblock-container { display: none; }
+.md-htmlblock-container { cursor: text; min-height: 1.2em; }
+.md-htmlblock-container.md-htmlblock-empty { min-height: 1.6em; border: 1px dashed rgba(127,127,127,.3); border-radius: 4px; }
+.md-htmlblock-container.md-htmlblock-empty::before { content: "</>"; opacity: .4; font-family: var(--monospace, monospace); font-size: .85em; padding: 0 6px; }
+/* Theme rules for "#write pre" must not reach CodeMirror's line elements (they are <pre> too): padding,
+   margins, borders or a different font/line-height there put the caret beside the text. */
+#write .CodeMirror pre.CodeMirror-line, #write .CodeMirror pre.CodeMirror-line-like {
+  margin: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; padding: 0 4px;
+  font: inherit; line-height: inherit; letter-spacing: normal; white-space: pre-wrap; word-wrap: break-word; overflow: visible; }
+#write .md-htmlblock .CodeMirror { font-family: var(--monospace, ui-monospace, Consolas, monospace); line-height: 1.5; white-space: normal; }
 .md-htmlblock-editor .CodeMirror { height: auto; background: transparent; }
 .mdn-code-copy { margin-left: 6px; font: inherit; font-size: 11px; border: 1px solid rgba(127,127,127,.4); background: var(--bg-color, #fff); color: inherit; border-radius: 3px; padding: 0 6px; cursor: pointer; }
 #file-title { opacity: .8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40vw; }

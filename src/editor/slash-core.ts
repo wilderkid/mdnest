@@ -1,7 +1,7 @@
 // Core slash items. Registered at startup whether or not AI is on.
 // The AI item is registered by the AI plugin and still appears when AI is on.
 import type { EditorView } from "prosemirror-view";
-import { TextSelection } from "prosemirror-state";
+import { NodeSelection, TextSelection } from "prosemirror-state";
 import { setBlockType, wrapIn } from "prosemirror-commands";
 import { wrapInList } from "prosemirror-schema-list";
 import { schema } from "./schema";
@@ -88,14 +88,10 @@ export function insertHtmlBlock(view: EditorView) {
   if (empty && at < end) tr = tr.replaceWith(at, end, [node, para]);
   else tr = tr.insert(end || view.state.doc.content.size, [node, para]);
   const pos = empty ? at : end;
-  view.dispatch(tr.setSelection(TextSelection.create(tr.doc, Math.min(pos + 1, tr.doc.content.size))).scrollIntoView());
-  view.focus();
-  // The node view mounts on the next frame; focus its editor then.
-  requestAnimationFrame(() => {
-    const dom = view.nodeDOM(pos) as HTMLElement | null;
-    const cm = dom?.querySelector<HTMLElement>(".CodeMirror");
-    (cm as any)?.CodeMirror?.focus();
-  });
+  view.dispatch(tr.setSelection(NodeSelection.create(tr.doc, pos)).scrollIntoView());
+  // whoever closes the slash menu may refocus ProseMirror after us: put the caret in the source editor last
+  const enter = () => { const dom = view.nodeDOM(pos) as any; dom?.__mdnHtml?.focusInside(); };
+  enter(); requestAnimationFrame(enter); setTimeout(enter, 30);
 }
 
 export function insertHr(view: EditorView) {
