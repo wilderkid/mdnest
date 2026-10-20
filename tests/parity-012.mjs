@@ -442,9 +442,11 @@ try {
   await page.waitForTimeout(80);
   ok((await page.evaluate(() => window.mdnest.editor.view.state.doc.textBetween(window.mdnest.editor.view.state.selection.from, window.mdnest.editor.view.state.selection.to))) === "alpha", "A9 Find Previous wraps to a hit");
   await setMd("nothing here\n");
+  // record every toast: this suite fakes state.path, so a disk-change toast can replace it a moment later
+  await page.evaluate(() => { const t = document.querySelector("#mdn-toast"); window.__t9 = []; new MutationObserver(() => window.__t9.push(t.innerText)).observe(t, { childList: true, characterData: true, subtree: true }); });
   await page.keyboard.press("F3");
   await page.waitForTimeout(200);
-  ok((await page.locator("#mdn-toast").innerText()).includes("Not found"), "A9 missing query notifies Not found");
+  ok((await page.evaluate(() => [document.querySelector("#mdn-toast").innerText, ...window.__t9].some((x) => x.includes("Not found")))), "A9 missing query notifies Not found");
 
   // ---------- A10: read-only mode ----------
   await setMd("readonly body\n\n");

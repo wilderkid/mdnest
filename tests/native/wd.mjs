@@ -87,6 +87,13 @@ export async function startNative({ app, display = ":78", port = 4444, env = {},
         { type: "pointerMove", duration: 0, x, y, origin: "viewport" }, { type: "pointerDown", button }, { type: "pointerUp", button }] }] });
       await call("DELETE", `${S}/actions`).catch(() => {});
     },
+    /** real pointer clicks at viewport x,y (clicks: 2 = double-click; 0 = just move/hover) */
+    async mouseAt(x, y, { button = 0, clicks = 1 } = {}) {
+      const acts = [{ type: "pointerMove", duration: 0, x: Math.round(x), y: Math.round(y), origin: "viewport" }];
+      for (let i = 0; i < clicks; i++) acts.push({ type: "pointerDown", button }, { type: "pointerUp", button });
+      await call("POST", `${S}/actions`, { actions: [{ type: "pointer", id: "mouse", parameters: { pointerType: "mouse" }, actions: acts }] });
+      await call("DELETE", `${S}/actions`).catch(() => {});
+    },
     async screenshot(file) {
       const b64 = await call("GET", `${S}/screenshot`);
       fs.mkdirSync(path.dirname(file), { recursive: true });
