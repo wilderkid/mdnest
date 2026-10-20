@@ -255,9 +255,9 @@ export function menuTemplate(mac: boolean): MenuNode[] {
       item("format.link", "Hyperlink", "CmdOrCtrl+K"),
       { id: "format.imageMenu", label: "Image", submenu: [
         item("format.image", "Insert Local Image…", "CmdOrCtrl+Shift+I"),
-        item("format.image.zoom50", "Zoom 50%"),
-        item("format.image.zoom100", "Zoom 100%"),
-        item("format.image.zoom200", "Zoom 200%"),
+        { id: "format.image.zoomMenu", label: "Zoom", submenu: [25, 33, 50, 67, 75, 100, 150, 200].map((z) => item("format.image.zoom" + z, z + "%")) },
+        item("format.image.width", "Custom Width…"),
+        item("format.image.reset", "Original Size"),
         item("format.image.alignLeft", "Align Left"),
         item("format.image.alignCenter", "Align Center"),
         item("format.image.alignRight", "Align Right"),
@@ -398,7 +398,7 @@ function applyState(node: MenuNode, state: MenuState, commands: Command[], occup
   if (node.id === "edit.copyCode") enabled = enabled && !!state.inCode;
   if (node.id === "format.link.open" || node.id === "format.link.copy") enabled = enabled && !!state.onLink;
   if (node.id && node.id.startsWith("format.image.align")) enabled = enabled && !!state.onImage;
-  if (node.id && node.id.startsWith("format.image.zoom")) enabled = enabled && !!state.onImage;
+  if (node.id && (node.id.startsWith("format.image.zoom") || node.id === "format.image.width" || node.id === "format.image.reset")) enabled = enabled && !!state.onImage;
   if (state.readonly && EDITING_IDS.has(node.id || "")) enabled = false;
   if (node.id?.startsWith("lang.")) return { ...node, enabled: true, checked: (state.langSetting ?? "auto") === node.id.slice(5) };
   if (node.id === "file.autosave") return { ...node, enabled: true, checked: !!state.autosave };

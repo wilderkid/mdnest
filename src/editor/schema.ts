@@ -2,7 +2,7 @@
 // (semantic tags + cid/mdtype attributes + span[md-inline] wrappers) so gallery themes apply.
 import { Schema, NodeSpec, MarkSpec } from "prosemirror-model";
 import { tableNodes } from "prosemirror-tables";
-import { imageAlignFromStyle, imageStyle, imageZoomFromStyle } from "./imagestyle";
+import { displayStyle, imageAlignFromStyle, imageWidthFromAttrs, imageZoomFromStyle } from "./imagestyle";
 
 let cidCounter = 0;
 export const nextCid = () => "n" + ++cidCounter;
@@ -92,17 +92,22 @@ const nodes: Record<string, NodeSpec> = {
   image: {
     inline: true, attrs: {
       src: {}, alt: { default: null }, title: { default: null }, refType: { default: null }, ref: { default: null },
-      zoom: { default: null }, align: { default: null },
+      // zoom: percent ("50"); width: pixels ("320"); align: left|center|right; html: the <img> tag it was read from
+      zoom: { default: null }, align: { default: null }, width: { default: null }, html: { default: null },
     }, group: "inline", draggable: true,
     parseDOM: [{ tag: "img[src]", getAttrs: (d: any) => {
       const style = d.getAttribute("style") || "";
-      return { src: d.getAttribute("src"), title: d.getAttribute("title"), alt: d.getAttribute("alt"), zoom: imageZoomFromStyle(style), align: imageAlignFromStyle(style) };
+      return { src: d.getAttribute("data-src") || d.getAttribute("src"), title: d.getAttribute("title"), alt: d.getAttribute("alt"),
+        zoom: imageZoomFromStyle(style), align: imageAlignFromStyle(style), width: imageWidthFromAttrs(d.getAttribute("width"), style) };
     } }],
     toDOM: (n) => {
-      const img: Record<string, string> = { src: resolveImageSrc(n.attrs.src), alt: n.attrs.alt, title: n.attrs.title };
-      const style = imageStyle(n.attrs.zoom, n.attrs.align);
+      const a = n.attrs;
+      const img: Record<string, string> = { src: resolveImageSrc(a.src), alt: a.alt, title: a.title };
+      if (resolveImageSrc(a.src) !== a.src) img["data-src"] = a.src;
+      const style = displayStyle({ src: a.src, alt: a.alt, title: a.title, zoom: a.zoom, align: a.align, width: a.width }, a.html);
       if (style) img.style = style;
-      return ["span", { "md-inline": "image", class: "md-image" }, ["img", img]];
+      if (a.width) img.width = a.width;
+      return ["span", { "md-inline": "image", class: "md-image" + (a.align ? " md-img-align-" + a.align : "") }, ["img", img]];
     },
   },
   inline_math: {

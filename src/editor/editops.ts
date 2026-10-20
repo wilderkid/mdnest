@@ -312,29 +312,34 @@ export function imageSelection(state: EditorState): { pos: number; src: string }
   return null;
 }
 
-export function setImageZoom(percent: number): Cmd {
+function setImageAttrs(attrs: Record<string, unknown>): Cmd {
   return (state, dispatch) => {
     const img = imageSelection(state);
     if (!img) return false;
     if (dispatch) {
       const node = state.doc.nodeAt(img.pos)!;
-      dispatch(state.tr.setNodeMarkup(img.pos, undefined, { ...node.attrs, zoom: String(percent) }));
+      const tr = state.tr.setNodeMarkup(img.pos, undefined, { ...node.attrs, ...attrs });
+      // keep the image selected so the toolbar stays and the next size/align change applies to it
+      tr.setSelection(NodeSelection.create(tr.doc, img.pos));
+      dispatch(tr);
     }
     return true;
   };
 }
+/** Zoom in percent of the natural size (Typora's style="zoom:N%"). 100 or null = original size. */
+export function setImageZoom(percent: number | null): Cmd {
+  return setImageAttrs({ zoom: percent && percent !== 100 ? String(Math.round(percent)) : null, width: null });
+}
+/** Custom width in pixels (width="N"); replaces a zoom. */
+export function setImageWidth(px: number | null): Cmd {
+  return setImageAttrs({ width: px && px > 0 ? String(Math.round(px)) : null, zoom: null });
+}
+/** Restore the original size (drops zoom and width; alignment stays). */
+export function resetImageSize(): Cmd { return setImageAttrs({ zoom: null, width: null }); }
 
 /** `null` clears alignment (Default). Stored as an inline style on the HTML `<img>`. */
 export function setImageAlign(align: "left" | "center" | "right" | null): Cmd {
-  return (state, dispatch) => {
-    const img = imageSelection(state);
-    if (!img) return false;
-    if (dispatch) {
-      const node = state.doc.nodeAt(img.pos)!;
-      dispatch(state.tr.setNodeMarkup(img.pos, undefined, { ...node.attrs, align }));
-    }
-    return true;
-  };
+  return setImageAttrs({ align });
 }
 
 export function deleteImage(): Cmd {

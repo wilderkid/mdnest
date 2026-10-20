@@ -8,7 +8,7 @@ import markPlugin from "markdown-it-mark";
 import { MarkdownParser, MarkdownSerializer, MarkdownSerializerState, defaultMarkdownSerializer } from "prosemirror-markdown";
 import { Node as PMNode } from "prosemirror-model";
 import { schema } from "./schema";
-import { imageAlignFromStyle, imageStyle, imageZoomFromStyle } from "./imagestyle";
+import { imgTag, imgTagAttrs, parseImgTag, sameImg, type ImgAttrs } from "./imagestyle";
 
 function mathPlugin(md: any) {
   // block: $$ ... $$ on their own lines
@@ -116,23 +116,14 @@ function typoraMarks(md: any) {
     state.pos = i + 1;
     return true;
   });
-  // A styled <img> is an image node (zoom and alignment), not literal HTML text.
+  // An <img> tag is an image node (zoom, width and alignment), not literal HTML text. The tag itself is
+  // kept (meta.html) so an untouched image is saved byte for byte.
   md.inline.ruler.before("html_inline", "img_html", (state: any, silent: boolean) => {
-    const m = /^<img\s+([^>]*?)\/?>/i.exec(state.src.slice(state.pos));
+    const m = /^<img\b[^>]*>/i.exec(state.src.slice(state.pos));
     if (!m || state.pos + m[0].length > state.posMax) return false;
-    const attrs = m[1];
-    const src = /src="([^"]*)"/i.exec(attrs)?.[1] ?? "";
-    if (!src) return false;
-    if (!silent) {
-      const t = state.push("image", "img", 0);
-      t.attrSet("src", src);
-      t.attrSet("alt", /alt="([^"]*)"/i.exec(attrs)?.[1] ?? "");
-      const title = /title="([^"]*)"/i.exec(attrs)?.[1];
-      if (title) t.attrSet("title", title);
-      const style = /style="([^"]*)"/i.exec(attrs)?.[1];
-      if (style) t.attrSet("style", style);
-      t.children = [{ type: "text", content: /alt="([^"]*)"/i.exec(attrs)?.[1] ?? "" }];
-    }
+    const a = parseImgTag(m[0]);
+    if (!a) return false;
+    if (!silent) imgToken(state.push("image", "img", 0), a, m[0]);
     state.pos += m[0].length;
     return true;
   });
@@ -152,6 +143,15 @@ function typoraMarks(md: any) {
       return orig(state, silent);
     });
   }
+}
+
+function imgToken(tok: any, a: ImgAttrs, html: string) {
+  tok.attrSet("src", a.src);
+  tok.attrSet("alt", a.alt ?? "");
+  if (a.title) tok.attrSet("title", a.title);
+  tok.children = [{ type: "text", content: a.alt ?? "" }];
+  tok.meta = { ...(tok.meta || {}), html, zoom: a.zoom, align: a.align, width: a.width };
+  return tok;
 }
 
 function typoraExtras(md: any) {
@@ -175,24 +175,16 @@ function typoraExtras(md: any) {
           if (first && first.type === "text") first.content = first.content.replace(/^\[([ xX])\][ \t]/, "");
         }
       }
-      // A styled <img> on its own line is an HTML block. Turn it into an image node so zoom and
+      // An <img> on its own line is an HTML block. Turn it into an image node so zoom, width and
       // alignment round-trip (markdown-it would otherwise keep the tag as raw HTML).
       if (t[i].type === "html_block") {
-        const m = /^<img\s+([^>]*?)\/?>\s*$/i.exec(t[i].content.trim());
-        const src = m && /src="([^"]*)"/i.exec(m[1])?.[1];
-        if (m && src) {
+        const tag = t[i].content.trim();
+        const a = /^<img\b[^>]*>$/i.test(tag) ? parseImgTag(tag) : null;
+        if (a) {
           const open = new state.Token("paragraph_open", "p", 1);
           const inl = new state.Token("inline", "", 0);
-          inl.content = t[i].content.trim();
-          const img = new state.Token("image", "img", 0);
-          img.attrSet("src", src);
-          img.attrSet("alt", /alt="([^"]*)"/i.exec(m[1])?.[1] ?? "");
-          const title = /title="([^"]*)"/i.exec(m[1])?.[1];
-          if (title) img.attrSet("title", title);
-          const style = /style="([^"]*)"/i.exec(m[1])?.[1];
-          if (style) img.attrSet("style", style);
-          img.children = [{ type: "text", content: img.attrGet("alt") || "" }] as any;
-          inl.children = [img];
+          inl.content = tag;
+          inl.children = [imgToken(new state.Token("image", "img", 0), a, tag)];
           const close = new state.Token("paragraph_close", "p", -1);
           t.splice(i, 1, open, inl, close);
           continue;
@@ -324,14 +316,11 @@ export const parser = new MarkdownParser(schema, md, {
   toc: { node: "toc" },
   html_block: { node: "html_block", getAttrs: (tok) => ({ html: tok.content }) },
   hr: { node: "horizontal_rule" },
-  image: { node: "image", getAttrs: (tok) => {
-    const style = tok.attrGet("style") || "";
-    return {
-      src: tok.attrGet("src"), title: tok.attrGet("title") || null, alt: tok.children?.[0]?.content || null,
-      refType: tok.meta?.refType ?? null, ref: tok.meta?.ref ?? null,
-      zoom: imageZoomFromStyle(style), align: imageAlignFromStyle(style),
-    };
-  } },
+  image: { node: "image", getAttrs: (tok) => ({
+    src: tok.attrGet("src"), title: tok.attrGet("title") || null, alt: tok.children?.[0]?.content || null,
+    refType: tok.meta?.refType ?? null, ref: tok.meta?.ref ?? null,
+    zoom: tok.meta?.zoom ?? null, align: tok.meta?.align ?? null, width: tok.meta?.width ?? null, html: tok.meta?.html ?? null,
+  }) },
   html_comment: { mark: "comment", noCloseToken: true },
   sup: { mark: "superscript" },
   sub: { mark: "subscript" },
@@ -427,14 +416,8 @@ export const serializer = new MarkdownSerializer({
   link_def(state, node) { state.text(node.textContent, false); state.closeBlock(node); },
   image(state, node, parent, index) {
     const a = node.attrs;
-    const style = imageStyle(a.zoom, a.align);
-    if (style && !a.refType) {
-      const alt = state.esc(a.alt || "");
-      const src = a.src || "";
-      const title = a.title ? ` title="${String(a.title).replace(/"/g, "&quot;")}"` : "";
-      state.write(`<img src="${src}" alt="${alt}"${title} style="${style}">`);
-      return;
-    }
+    const html = imageHtml(node);
+    if (html) { state.write(html); return; }
     if (!a.refType) return (d.nodes.image as any)(state, node, parent, index);
     state.write("![" + state.esc(a.alt || "") + "]" + (a.refType === "full" ? "[" + a.ref + "]" : a.refType === "collapsed" ? "[]" : ""));
   },
@@ -480,6 +463,22 @@ export const serializer = new MarkdownSerializer({
   md_hprefix: { open: "", close: "" }, // stripped before serializing (headingsrc.ts)
   md_src: { open: "", close: "" }, // never reached: raw regions are collapsed before serializing
 });
+
+/** The <img> tag an image node is saved as, or null when it is a plain ![]() image. */
+export function imageHtml(node: PMNode): string | null {
+  const a = node.attrs;
+  const cur: ImgAttrs = { src: a.src || "", alt: a.alt, title: a.title, zoom: a.zoom, align: a.align, width: a.width };
+  if (a.html) {
+    const orig = parseImgTag(a.html);
+    if (orig && sameImg(orig, cur)) return a.html; // untouched: byte for byte
+    // size and alignment reset and nothing else in the tag: back to plain Markdown
+    const rest = imgTagAttrs(imgTag(cur, a.html)).filter(([k]) => !/^(src|alt|title)$/i.test(k));
+    if (!cur.zoom && !cur.align && !cur.width && !rest.length) return null;
+    return imgTag(cur, a.html);
+  }
+  if (a.refType || (!cur.zoom && !cur.align && !cur.width)) return null;
+  return imgTag(cur);
+}
 
 export function parseMarkdown(src: string): PMNode {
   const doc = parser.parse(src.replace(/\r\n/g, "\n"));

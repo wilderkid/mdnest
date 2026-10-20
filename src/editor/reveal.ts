@@ -2,6 +2,8 @@
 // ancestors .md-focus-container (Typora-theme compatible classes); headings show their "#" prefix
 // and selected images their source. Inline markers are real text — see markers.ts.
 import { Plugin, PluginKey, EditorState, NodeSelection } from "prosemirror-state";
+import { imageHtml } from "./markdown";
+import { quietBlockSelection } from "./blocknav";
 import { Decoration, DecorationSet } from "prosemirror-view";
 
 function meta(text: string, cls: string) {
@@ -26,11 +28,12 @@ export function revealPlugin() {
         }
         if (sel instanceof NodeSelection) {
           const n = sel.node;
-          if (n.type.name === "code_block" || n.type.name === "math_block" || n.type.name === "toc" || n.type.name === "html_block") {
+          // a block selected as a whole (grip / Backspace) stays rendered: no source, no md-focus
+          if (!quietBlockSelection(state) && (n.type.name === "code_block" || n.type.name === "math_block" || n.type.name === "toc" || n.type.name === "html_block")) {
             decos.push(Decoration.node(sel.from, sel.to, { class: "md-focus" }));
           }
           if (n.type.name === "image") {
-            decos.push(Decoration.widget(sel.from, meta(`![${n.attrs.alt ?? ""}](${n.attrs.src})`, "md-before md-content md-image-src-span"), { side: -1 }));
+            decos.push(Decoration.widget(sel.from, meta(imageHtml(n) ?? `![${n.attrs.alt ?? ""}](${n.attrs.src})`, "md-before md-content md-image-src-span"), { side: -1 }));
           }
           return DecorationSet.create(state.doc, decos);
         }

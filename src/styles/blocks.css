@@ -56,3 +56,35 @@ body.shell-b .mdn-saved[data-state="failed"] { background: color-mix(in srgb, va
 body.typora-sourceview-on .mdn-block-handle { display: none; }
 #write .mdn-block-selected *::selection, #write.mdn-has-block-sel .ProseMirror-selectednode *::selection,
 #write.mdn-has-block-sel .ProseMirror-selectednode::selection { background: transparent; }
+
+/* ---------- images: alignment, toolbar, resize handle ---------- */
+#write span.md-image[class*="md-img-align-"] { display: block; }
+#write span.md-image img { max-width: 100%; }
+.mdn-imgbar {
+  position: fixed; z-index: 45; display: flex; align-items: center; gap: 2px; padding: 3px;
+  background: var(--sh-card, #fff); color: var(--sh-fg, #333); border: 1px solid var(--sh-line, #ddd);
+  border-radius: var(--sh-radius-sm, 8px); box-shadow: var(--sh-shadow-pop, 0 6px 20px rgba(0,0,0,.15));
+  font: 12px var(--sh-font, system-ui, sans-serif); user-select: none;
+}
+.mdn-imgbar[hidden] { display: none; }
+.mdn-imgbar button {
+  height: 26px; min-width: 28px; padding: 0 6px; display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+  border: 0; border-radius: 6px; background: transparent; color: inherit; cursor: pointer; font: inherit;
+}
+.mdn-imgbar button:hover:not([disabled]) { background: var(--sh-hover, #f0f0f0); }
+.mdn-imgbar button.on { background: var(--sh-active, #e6f0ee); color: var(--sh-accent-ink, var(--sh-accent, #2f7d6d)); }
+.mdn-imgbar button[disabled] { opacity: .4; cursor: default; }
+.mdn-imgbar .mdn-imgbar-zoom .z { min-width: 36px; text-align: center; font-variant-numeric: tabular-nums; font-weight: 600; }
+.mdn-imgbar-sep { width: 1px; height: 18px; background: var(--sh-line, #ddd); margin: 0 3px; }
+.mdn-img-resize {
+  position: fixed; z-index: 44; width: 12px; height: 12px; border-radius: 3px; cursor: nwse-resize; touch-action: none;
+  background: var(--sh-accent, #2f7d6d); border: 2px solid var(--sh-card, #fff); box-shadow: 0 1px 3px rgba(0,0,0,.25);
+}
+.mdn-img-resize.left { cursor: nesw-resize; }
+.mdn-img-resize[hidden] { display: none; }
+.mdn-img-size-tip { position: fixed; z-index: 46; padding: 3px 8px; border-radius: 6px; background: var(--sh-tip-bg, #1f2330); color: #fff; font: 600 12px var(--sh-font, system-ui); pointer-events: none; }
+.mdn-img-size-tip[hidden] { display: none; }
+body.typora-sourceview-on .mdn-imgbar, body.typora-sourceview-on .mdn-img-resize { display: none; }
+#write span.md-image.ProseMirror-selectednode { outline: none; }
+#write span.md-image.ProseMirror-selectednode img { outline: 2px solid var(--sh-accent, var(--primary-color, #4a7bd0)); outline-offset: 2px; border-radius: 2px; }
+#write .md-image-src-span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }

@@ -208,6 +208,9 @@ export const ZH: Record<string, string> = {
   "Saves 1.5 s after you stop typing, and when you switch files or leave the window. Untitled documents are kept as a recoverable draft.": "停止输入 1.5 秒后、切换文件或离开窗口时自动保存；未命名文档会暂存为可恢复的草稿。",
   // 0.2.2 blocks
   "Select block (then Delete to remove)": "选中整个块（再按 Delete 删除）", "Select block": "选中块",
+  // 0.2.2 images
+  "Open Image Location": "打开图片所在位置", "Delete Image": "删除图片", "Custom Width…": "自定义宽度…", "Original Size": "原始尺寸", "Drag to resize": "拖动调整大小",
+  "Width in pixels, e.g. 320": "宽度（像素），例如 320", "Zoom 25%": "缩放 25%", "Zoom 33%": "缩放 33%", "Zoom 67%": "缩放 67%", "Zoom 75%": "缩放 75%", "Zoom 150%": "缩放 150%",
   // language endonym
   "English": "English",
 };

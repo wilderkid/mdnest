@@ -25,6 +25,7 @@ import { suggestPlugin } from "./suggest";
 import { slashPlugin, slashItems, registerSlashItem } from "./slash";
 import { liveCommandKeymap } from "./plugin-keys";
 import { blockNavPlugin } from "./blocknav";
+import { imageToolsPlugin } from "./imagetools";
 
 export interface EditorHooks {
   onChange: () => void;
@@ -72,7 +73,7 @@ export function createEditor(mount: HTMLElement, markdown: string, hooks: Editor
     liveCommandKeymap(() => hooks.commands?.() ?? []),
     defsPlugin(), defsKeymap(),
     autoPairPlugin(), smartPunctPlugin(), emojiPlugin(), buildInputRules(schema), ...buildKeymaps(schema, hooks.keys), history(), dropCursor(), blockNavPlugin(), gapCursor(),
-    columnResizing(), tableEditing({ allowTableNodeSelection: true }), revealPlugin(), headingSrcPlugin(), tableToolbarPlugin(), searchPlugin(), externalDecorations(hooks),
+    columnResizing(), tableEditing({ allowTableNodeSelection: true }), revealPlugin(), headingSrcPlugin(), tableToolbarPlugin(), imageToolsPlugin(), searchPlugin(), externalDecorations(hooks),
   ];
   const mkState = (md: string) => {
     const doc = parseMarkdown(md);

@@ -40,8 +40,10 @@ import { registerCoreSlash, insertAlert, insertFootnote, insertFrontMatter, inse
 import {
   clearFormat, copyMarkdownText, copyPlainText, decreaseHeading, deleteBlock, deleteImage, deleteSelection,
   imageSelection, increaseHeading, insertParagraphAfter, insertParagraphBefore, jumpBottom, jumpTop,
-  linkAt, selectLine, selectStyledScope, selectWord, selectionHtml, setImageAlign, setImageZoom, setTaskStatus, toggleTaskList,
+  linkAt, resetImageSize, selectLine, selectStyledScope, selectWord, selectionHtml, setImageAlign, setImageZoom, setTaskStatus, toggleTaskList,
 } from "./editor/editops";
+import { promptImageWidth } from "./editor/imagetools";
+import { ZOOM_PRESETS } from "./editor/imagestyle";
 import { pairBracketsOn, pairMarkdownOn, PAIR_BRACKETS_KEY, PAIR_MARKDOWN_KEY } from "./editor/autopair";
 import { smartPunctOn, SMART_PUNCT_KEY } from "./editor/smartpunct";
 import { spellcheckOn, SPELL_KEY, applySpellcheck } from "./editor/spellcheck";
@@ -1123,6 +1125,11 @@ sidebar.setActions({
   notify,
 });
 
+/** caret next to an image → select the image itself (toolbar + the custom width prompt need a NodeSelection) */
+function selectImageNode() {
+  const v = editor.view, img = imageSelection(v.state);
+  if (img && !(v.state.selection instanceof NodeSelection)) v.dispatch(v.state.tr.setSelection(NodeSelection.create(v.state.doc, img.pos)));
+}
 function pmRun(fn: (state: any, dispatch?: any, view?: any) => boolean) {
   const v = editor.view;
   fn(v.state, v.dispatch, v);
@@ -1524,13 +1531,13 @@ const markCmd = (name: string) => () => pmRun(toggleMark(schema.marks[name]));
   { id: "format.comment", title: "Format: Comment", run: () => wrapComment() },
   { id: "format.link", title: "Format: Hyperlink", key: "CmdOrCtrl+K", run: () => promptHyperlink() },
   { id: "format.image", title: "Format: Insert Local Image…", key: "CmdOrCtrl+Shift+I", run: () => insertLocalImage() },
-  { id: "format.image.zoom50", title: "Image: Zoom 50%", when: () => !!imageSelection(editor.view.state), run: () => pmRun(setImageZoom(50)) },
-  { id: "format.image.zoom100", title: "Image: Zoom 100%", when: () => !!imageSelection(editor.view.state), run: () => pmRun(setImageZoom(100)) },
-  { id: "format.image.zoom200", title: "Image: Zoom 200%", when: () => !!imageSelection(editor.view.state), run: () => pmRun(setImageZoom(200)) },
-  { id: "format.image.alignLeft", title: "Image: Align Left", when: () => !!imageSelection(editor.view.state), run: () => pmRun(setImageAlign("left")) },
-  { id: "format.image.alignCenter", title: "Image: Align Center", when: () => !!imageSelection(editor.view.state), run: () => pmRun(setImageAlign("center")) },
-  { id: "format.image.alignRight", title: "Image: Align Right", when: () => !!imageSelection(editor.view.state), run: () => pmRun(setImageAlign("right")) },
-  { id: "format.image.alignDefault", title: "Image: Default", when: () => !!imageSelection(editor.view.state), run: () => pmRun(setImageAlign(null)) },
+  ...ZOOM_PRESETS.map((z) => ({ id: "format.image.zoom" + z, title: `Image: Zoom ${z}%`, when: () => !!imageSelection(editor.view.state), run: () => { selectImageNode(); pmRun(setImageZoom(z)); } })),
+  { id: "format.image.width", title: "Image: Custom Width…", when: () => !!imageSelection(editor.view.state), run: () => { selectImageNode(); void promptImageWidth(editor.view); } },
+  { id: "format.image.reset", title: "Image: Original Size", when: () => !!imageSelection(editor.view.state), run: () => { selectImageNode(); pmRun(resetImageSize()); } },
+  { id: "format.image.alignLeft", title: "Image: Align Left", when: () => !!imageSelection(editor.view.state), run: () => { selectImageNode(); pmRun(setImageAlign("left")); } },
+  { id: "format.image.alignCenter", title: "Image: Align Center", when: () => !!imageSelection(editor.view.state), run: () => { selectImageNode(); pmRun(setImageAlign("center")); } },
+  { id: "format.image.alignRight", title: "Image: Align Right", when: () => !!imageSelection(editor.view.state), run: () => { selectImageNode(); pmRun(setImageAlign("right")); } },
+  { id: "format.image.alignDefault", title: "Image: Default", when: () => !!imageSelection(editor.view.state), run: () => { selectImageNode(); pmRun(setImageAlign(null)); } },
   { id: "format.link.open", title: "Format: Open Link", when: () => !!linkAt(editor.view.state), run: () => { const l = linkAt(editor.view.state); if (l) void openLinkHref(l.href); } },
   { id: "format.link.copy", title: "Format: Copy Link Address", when: () => !!linkAt(editor.view.state), run: () => { const l = linkAt(editor.view.state); if (l) void navigator.clipboard.writeText(l.href).then(() => notify("Copied link")); } },
   { id: "edit.copyCode", title: "Edit: Copy Code Content", when: () => inCodeNow(), run: () => copyCodeNow() },
@@ -1908,14 +1915,24 @@ function editorContextMenu(e: MouseEvent) {
     ]) });
   }
   if (img) {
-    items.push({ id: "image-align", label: "Image", submenu: rows([
-      ["format.image.alignLeft", "Align Left"],
-      ["format.image.alignCenter", "Align Center"],
-      ["format.image.alignRight", "Align Right"],
-      ["format.image.alignDefault", "Default"],
-      ["image.open", "Open Image Location"],
-      ["image.delete", "Delete Image"],
-    ]) });
+    const imgNode = editor.view.state.doc.nodeAt(img.pos);
+    const zoomNow = imgNode?.attrs.width ? null : imgNode?.attrs.zoom ? +imgNode.attrs.zoom : 100;
+    const alignNow = imgNode?.attrs.align ?? null;
+    items.push({ id: "image-align", label: "Image", submenu: [
+      { id: "image-zoom", label: "Zoom", icon: "zoomIn", submenu: [
+        ...ZOOM_PRESETS.map((z) => ({ id: "format.image.zoom" + z, label: z + "%", checked: zoomNow === z })),
+      ] },
+      { id: "format.image.width", label: "Custom Width…", icon: "width" },
+      { id: "format.image.reset", label: "Original Size", icon: "actualSize", disabled: !imgNode?.attrs.zoom && !imgNode?.attrs.width },
+      { id: "-", label: "", sep: true },
+      { id: "format.image.alignLeft", label: "Align Left", icon: "alignLeft", checked: alignNow === "left" || undefined },
+      { id: "format.image.alignCenter", label: "Align Center", icon: "alignCenter", checked: alignNow === "center" || undefined },
+      { id: "format.image.alignRight", label: "Align Right", icon: "alignRight", checked: alignNow === "right" || undefined },
+      { id: "format.image.alignDefault", label: "Default" },
+      { id: "-", label: "", sep: true },
+      { id: "image.open", label: "Open Image Location" },
+      { id: "image.delete", label: "Delete Image" },
+    ] });
   }
   items.push({ id: "edit.selectAll", label: "Select All" });
   const menuSel = editor.view.state.selection;
