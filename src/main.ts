@@ -1,5 +1,5 @@
 import { blockPosForLine } from "./editor/lines";
-import { TextSelection } from "prosemirror-state";
+import { NodeSelection, Selection, TextSelection } from "prosemirror-state";
 import { Decoration, DecorationSet } from "prosemirror-view";
 import "codemirror/lib/codemirror.css";
 import "prosemirror-view/style/prosemirror.css";
@@ -1679,14 +1679,55 @@ function decorate(items: ContextItem[]): ContextItem[] {
 function rows(pairs: [string, string][]): ContextItem[] {
   return pairs.map(([id, label]) => ({ id, label }));
 }
+// The selection the user had when the right button went down. ProseMirror (and the old menu code)
+// collapsed it to the click point, so Format/Paragraph items from the menu ran on an empty caret
+// and did nothing; keyboard shortcuts kept the selection and worked.
+let rightDownSel: Selection | null = null;
+editor.view.dom.addEventListener("mousedown", (e) => { if (e.button === 2) rightDownSel = editor.view.state.selection; }, true);
+/** Selection to use for a right-click at `hit`: keep a range/node selection the click falls inside. */
+function contextSelection(e: MouseEvent, hit: { pos: number; inside: number } | null): Selection | null {
+  const v = editor.view, doc = v.state.doc;
+  const prev = rightDownSel && rightDownSel.$anchor.doc === doc ? rightDownSel : v.state.selection;
+  rightDownSel = null;
+  const img = (e.target as HTMLElement).closest("img");
+  if (img && v.dom.contains(img)) {
+    const pos = v.posAtDOM(img, 0);
+    for (const p of [pos, pos - 1]) { if (p >= 0 && doc.nodeAt(p)?.type.name === "image") return NodeSelection.create(doc, p); }
+  }
+  if (!hit) return prev;
+  if (!prev.empty && hit.pos >= prev.from && hit.pos <= prev.to) return prev;
+  if (prev instanceof NodeSelection && hit.inside === prev.from) return prev;
+  return TextSelection.create(doc, hit.pos);
+}
+const CTX_MARKS = new Set(["format.strong", "format.emphasis", "format.underline", "format.code", "format.strike", "format.highlight"]);
+/** Context-menu Paste: execCommand("paste") is blocked in browsers and WebView2, so read the clipboard and feed ProseMirror's paste pipeline. */
+async function contextPaste() {
+  const v = editor.view;
+  v.focus();
+  try { if (document.execCommand("paste")) return; } catch { /* blocked */ }
+  try {
+    const items = await navigator.clipboard.read();
+    for (const it of items) {
+      const imgType = it.types.find((x) => x.startsWith("image/"));
+      if (imgType) {
+        const blob = await it.getType(imgType);
+        const file = new File([blob], "image." + (imgType.split("/")[1] || "png"), { type: imgType });
+        insertImageFiles(v, host, state.path, [file], v.state.selection.from, notify);
+        return;
+      }
+      if (it.types.includes("text/html")) { v.pasteHTML(await (await it.getType("text/html")).text()); return; }
+      if (it.types.includes("text/plain")) { v.pasteText(await (await it.getType("text/plain")).text()); return; }
+    }
+  } catch { /* fall back to plain text */ }
+  try { const text = await navigator.clipboard.readText(); if (text) { v.pasteText(text); return; } } catch { /* denied */ }
+  notify("Clipboard is empty");
+}
 function editorContextMenu(e: MouseEvent) {
   const t = e.target as HTMLElement;
   if (!t.closest("#write")) return;
   const hit = editor.view.posAtCoords({ left: e.clientX, top: e.clientY });
-  if (hit) {
-    const sel = TextSelection.create(editor.view.state.doc, hit.pos);
-    if (!sel.eq(editor.view.state.selection)) editor.view.dispatch(editor.view.state.tr.setSelection(sel));
-  }
+  const want = contextSelection(e, hit);
+  if (want && !want.eq(editor.view.state.selection)) editor.view.dispatch(editor.view.state.tr.setSelection(want));
   const st = editor.view.state;
   const link = linkAt(st);
   const img = imageSelection(st);
@@ -1748,10 +1789,18 @@ function editorContextMenu(e: MouseEvent) {
     ]) });
   }
   items.push({ id: "edit.selectAll", label: "Select All" });
+  const menuSel = editor.view.state.selection;
   openContextMenu(e.clientX, e.clientY, decorate(items), (id) => {
+    // The click on the menu took focus away from the editor: give it back, with the selection the
+    // menu was opened on, before running anything (formatting, cut/copy, block commands).
+    const v = editor.view;
+    v.focus();
+    if (menuSel.$anchor.doc === v.state.doc && !menuSel.eq(v.state.selection)) v.dispatch(v.state.tr.setSelection(menuSel));
+    // Typora: a format command on a bare caret applies to the word under it
+    if (CTX_MARKS.has(id) && v.state.selection.empty) pmRun(selectWord());
     if (id === "cut") document.execCommand("cut");
     else if (id === "copy") document.execCommand("copy");
-    else if (id === "paste") document.execCommand("paste");
+    else if (id === "paste") void contextPaste();
     else if (id === "format.link.open" && link) void openLinkHref(link.href);
     else if (id === "format.link.copy" && link) void navigator.clipboard.writeText(link.href).then(() => notify("Copied link"));
     else if (id === "image.open" && img) window.open(img.src, "_blank");
