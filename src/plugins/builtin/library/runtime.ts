@@ -38,7 +38,7 @@ const set = (p: Partial<Status>) => { Object.assign(status, p); changed(); };
 const serial = (fn: () => Promise<void>) => (queue = queue.then(fn, fn));
 
 export async function start() {
-  if (!ctx.workspace.root()) { set({ phase: "idle", message: "Open a folder to build its library." }); return; }
+  if (!ctx.workspace.root()) { set({ phase: "idle", message: tr("Open a folder to build its library.") }); return; }
   unwatch?.(); unwatch = null;
   unmention ??= ai.registerMention({ trigger: "@library", title: "Library", resolve: (q, signal) => resolveMention(q, signal) });
   try { unwatch = await ctx.index.watch((paths) => { void serial(() => runScan(paths)); }); } catch { /* browser host without watch */ }
@@ -62,10 +62,10 @@ export async function reindex(full: boolean) {
 /** scan (optionally only some paths), then embed pending chunks in batches */
 export async function runScan(paths?: string[]) {
   if (ctx.settings.get("enabled") !== true || !ctx.workspace.root()) return;
-  set({ phase: "scanning", message: paths ? `Updating ${paths.length} file(s)…` : "Scanning folder…" });
+  set({ phase: "scanning", message: paths ? tr("Updating {n} file(s)…", { n: paths.length }) : tr("Scanning folder…") });
   try {
     const rep = await ctx.index.call("scan", { exclude: excludes(), ...(paths ? { paths } : {}) });
-    set({ message: `${rep.changedFiles} changed · +${rep.addedChunks} −${rep.removedChunks} chunks` });
+    set({ message: tr("{n} changed · +{a} −{r} chunks", { n: rep.changedFiles, a: rep.addedChunks, r: rep.removedChunks }) });
     await embedPending();
   } catch (e: any) {
     set({ phase: "error", message: String(e?.message ?? e) });
@@ -73,7 +73,7 @@ export async function runScan(paths?: string[]) {
 }
 
 export async function embedPending(batch = 32) {
-  if (!vectorsWanted()) { set({ phase: "idle", vectors: false, message: status.message || "Keyword search only (no embeddings)" }); return; }
+  if (!vectorsWanted()) { set({ phase: "idle", vectors: false, message: status.message || tr("Keyword search only (no embeddings)") }); return; }
   const { model } = ai.embedInfo();
   const ac = new AbortController(); job = ac;
   const st0 = await ctx.index.call<Stats>("stats");
@@ -83,7 +83,7 @@ export async function embedPending(batch = 32) {
   set({ phase: "embedding", done, total, vectors: true });
   try {
     for (;;) {
-      if (ac.signal.aborted) { set({ phase: "paused", message: "Paused" }); return; }
+      if (ac.signal.aborted) { set({ phase: "paused", message: tr("Paused") }); return; }
       const pending = await ctx.index.call<{ id: number; input: string }[]>("pending", { limit: batch });
       if (!pending.length) break;
       const pre = taskPrefix(model, "doc");
@@ -92,10 +92,10 @@ export async function embedPending(batch = 32) {
       done += pending.length;
       set({ done, total: Math.max(total, done) });
     }
-    set({ phase: "idle", message: `Indexed · ${done} new vector${done === 1 ? "" : "s"}` });
+    set({ phase: "idle", message: done === 1 ? tr("Indexed · 1 new vector") : tr("Indexed · {n} new vectors", { n: done }) });
   } catch (e: any) {
-    if (ac.signal.aborted) { set({ phase: "paused", message: "Paused" }); return; }
-    set({ phase: "error", vectors: false, message: "Embeddings unavailable: " + String(e?.message ?? e) + " — keyword search still works" });
+    if (ac.signal.aborted) { set({ phase: "paused", message: tr("Paused") }); return; }
+    set({ phase: "error", vectors: false, message: tr("Embeddings unavailable: {e} — keyword search still works", { e: String(e?.message ?? e) }) });
   } finally { if (job === ac) job = null; }
 }
 

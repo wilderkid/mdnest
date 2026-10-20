@@ -84,6 +84,13 @@ export const ZH: Record<string, string> = {
   "Drop an image into the editor to copy it next to the document.": "把图片拖进编辑器，会自动复制到文档旁的文件夹。",
   "Ctrl+Shift+F searches every file in the folder.": "Ctrl+Shift+F 在整个文件夹中搜索。",
 
+  // library status
+  Paused: "已暂停",
+  "Open a folder to build its library.": "打开文件夹以建立知识库。", "Updating {n} file(s)…": "正在更新 {n} 个文件…", "Scanning folder…": "正在扫描文件夹…",
+  "{n} changed · +{a} −{r} chunks": "{n} 个文件变更 · +{a} −{r} 段", "Keyword search only (no embeddings)": "仅关键词搜索（无向量）",
+  "Indexed · 1 new vector": "已索引 · 新增 1 个向量", "Indexed · {n} new vectors": "已索引 · 新增 {n} 个向量",
+  "Embeddings unavailable: {e} — keyword search still works": "向量服务不可用：{e} — 关键词搜索仍可用",
+
   // settings
   Editor: "编辑器", Images: "图片", "Files & Encoding": "文件与编码", Appearance: "外观", "Search settings…": "搜索设置…",
   "Autosave (1.5 s after edits)": "自动保存（编辑停止 1.5 秒后）", "Reopen last file on startup": "启动时打开上次的文件",
