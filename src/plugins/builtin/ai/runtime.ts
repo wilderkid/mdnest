@@ -5,6 +5,7 @@ import {
   actionInstruction, stripFence, systemPrompt, userPrompt,
 } from "./prompts";
 import type { AiProvider, ChatMessage } from "./provider";
+import { tError } from "../../../i18n";
 
 export function mountChat(el: HTMLElement, ctx: PluginContext, provider: AiProvider): () => void {
   // Second dynamic import so the chat UI is its own chunk, fetched only when the panel paints.
@@ -136,7 +137,7 @@ function startStream(ctx: PluginContext, provider: AiProvider, job: Job) {
       handle.finish();
     } catch (e: any) {
       if (ac.signal.aborted) return;
-      handle.fail(String(e?.message ?? e));
+      handle.fail(tError(String(e?.message ?? e)));
     }
   })();
   return { abort: () => ac.abort() };

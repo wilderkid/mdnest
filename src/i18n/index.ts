@@ -88,3 +88,32 @@ export function wordsLabel(n: number): string {
 export function minutesLabel(n: number): string {
   return LANG === "zh-CN" ? `约 ${n} 分钟` : `~${n} min`;
 }
+
+/** Error texts from providers/the host are built in English; show them translated (patterns keep the details). */
+const ERROR_PATTERNS: [RegExp, string][] = [
+  [/^API key rejected$/, "API 密钥被拒绝"],
+  [/^model or URL not found$/, "找不到模型或地址"],
+  [/^cannot reach (.+)$/, "无法连接 $1"],
+  [/^HTTP (\d+): (.*)$/, "HTTP $1：$2"],
+  [/^request failed$/, "请求失败"],
+  [/^cancelled$/, "已取消"],
+  [/^AI is disabled$/, "AI 已关闭"],
+  [/^local-only mode refuses (.+)$/, "仅本地模式拒绝连接 $1"],
+  [/^no embedding endpoint configured.*$/, "未配置向量（Embeddings）服务（设置 → AI → Embeddings）"],
+  [/^embedding endpoint returned no JSON$/, "向量服务没有返回 JSON"],
+  [/^Daily AI limit reached \((\d+) requests\)\..*$/, "已达到每日 AI 上限（$1 次请求），可在 设置 → AI 中修改。"],
+  [/^Daily AI limit reached \((\d+) tokens\)\..*$/, "已达到每日 AI 上限（$1 个 token），可在 设置 → AI 中修改。"],
+  [/^(?:TypeError: )?Failed to fetch$/, "网络请求失败"],
+  [/^missing$/, "文件不存在"],
+  [/^(.+): the file is open in another program$/, "$1：文件正被其他程序占用"],
+  [/^(.+): access denied$/, "$1：拒绝访问"],
+  [/^(.+): invalid path$/, "$1：路径无效"],
+  [/^(.+): could not move to the Recycle Bin \((.+)\)$/, "$1：无法移到回收站（$2）"],
+];
+export function tError(msg: string): string {
+  if (LANG !== "zh-CN") return msg;
+  const m = msg.trim();
+  if (ZH[m]) return ZH[m];
+  for (const [re, zh] of ERROR_PATTERNS) if (re.test(m)) return m.replace(re, zh);
+  return m;
+}

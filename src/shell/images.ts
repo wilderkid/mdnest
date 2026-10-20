@@ -5,6 +5,7 @@ import { EditorView } from "prosemirror-view";
 import type { Host } from "../host/types";
 import { schema } from "../editor/schema";
 import type { Node as PMNode } from "prosemirror-model";
+import { t } from "../i18n";
 
 export const IMAGE_FOLDER_KEY = "mdnest.imageFolder";
 export const imageFolderPattern = () => localStorage.getItem(IMAGE_FOLDER_KEY) || "./assets";
@@ -102,7 +103,7 @@ export async function insertImageFiles(view: EditorView, host: Host, docPath: st
       const name = final.replace(/^.*[\\/]/, "");
       const src = (relClean ? relClean + "/" : "") + name;
       nodes.push(schema.nodes.image.create({ src: src.split("/").map(encodeURIComponent).join("/"), alt: base }));
-    } catch (e: any) { notify("Image save failed: " + (e.message ?? e)); }
+    } catch (e: any) { notify(t("Image save failed: {error}", { error: String(e.message ?? e) })); }
   }
   if (!nodes.length) return true;
   let tr = view.state.tr;
@@ -112,6 +113,6 @@ export async function insertImageFiles(view: EditorView, host: Host, docPath: st
   if ($at.parent.inlineContent) tr = tr.insert(at, nodes);
   else tr = tr.insert(at, schema.nodes.paragraph.create(null, nodes));
   view.dispatch(tr.scrollIntoView()); view.focus();
-  notify(`Inserted ${nodes.length} image${nodes.length > 1 ? "s" : ""} → ${relClean || "."}/`);
+  notify(t(nodes.length > 1 ? "Inserted {n} images → {dir}/" : "Inserted {n} image → {dir}/", { n: nodes.length, dir: relClean || "." }));
   return true;
 }

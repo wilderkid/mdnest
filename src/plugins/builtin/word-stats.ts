@@ -55,7 +55,7 @@ const plugin: EditorPlugin = {
     };
     ctx.ui.registerSidebarPanel({ id: "word-stats", title: "Writing Stats", icon: "stats", render: (el) => { panelEl = el; paint(); return () => (panelEl = null); } });
     ctx.events.on("doc-changed", paint);
-    ctx.commands.add({ id: "show", title: "Word Stats: Show counts", run: () => { const s = stats(); ctx.ui.notify(`${s.words} words · ${s.chars} chars · ~${s.minutes} min read`); } });
+    ctx.commands.add({ id: "show", title: "Word Stats: Show counts", run: () => { const s = stats(); ctx.ui.notify(t("{words} words · {chars} chars · ~{minutes} min read", { words: s.words, chars: s.chars, minutes: s.minutes })); } });
     ctx.commands.add({ id: "toggle-long", title: "Word Stats: Toggle long-sentence highlighting", run: () => { ctx.settings.set("highlightLong", !ctx.settings.get("highlightLong")); ctx.editor.refresh(); } });
     ctx.editor.registerDecorations((state) => {
       if (!ctx.settings.get("highlightLong")) return null;

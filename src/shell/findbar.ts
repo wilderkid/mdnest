@@ -1,6 +1,7 @@
 // Find / replace bar (Ctrl+F / Ctrl+H) driving either the WYSIWYG searcher or the source-mode one.
 import type CodeMirror from "codemirror";
 import { EditorSearch, SearchQuery, buildRegex } from "../editor/search";
+import { t } from "../i18n";
 
 interface Searcher {
   set(q: SearchQuery): { count: number; current: number };
@@ -59,10 +60,10 @@ export class FindBar {
   private opts = { caseSensitive: false, regex: false };
   constructor(private pick: () => Searcher, private notify: (m: string) => void) {
     this.el = document.createElement("div"); this.el.id = "mdn-find"; this.el.className = "mdn-findbar"; this.el.style.display = "none";
-    this.el.innerHTML = `<div class="fb-row"><input class="fb-find" placeholder="Find" spellcheck="false"><span class="fb-count">0/0</span>
-      <button class="fb-opt" data-opt="caseSensitive" title="Match case">Aa</button><button class="fb-opt" data-opt="regex" title="Regular expression">.*</button>
-      <button data-act="prev" title="Previous (Shift+Enter)">↑</button><button data-act="next" title="Next (Enter)">↓</button><button data-act="close" title="Close (Esc)">✕</button></div>
-      <div class="fb-row fb-replace-row"><input class="fb-repl" placeholder="Replace" spellcheck="false"><button data-act="replace">Replace</button><button data-act="all">All</button></div>`;
+    this.el.innerHTML = `<div class="fb-row"><input class="fb-find" placeholder="${t("Find")}" spellcheck="false"><span class="fb-count">0/0</span>
+      <button class="fb-opt" data-opt="caseSensitive" title="${t("Match case")}">Aa</button><button class="fb-opt" data-opt="regex" title="${t("Regular expression")}">.*</button>
+      <button data-act="prev" title="${t("Previous (Shift+Enter)")}">↑</button><button data-act="next" title="${t("Next (Enter)")}">↓</button><button data-act="close" title="${t("Close (Esc)")}">✕</button></div>
+      <div class="fb-row fb-replace-row"><input class="fb-repl" placeholder="${t("Replace")}" spellcheck="false"><button data-act="replace">${t("Replace")}</button><button data-act="all">${t("Replace All")}</button></div>`;
     document.body.appendChild(this.el);
     this.find = this.el.querySelector(".fb-find")!; this.repl = this.el.querySelector(".fb-repl")!; this.count = this.el.querySelector(".fb-count")!;
     this.find.addEventListener("input", () => this.update());
@@ -76,7 +77,7 @@ export class FindBar {
       switch (b.dataset.act) {
         case "prev": this.show(s.go(-1)); break; case "next": this.show(s.go(1)); break; case "close": this.close(); break;
         case "replace": this.show(s.replace(this.repl.value)); break;
-        case "all": { const r = s.replaceAll(this.repl.value); this.show(r); this.notify(`Replaced ${r.replaced ?? 0} occurrence(s)`); break; }
+        case "all": { const r = s.replaceAll(this.repl.value); this.show(r); this.notify(t("Replaced {n} occurrence(s)", { n: r.replaced ?? 0 })); break; }
       }
     });
   }

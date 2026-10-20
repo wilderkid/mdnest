@@ -49,6 +49,15 @@
           "libssl3 | libssl3t64"
         ]
       }
+    },
+    "windows": {
+      "nsis": {
+        "languages": [
+          "SimpChinese",
+          "English"
+        ],
+        "displayLanguageSelector": false
+      }
     }
   },
   "mainBinaryName": "mdnest"

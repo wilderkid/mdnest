@@ -4,7 +4,8 @@ import { docSnippet } from "./context";
 import type { AiProvider, ChatMessage } from "./provider";
 import { citeSegments, findMentions, LIBRARY_RULES, mentions, sourcesBlock, type Source } from "./mentions";
 import "./ai.css";
-import { t } from "../../../i18n";
+import { t, tError } from "../../../i18n";
+const PRESET_NAMES: Record<string, string> = { relay: "Relay (Grok)", openai: "OpenAI", ollama: "Ollama (local)", custom: "Custom" };
 import { icon } from "../../../shell/icons";
 
 interface Turn { role: "user" | "assistant"; content: string; sources?: Source[] }
@@ -91,7 +92,7 @@ export function mountChat(el: HTMLElement, ctx: PluginContext, provider: AiProvi
     const dot = document.createElement("span");
     dot.className = "mdn-ai-dot" + (info.enabled ? " ok" : "");
     const label = document.createElement("span");
-    label.textContent = info.enabled ? `${info.preset} · ${info.model || t("no model")}` : t("AI is off");
+    label.textContent = info.enabled ? `${t(PRESET_NAMES[info.preset] ?? info.preset)} · ${info.model || t("no model")}` : t("AI is off");
     status.append(dot, label);
     status.title = label.textContent;
     usageEl.textContent = info.enabled ? provider.usageSummary() : "";
@@ -212,7 +213,7 @@ export function mountChat(el: HTMLElement, ctx: PluginContext, provider: AiProvi
       }
     } catch (e: any) {
       if (!ac.signal.aborted) {
-        assistant.content = assistant.content || String(e?.message ?? e);
+        assistant.content = assistant.content || tError(String(e?.message ?? e));
         if (!assistant.content) assistant.content = "request failed";
         paint();
       } else if (!assistant.content) {
@@ -266,7 +267,7 @@ function button(label: string, fn: () => void, ic = "", cls = ""): HTMLButtonEle
   if (cls) b.className = cls;
   if (ic) b.innerHTML = icon(ic, 14, 1.8);
   const span = document.createElement("span");
-  span.textContent = label;
+  span.textContent = t(label);
   span.className = cls ? "sr-label" : "btn-label";
   b.appendChild(span);
   b.title = t(label);

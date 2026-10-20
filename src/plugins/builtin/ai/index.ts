@@ -68,7 +68,7 @@ const plugin: EditorPlugin = {
       if (key !== "enabled" || value !== true) return true;
       if (ctx.settings.get(ACK_KEY) === true) return true;
       // confirm() is synchronous, so the settings control can revert in the same turn.
-      const ok = window.confirm(PRIVACY_NOTE + "\n\nEnable AI?");
+      const ok = window.confirm(t(PRIVACY_NOTE) + "\n\n" + t("Enable AI?"));
       if (ok) ctx.settings.set(ACK_KEY, true);
       else ctx.ui.notify("AI stays off");
       return ok;
@@ -258,7 +258,7 @@ const ACK_KEY = "privacyAck";
 
 export function confirmEnable(ctx: PluginContext): boolean {
   if (ctx.settings.get(ACK_KEY) === true) return true;
-  const ok = window.confirm(PRIVACY_NOTE + "\n\nEnable AI?");
+  const ok = window.confirm(t(PRIVACY_NOTE) + "\n\n" + t("Enable AI?"));
   if (ok) ctx.settings.set(ACK_KEY, true);
   return ok;
 }

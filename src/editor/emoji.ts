@@ -5,6 +5,7 @@
 import { Plugin, PluginKey, EditorState, TextSelection } from "prosemirror-state";
 import { EditorView } from "prosemirror-view";
 import { EMOJI } from "./emoji-data";
+import { t } from "../i18n";
 
 export const EMOJI_KEY = "mdnest.emoji";
 
@@ -193,7 +194,7 @@ export function openEmojiPicker(view: EditorView): void {
   box.className = "md-emoji-picker";
   const search = document.createElement("input");
   search.type = "text";
-  search.placeholder = "Search emoji";
+  search.placeholder = t("Search emoji");
   search.setAttribute("spellcheck", "false");
   const grid = document.createElement("div");
   grid.className = "md-emoji-grid";

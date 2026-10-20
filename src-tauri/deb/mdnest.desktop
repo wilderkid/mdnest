@@ -2,7 +2,9 @@
 Type=Application
 Name=MD Nest
 GenericName=Markdown Editor
+GenericName[zh_CN]=Markdown 编辑器
 Comment={{comment}}
+Comment[zh_CN]=所见即所得的 Markdown 编辑器，兼容 Typora 主题
 Exec={{exec}} %F
 StartupWMClass={{exec}}
 Icon={{icon}}

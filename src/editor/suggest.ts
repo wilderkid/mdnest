@@ -5,6 +5,7 @@ import { Decoration, DecorationSet, EditorView } from "prosemirror-view";
 import { undo, closeHistory } from "prosemirror-history";
 import { selectionMarkdown, sliceForInsert, normalizeRange, sameTextblock, plainBetween } from "./insertmd";
 import { chooseView, parseProposal, plainOf, renderProposal } from "./sugview";
+import { t } from "../i18n";
 
 export type SugResult = "accepted" | "rejected" | "invalidated";
 export type SugPhase = "running" | "ready" | "error";
@@ -191,7 +192,7 @@ function span(cls: string, text: string) {
 function button(label: string, fn: () => void) {
   const b = document.createElement("button");
   b.type = "button";
-  b.textContent = label;
+  b.textContent = t(label);
   b.onmousedown = (e) => { e.preventDefault(); fn(); };
   return b;
 }

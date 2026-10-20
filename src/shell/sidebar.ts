@@ -697,7 +697,7 @@ export class Sidebar {
 
   private renderEmptyTree() {
     if (this.root) return;
-    this.tree.innerHTML = `<div class="sb-empty-state">${icon("folderOpen", 28, 1.4)}<p>${t("No folder open")}</p><button type="button" class="sb-btn" data-act="open-folder" title="Open Folder…">${t("Open Folder…")}</button></div>`;
+    this.tree.innerHTML = `<div class="sb-empty-state">${icon("folderOpen", 28, 1.4)}<p>${t("No folder open")}</p><button type="button" class="sb-btn" data-act="open-folder" title="${t("Open Folder…")}">${t("Open Folder…")}</button></div>`;
     this.tree.querySelector<HTMLButtonElement>("button")!.onclick = () => void this.actions?.openFolder();
   }
 

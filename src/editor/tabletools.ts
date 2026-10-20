@@ -4,6 +4,7 @@ import { EditorView } from "prosemirror-view";
 import { addRowBefore, addRowAfter, deleteRow, addColumnBefore, addColumnAfter, deleteColumn, deleteTable, isInTable, selectedRect, moveTableRow, moveTableColumn } from "prosemirror-tables";
 import { schema } from "./schema";
 import { serializeMarkdown } from "./markdown";
+import { t } from "../i18n";
 
 export function setColumnAlign(align: "left" | "center" | "right" | null) {
   return (state: EditorState, dispatch?: (tr: any) => void) => {
@@ -111,11 +112,11 @@ export function tableToolbarPlugin() {
     view(view: EditorView) {
       const bar = document.createElement("div");
       bar.id = "mdn-table-tools"; bar.className = "md-table-edit mdn-toolbar"; bar.style.display = "none";
-      bar.innerHTML = BUTTONS.map(([id, label, title]) => `<button data-cmd="${id}" title="${title}">${label}</button>`).join("");
+      bar.innerHTML = BUTTONS.map(([id, label, title]) => `<button data-cmd="${id}" title="${t(title)}">${t(label)}</button>`).join("");
       const more = document.createElement("div");
       more.className = "context-menu dropdown-menu mdn-table-more";
       more.hidden = true;
-      more.innerHTML = MORE.map(([id, label]) => `<button type="button" class="mdn-menu-item" data-cmd="${id}">${label}</button>`).join("");
+      more.innerHTML = MORE.map(([id, label]) => `<button type="button" class="mdn-menu-item" data-cmd="${id}">${t(label)}</button>`).join("");
       bar.appendChild(more);
       const run = (id: string) => {
         if (id === "more") {

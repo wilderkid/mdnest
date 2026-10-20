@@ -15,7 +15,7 @@ import { ThemeManager, displayName, applyShellStyle, applyShellColors, shellStyl
 import { openPalette } from "./shell/palette";
 import { PluginManager, Command, SettingSpec, DecorationProvider, cancelPendingSuggestions } from "./plugins/api";
 import { escapeHtml } from "./editor/render";
-import { t, lang, wordsLabel, minutesLabel, tTitle, langSetting, saveLangSetting, type LangSetting } from "./i18n";
+import { t, tError, lang, wordsLabel, minutesLabel, tTitle, langSetting, saveLangSetting, type LangSetting } from "./i18n";
 import { icon } from "./shell/icons";
 import type { FilePreview } from "./host/types";
 import { openPrompt } from "./editor/prompt";
@@ -314,14 +314,14 @@ function confirmDirty(action: string): Promise<GuardChoice> {
   return new Promise((resolve) => {
     const back = document.createElement("div");
     back.className = "modal-backdrop";
-    const name = state.path ? state.path.split(/[\\/]/).pop() : "Untitled";
+    const name = state.path ? state.path.split(/[\\/]/).pop() : t("Untitled");
     back.innerHTML = `<div class="modal" role="dialog" aria-modal="true">
-      <h3>Save changes?</h3>
-      <p>${escapeHtml(name!)} has unsaved changes. Save before ${escapeHtml(action)}?</p>
+      <h3>${escapeHtml(t("Save changes?"))}</h3>
+      <p>${escapeHtml(t("{name} has unsaved changes. Save before {action}?", { name: name!, action: t(action) }))}</p>
       <div class="modal-actions">
-        <button type="button" class="btn" data-c="cancel">Cancel</button>
-        <button type="button" class="btn" data-c="discard">Don't Save</button>
-        <button type="button" class="btn btn-primary" data-c="save">Save</button>
+        <button type="button" class="btn" data-c="cancel">${escapeHtml(t("Cancel"))}</button>
+        <button type="button" class="btn" data-c="discard">${escapeHtml(t("Don't Save"))}</button>
+        <button type="button" class="btn btn-primary" data-c="save">${escapeHtml(t("Save"))}</button>
       </div>
     </div>`;
     document.body.appendChild(back);
@@ -417,7 +417,7 @@ async function openFile(path: string, encoding?: string) {
     const enc = (encoding ?? opened.encoding) as SaveEncoding;
     const text = encoding ? decodeAs(bytes, encoding) : opened.text;
     await loadOpened(path, text, enc, opened.eol);
-  } catch (e: any) { notify("Open failed: " + (e.message ?? e)); }
+  } catch (e: any) { notify(t("Open failed: {error}", { error: String(e.message ?? e) })); }
 }
 /** Open a file and reveal the top-level block at a 1-based source line, briefly highlighted. */
 async function openAt(path: string, line?: number) {
@@ -474,9 +474,9 @@ async function save(as: boolean) {
     const first = state.path !== p; state.path = p; state.lastSaved = md; setDirty(false); setTitle();
     state.mtime = await host.mtime(p).catch(() => null); state.conflict = false;
     if (first) { setImageBase(host.fileUrl(p.replace(/[\\/][^\\/]*$/, "") + "/")); addRecent(p); }
-    if (!quietSave) notify("Saved " + p); plugins.emit("file-saved", p);
+    if (!quietSave) notify(t("Saved {path}", { path: p })); plugins.emit("file-saved", p);
   }
-  catch (e: any) { notify("Save failed: " + (e.message ?? e)); }
+  catch (e: any) { notify(t("Save failed: {error}", { error: String(e.message ?? e) })); }
 }
 
 // ---------- autosave, recent files, file watching ----------
@@ -508,13 +508,13 @@ function setSaveEncoding(enc: SaveEncoding) {
   setDirty(true);
   paintEncoding();
   scheduleMenu();
-  notify("Save encoding: " + (enc === "UTF-8-BOM" ? "UTF-8 with BOM" : enc));
+  notify(t("Save encoding: {encoding}", { encoding: enc === "UTF-8-BOM" ? t("UTF-8 with BOM") : enc }));
 }
 async function reopenWith(enc: string) {
   if (!state.path) { notify("No file to reopen"); return; }
   if (state.dirty && !(await guard("reopening with another encoding"))) return;
   await openFile(state.path, enc);
-  notify("Reopened as " + enc);
+  notify(t("Reopened as {encoding}", { encoding: enc }));
 }
 async function reloadFromDisk(force = false) {
   if (!state.path) return;
@@ -553,7 +553,7 @@ async function exportHtml(out?: string, styles = true) {
   const p = out ?? (await host.pickSavePath(docStem() + ".html", "html")); if (!p) return;
   notify("Exporting HTML…");
   const html = await exportHtmlString(false, styles);
-  await host.writeFile(p, html); notify("Exported " + p); return p;
+  await host.writeFile(p, html); notify(t("Exported {path}", { path: p })); return p;
 }
 async function exportDocx(out?: string) {
   if (source.active) editor.setMarkdown(source.value());
@@ -569,7 +569,7 @@ async function exportDocx(out?: string) {
     readBytes: (src) => readImageBytes(host, src),
   });
   await host.writeFileBytes(p, bytesToBase64(bytes));
-  notify("Exported " + p);
+  notify(t("Exported {path}", { path: p }));
   return p;
 }
 
@@ -592,12 +592,12 @@ function pandocMissingModal(): Promise<"recheck" | "close"> {
     back.className = "modal-backdrop";
     back.id = "pandoc-missing";
     back.innerHTML = `<div class="modal" role="dialog" aria-modal="true">
-      <h3>Pandoc not found</h3>
-      <p>These formats need Pandoc. Built-in Word, HTML, and PDF still work.</p>
+      <h3>${escapeHtml(t("Pandoc not found"))}</h3>
+      <p>${escapeHtml(t("These formats need Pandoc. Built-in Word, HTML, and PDF still work."))}</p>
       <div class="modal-actions">
-        <button type="button" class="btn" data-c="install">Install Pandoc</button>
-        <button type="button" class="btn" data-c="recheck">Re-check</button>
-        <button type="button" class="btn btn-primary" data-c="close">Close</button>
+        <button type="button" class="btn" data-c="install">${escapeHtml(t("Install Pandoc"))}</button>
+        <button type="button" class="btn" data-c="recheck">${escapeHtml(t("Re-check"))}</button>
+        <button type="button" class="btn btn-primary" data-c="close">${escapeHtml(t("Close"))}</button>
       </div></div>`;
     document.body.appendChild(back);
     const done = (v: "recheck" | "close") => { back.remove(); resolve(v); };
@@ -628,12 +628,12 @@ async function exportPandoc(writer: string, ext: string, out?: string) {
   notify("Exporting with Pandoc…");
   try {
     await host.pandocExport(currentMarkdown(), writer, p, docDir());
-    notify("Exported " + p);
+    notify(t("Exported {path}", { path: p }));
     return p;
   } catch (e: any) {
     const msg = String(e?.message ?? e);
     if (/not found/i.test(msg)) { pandocFound = false; scheduleMenu(); await pandocMissingModal(); return; }
-    notify("Pandoc export failed: " + msg);
+    notify(t("Pandoc export failed: {error}", { error: String(msg) }));
   }
 }
 
@@ -650,11 +650,11 @@ async function exportPdf(out?: string) {
   try {
     const p = out ?? (await host.pickSavePath(docStem() + ".pdf", "pdf")); if (!p) return;
     notify("Exporting PDF…");
-    await host.exportPdf(html, p); notify("Exported " + p); return p;
+    await host.exportPdf(html, p); notify(t("Exported {path}", { path: p })); return p;
   } catch (e: any) {
     const msg = String(e?.message ?? e);
     if (msg.includes("unsupported")) { printHtml(html); return; } // system print dialog → "Save as PDF"
-    notify("PDF export failed: " + msg + (out ? "" : " — opening the print dialog instead"));
+    notify(t(out ? "PDF export failed: {error}" : "PDF export failed: {error} — opening the print dialog instead", { error: String(msg) }));
     if (!out) printHtml(html); // interactive: native path failed (e.g. untested macOS/Windows engines) → dialog
     else throw e;
   }
@@ -712,10 +712,10 @@ const plugins = new PluginManager({
   { id: "file.exportDocx", title: "File: Export Word (.docx)", run: () => exportDocx() },
   ...PANDOC_FORMATS.map((f) => ({ id: f.id, title: "File: Export " + f.label, run: () => exportPandoc(f.writer, f.ext) })),
   { id: "file.exportPandoc.custom", title: "File: Export Custom pandoc format…", run: () => exportPandocCustom() },
-  { id: "edit.smartPunct", title: "Edit: Smart Punctuation", run: () => { const on = !smartPunctOn(); localStorage.setItem(SMART_PUNCT_KEY, on ? "1" : "0"); notify("Smart punctuation " + (on ? "on" : "off")); scheduleMenu(); } },
-  { id: "edit.spellcheck", title: "Edit: Spell Check", run: () => { const on = !spellcheckOn(); localStorage.setItem(SPELL_KEY, on ? "1" : "0"); applySpellcheck(on); void host.setSpellcheck(on).catch(() => {}); notify("Spell check " + (on ? "on" : "off")); scheduleMenu(); } },
+  { id: "edit.smartPunct", title: "Edit: Smart Punctuation", run: () => { const on = !smartPunctOn(); localStorage.setItem(SMART_PUNCT_KEY, on ? "1" : "0"); notify(t(on ? "Smart punctuation on" : "Smart punctuation off")); scheduleMenu(); } },
+  { id: "edit.spellcheck", title: "Edit: Spell Check", run: () => { const on = !spellcheckOn(); localStorage.setItem(SPELL_KEY, on ? "1" : "0"); applySpellcheck(on); void host.setSpellcheck(on).catch(() => {}); notify(t(on ? "Spell check on" : "Spell check off")); scheduleMenu(); } },
   { id: "edit.emoji", title: "Edit: Emoji & Symbols", run: () => openEmojiPicker(editor.view) },
-  { id: "edit.emojiToggle", title: "Edit: Emoji Autocomplete", run: () => { const on = !emojiOn(); localStorage.setItem(EMOJI_KEY, on ? "1" : "0"); notify("Emoji autocomplete " + (on ? "on" : "off")); scheduleMenu(); } },
+  { id: "edit.emojiToggle", title: "Edit: Emoji Autocomplete", run: () => { const on = !emojiOn(); localStorage.setItem(EMOJI_KEY, on ? "1" : "0"); notify(t(on ? "Emoji autocomplete on" : "Emoji autocomplete off")); scheduleMenu(); } },
   { id: "file.reload", title: "File: Reload from Disk", run: () => reloadFromDisk(true) },
   { id: "file.eol.lf", title: "File: Line Endings LF", run: () => { state.eol = "LF"; setDirty(true); paintEncoding(); scheduleMenu(); } },
   { id: "file.eol.crlf", title: "File: Line Endings CRLF", run: () => { state.eol = "CRLF"; setDirty(true); paintEncoding(); scheduleMenu(); } },
@@ -734,7 +734,7 @@ const plugins = new PluginManager({
   { id: "file.saveenc.big5", title: "File: Save as Big5", run: () => setSaveEncoding("Big5") },
   { id: "file.saveenc.shiftjis", title: "File: Save as Shift_JIS", run: () => setSaveEncoding("Shift_JIS") },
   { id: "file.saveenc.utf16le", title: "File: Save as UTF-16LE", run: () => setSaveEncoding("UTF-16LE") },
-  { id: "file.autosave", title: "File: Toggle Autosave", run: () => { const on = localStorage.getItem(AUTOSAVE_KEY) !== "1"; localStorage.setItem(AUTOSAVE_KEY, on ? "1" : "0"); notify("Autosave " + (on ? "on" : "off")); } },
+  { id: "file.autosave", title: "File: Toggle Autosave", run: () => { const on = localStorage.getItem(AUTOSAVE_KEY) !== "1"; localStorage.setItem(AUTOSAVE_KEY, on ? "1" : "0"); notify(t(on ? "Autosave on" : "Autosave off")); } },
   { id: "view.recent", title: "View: Recent Files", run: () => { document.body.classList.add("pin-outline"); sidebar.select("recent"); } },
   { id: "view.settings", title: "Preferences: Settings", run: () => { document.body.classList.add("pin-outline"); sidebar.select("settings"); } },
 ].forEach(addCmd);
@@ -785,7 +785,7 @@ async function renameTo(from: string, name: string) {
     await sidebar.refresh();
     sidebar.markActive(state.path);
     scheduleMenu();
-  } catch (e: any) { notify("Rename failed: " + (e.message ?? e)); await sidebar.refresh(); }
+  } catch (e: any) { notify(t("Rename failed: {error}", { error: String(e.message ?? e) })); await sidebar.refresh(); }
 }
 function remapRecent(from: string, to: string) {
   const list = recent().map((p) => p === from ? to : (p.startsWith(from + "/") || p.startsWith(from + "\\") ? to + p.slice(from.length) : p));
@@ -806,8 +806,8 @@ async function moveCurrent() {
     if (sidebar.root && (dir.startsWith(sidebar.root) || sidebar.root.startsWith(dir))) await sidebar.refresh();
     else await sidebar.openFolder(dir);
     sidebar.markActive(to);
-    notify("Moved to " + to);
-  } catch (e: any) { notify("Move failed: " + (e.message ?? e)); }
+    notify(t("Moved to {path}", { path: to }));
+  } catch (e: any) { notify(t("Move failed: {error}", { error: String(e.message ?? e) })); }
 }
 async function renameCurrent() {
   if (!state.path) return;
@@ -821,8 +821,8 @@ async function duplicateCurrent(path = state.path) {
     const created = await host.duplicatePath(path);
     await sidebar.refresh();
     if (/\.(md|markdown|mdown|mkd|mdx|txt|text)$/i.test(created)) await openFile(created);
-    notify("Duplicated " + baseName(created));
-  } catch (e: any) { notify("Duplicate failed: " + (e.message ?? e)); }
+    notify(t("Duplicated {name}", { name: baseName(created) }));
+  } catch (e: any) { notify(t("Duplicate failed: {error}", { error: String(e.message ?? e) })); }
 }
 async function trashPath(path: string) {
   const name = baseName(path);
@@ -860,14 +860,14 @@ async function trashPath(path: string) {
     }
     await sidebar.refresh();
     notify(t("Moved to trash"));
-  } catch (e: any) { notify(t("Delete failed: {error}", { error: String(e?.message ?? e) })); }
+  } catch (e: any) { notify(t("Delete failed: {error}", { error: tError(String(e?.message ?? e)) })); }
 }
 function copyPath(path: string) {
   void navigator.clipboard?.writeText(path).then(() => notify("Copied path")).catch(() => notify(path));
 }
 async function openNewWindow(file?: string) {
   try { await host.openWindow(file ?? null); }
-  catch (e: any) { notify("New window failed: " + (e.message ?? e)); }
+  catch (e: any) { notify(t("New window failed: {error}", { error: String(e.message ?? e) })); }
 }
 async function printDoc() {
   const html = await exportHtmlString(true);
@@ -885,7 +885,7 @@ async function quickOpen() {
   document.querySelector("#typora-quick-open")?.remove();
   const box = document.createElement("div");
   box.id = "typora-quick-open";
-  box.innerHTML = `<input id="typora-quick-open-input" type="text" placeholder="Open quickly…" autocomplete="off"><div class="typora-quick-open-list"></div>`;
+  box.innerHTML = `<input id="typora-quick-open-input" type="text" placeholder="${escapeHtml(t("Open quickly…"))}" autocomplete="off"><div class="typora-quick-open-list"></div>`;
   document.body.appendChild(box);
   const input = box.querySelector("input") as HTMLInputElement;
   const listEl = box.querySelector(".typora-quick-open-list") as HTMLElement;
@@ -900,7 +900,7 @@ async function quickOpen() {
     items = (q ? pool.map((it) => ({ it, s: fuzzyScore(it.name, q) })).filter((x) => x.s > 0).sort((a, b) => b.s - a.s).map((x) => x.it) : pool).slice(0, 40);
     if (active >= items.length) active = 0;
     listEl.innerHTML = items.map((it, i) => `<div class="typora-quick-open-item${i === active ? " active" : ""}" data-i="${i}"><span>${escapeHtml(it.name)}</span><span class="typora-quick-open-item-path">${escapeHtml(it.path)}</span></div>`).join("")
-      || `<div class="typora-quick-open-item" style="opacity:.6">No matches</div>`;
+      || `<div class="typora-quick-open-item" style="opacity:.6">${escapeHtml(t("No matches"))}</div>`;
     listEl.querySelectorAll<HTMLElement>(".typora-quick-open-item[data-i]").forEach((n) => {
       n.onmouseenter = () => { active = +n.dataset.i!; render(); };
       n.onclick = () => { void pick(items[+n.dataset.i!].path); };
@@ -918,15 +918,15 @@ async function quickOpen() {
   input.focus();
   render();
 }
-const MARKDOWN_REF = `# Markdown reference\n\n# Heading\n\n**bold** *italic* ~~strike~~ \`code\`\n\n- list\n- [ ] task\n\n> quote\n\n\`\`\`\ncode\n\`\`\`\n\n[link](https://example.com)\n\n| a | b |\n|---|---|\n| 1 | 2 |\n`;
+const markdownRef = () => `# ${t("Markdown reference")}\n\n# ${t("Heading")}\n\n**${t("bold")}** *${t("italic")}* ~~${t("strike")}~~ \`${t("code")}\`\n\n- ${t("list")}\n- [ ] ${t("task")}\n\n> ${t("quote")}\n\n\`\`\`\n${t("code")}\n\`\`\`\n\n[${t("link")}](https://example.com)\n\n| a | b |\n|---|---|\n| 1 | 2 |\n`;
 function showHelp(title: string, body: string) {
   const back = document.createElement("div");
   back.className = "modal-backdrop";
   const pre = document.createElement("pre");
   pre.style.cssText = "white-space:pre-wrap;max-height:50vh;overflow:auto;font:13px var(--monospace)";
   pre.textContent = body;
-  back.innerHTML = `<div class="modal" role="dialog" style="max-width:560px"><h3></h3><div class="mdn-help-body"></div><div class="modal-actions"><button type="button" class="btn btn-primary">Close</button></div></div>`;
-  back.querySelector("h3")!.textContent = title;
+  back.innerHTML = `<div class="modal" role="dialog" style="max-width:560px"><h3></h3><div class="mdn-help-body"></div><div class="modal-actions"><button type="button" class="btn btn-primary">${escapeHtml(t("Close"))}</button></div></div>`;
+  back.querySelector("h3")!.textContent = t(title);
   back.querySelector(".mdn-help-body")!.appendChild(pre);
   document.body.appendChild(back);
   back.querySelector("button")!.onclick = () => back.remove();
@@ -934,7 +934,7 @@ function showHelp(title: string, body: string) {
 function shortcutHelp(): string {
   return commands.filter((c) => c.key).map((c) => {
     const shown = accelLabel(c.key!.includes("+") ? c.key! : prosemirrorToAccel(c.key!));
-    return `${shown}  ${c.title}`;
+    return `${shown}  ${tTitle(c.title)}`;
   }).join("\n");
 }
 
@@ -957,15 +957,15 @@ function shortcutHelp(): string {
   { id: "view.fileTree", title: "View: File Tree", key: "CmdOrCtrl+Shift+3", run: () => sidebar.showTree() },
   { id: "view.searchFolder", title: "View: Search in Folder", key: "CmdOrCtrl+Shift+F", run: () => sidebar.focusSearch() },
   { id: "themes.openFolder", title: "Themes: Open Theme Folder", run: async () => {
-    if (host.kind === "browser") { notify("Themes: " + (location.origin + "/themes/")); return; }
+    if (host.kind === "browser") { notify(t("Themes: {path}", { path: location.origin + "/themes/" })); return; }
     try {
       const { invoke } = await import("@tauri-apps/api/core");
       const { appConfigDir } = await import("@tauri-apps/api/path");
       const dir = (await appConfigDir()) + "themes";
       await invoke("reveal_path", { path: dir });
-    } catch (e: any) { notify("Theme folder: " + (e?.message ?? e)); }
+    } catch (e: any) { notify(t("Theme folder: {error}", { error: String(e?.message ?? e) })); }
   } },
-  { id: "help.markdown", title: "Help: Markdown Reference", run: () => showHelp("Markdown reference", MARKDOWN_REF) },
+  { id: "help.markdown", title: "Help: Markdown Reference", run: () => showHelp("Markdown reference", markdownRef()) },
   { id: "help.shortcuts", title: "Help: Keyboard Shortcuts", run: () => showHelp("Keyboard shortcuts", shortcutHelp()) },
   { id: "help.dataFolder", title: "Help: Open Data Folder", run: () => notify("App data lives in the platform config directory") },
 ].forEach(addCmd);
@@ -1153,12 +1153,12 @@ function openTableDialog() {
   back.className = "modal-backdrop";
   back.id = "table-insert-dialog";
   back.innerHTML = `<div class="modal" role="dialog" aria-modal="true">
-    <h3>Insert table</h3>
-    <p><label>Rows <input id="table-rows" type="number" min="1" max="50" value="3" style="width:4em"></label>
-       <label>Columns <input id="table-cols" type="number" min="1" max="20" value="3" style="width:4em"></label></p>
+    <h3>${escapeHtml(t("Insert Table"))}</h3>
+    <p><label>${escapeHtml(t("Rows"))} <input id="table-rows" type="number" min="1" max="50" value="3" style="width:4em"></label>
+       <label>${escapeHtml(t("Columns"))} <input id="table-cols" type="number" min="1" max="20" value="3" style="width:4em"></label></p>
     <div class="modal-actions">
-      <button type="button" class="btn" data-c="cancel">Cancel</button>
-      <button type="button" class="btn btn-primary" data-c="ok">Insert</button>
+      <button type="button" class="btn" data-c="cancel">${escapeHtml(t("Cancel"))}</button>
+      <button type="button" class="btn btn-primary" data-c="ok">${escapeHtml(t("Insert"))}</button>
     </div>
   </div>`;
   document.body.appendChild(back);
@@ -1234,7 +1234,7 @@ async function toggleAlwaysOnTop() {
       const { getCurrentWindow } = await import("@tauri-apps/api/window");
       await getCurrentWindow().setAlwaysOnTop(alwaysOnTop);
     } catch (e: any) { notify(String(e?.message ?? e)); }
-  } else notify("Always on top " + (alwaysOnTop ? "on" : "off"));
+  } else notify(t(alwaysOnTop ? "Always on top on" : "Always on top off"));
   scheduleMenu();
 }
 let maximized = false;
@@ -1645,8 +1645,8 @@ function wordStatsNow() {
 function toggleWordPopover() {
   if (!wordPop.hidden) { wordPop.hidden = true; return; }
   const s = wordStatsNow();
-  wordPop.innerHTML = `<div><b>${s.selection ? "Selection" : "Document"}</b></div>
-    <div>${s.words} words</div><div>${s.chars} characters</div><div>${s.lines} lines</div><div>~${s.minutes} min read</div>`;
+  wordPop.innerHTML = `<div><b>${t(s.selection ? "Selection" : "Document")}</b></div>
+    <div>${wordsLabel(s.words)}</div><div>${t("{n} characters", { n: s.chars })}</div><div>${t("{n} lines", { n: s.lines })}</div><div>${t("~{n} min read", { n: s.minutes })}</div>`;
   const anchor = document.getElementById("footer-word-count")!.getBoundingClientRect();
   wordPop.hidden = false;
   wordPop.style.left = Math.max(8, anchor.right - 180) + "px";
@@ -2017,7 +2017,7 @@ async function saveOrClearSecret(btn: HTMLButtonElement) {
       await host.secrets.set(sid, value);
       if (input) input.value = "";
     }
-  } catch (e: any) { notify("Secret " + (e?.message ?? e)); }
+  } catch (e: any) { notify(t("Secret: {error}", { error: String(e?.message ?? e) })); }
   if (status) await refreshSecretStatus(status);
 }
 renderRecent();

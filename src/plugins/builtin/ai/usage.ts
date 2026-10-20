@@ -1,3 +1,4 @@
+import { t } from "../../../i18n";
 // Per-day usage counters (requests, tokens) and optional daily limits. Local only, no telemetry.
 // Token counts come from the provider's `usage` field (OpenAI `stream_options.include_usage`);
 // when a provider sends none, they are estimated (~4 chars per token) and flagged as estimates.
@@ -69,8 +70,9 @@ export function createUsage(deps: UsageDeps) {
       const d = day(read());
       const tokens = d.prompt + d.completion;
       const rl = deps.requestLimit(), tl = deps.tokenLimit();
-      const lim = [rl > 0 ? `${rl} req` : "", tl > 0 ? `${tl} tok` : ""].filter(Boolean).join(", ");
-      return `Today: ${d.requests} request${d.requests === 1 ? "" : "s"} · ${d.estimated ? "≈" : ""}${tokens} tokens` + (lim ? ` (limit ${lim})` : "");
+      const lim = [rl > 0 ? t("{n} req", { n: rl }) : "", tl > 0 ? t("{n} tok", { n: tl }) : ""].filter(Boolean).join(", ");
+      return t(d.requests === 1 ? "Today: {n} request · {approx}{tokens} tokens" : "Today: {n} requests · {approx}{tokens} tokens", { n: d.requests, approx: d.estimated ? "≈" : "", tokens })
+        + (lim ? t(" (limit {limit})", { limit: lim }) : "");
     },
   };
 }

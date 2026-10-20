@@ -1,6 +1,6 @@
 // Library runtime (lazy): scan → embed loop, watcher, hybrid search panel, related notes, @library.
 import type { PluginContext } from "../../api";
-import { t as tr } from "../../../i18n";
+import { t as tr, tError } from "../../../i18n";
 import { icon } from "../../../shell/icons";
 import { markHit } from "../../../shell/sidebar";
 import type { AiProvider } from "../ai/provider";
@@ -68,7 +68,7 @@ export async function runScan(paths?: string[]) {
     set({ message: tr("{n} changed · +{a} −{r} chunks", { n: rep.changedFiles, a: rep.addedChunks, r: rep.removedChunks }) });
     await embedPending();
   } catch (e: any) {
-    set({ phase: "error", message: String(e?.message ?? e) });
+    set({ phase: "error", message: tError(String(e?.message ?? e)) });
   }
 }
 
@@ -95,7 +95,7 @@ export async function embedPending(batch = 32) {
     set({ phase: "idle", message: done === 1 ? tr("Indexed · 1 new vector") : tr("Indexed · {n} new vectors", { n: done }) });
   } catch (e: any) {
     if (ac.signal.aborted) { set({ phase: "paused", message: tr("Paused") }); return; }
-    set({ phase: "error", vectors: false, message: tr("Embeddings unavailable: {e} — keyword search still works", { e: String(e?.message ?? e) }) });
+    set({ phase: "error", vectors: false, message: tr("Embeddings unavailable: {e} — keyword search still works", { e: tError(String(e?.message ?? e)) }) });
   } finally { if (job === ac) job = null; }
 }
 
@@ -274,7 +274,7 @@ export function mountPanel(host: HTMLElement) {
     timer = setTimeout(async () => {
       ac?.abort(); ac = new AbortController(); const mine = ac;
       const q = input.value;
-      const hits = await search(q, 10, mine.signal).catch((e) => { results.replaceChildren(el("p", "mdn-lib-empty", String(e?.message ?? e))); return null; });
+      const hits = await search(q, 10, mine.signal).catch((e) => { results.replaceChildren(el("p", "mdn-lib-empty", tError(String(e?.message ?? e)))); return null; });
       if (!hits || mine.signal.aborted) return;
       const shown = libMode === "all" ? hits : hits.filter((h) => h.via.includes(libMode));
       const top = Math.max(0, ...shown.map((h) => h.score || 0));
