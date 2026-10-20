@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { startNative } from "./wd.mjs";
 
-const app = process.argv[2]; const display = process.argv[3] ?? ":81";
+const app = process.argv[2]; const display = process.argv[3] ?? ":79";
 const work = fs.mkdtempSync(path.join(os.tmpdir(), "mdn-022-"));
 const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAHElEQVR4nGP8z8DwnwEJMDGgAcYRCRgFAABmLwIfyPo0uQAAAABJRU5ErkJggg==", "base64");
 fs.writeFileSync(path.join(work, "pic.png"), png);
@@ -18,7 +18,7 @@ let pass = 0, fail = 0;
 const ok = (c, m, info = "") => { console.log((c ? "PASS " : "FAIL ") + m + (c || info === "" ? "" : " — " + String(typeof info === "string" ? info : JSON.stringify(info)).slice(0, 300))); c ? pass++ : fail++; };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const disk = () => fs.readFileSync(doc, "utf8");
-const n = await startNative({ app, display, port: 4454, args: [doc], env: { LANG: "zh_CN.UTF-8", LANGUAGE: "zh_CN" } });
+const n = await startNative({ app, display, port: 4444, args: [doc], env: { LANG: "zh_CN.UTF-8", LANGUAGE: "zh_CN" } });
 try {
   await n.waitFor(() => document.body.classList.contains("mdn-ready") && !!document.querySelector("#write .CodeMirror"));
   await sleep(800);

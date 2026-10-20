@@ -187,7 +187,7 @@ if (SHOTS) {
   await page.locator('.context-menu .mdn-menu-item[data-id="format"]').hover(); await page.waitForTimeout(250);
   await page.shot("after-ctx-format-menu-zh.png");
   await page.locator('.context-menu .mdn-menu-item[data-id="format.strong"]').click(); await page.waitForTimeout(250);
-  await page.locator("#write p").first().click(); await page.waitForTimeout(150);
+  { const w2 = await wordBox(page, "world"); await page.mouse.click(w2.x, w2.y); } await page.waitForTimeout(200); // caret inside: markers revealed
   ok((await page.md()).trim() === "你好 **world** 这里", "ctx (zh UI): 格式 > 加粗", await page.md());
   await page.shot("after-ctx-format-result-zh.png");
   await page.context().close();
