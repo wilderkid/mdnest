@@ -88,3 +88,6 @@ body.typora-sourceview-on .mdn-imgbar, body.typora-sourceview-on .mdn-img-resize
 #write span.md-image.ProseMirror-selectednode { outline: none; }
 #write span.md-image.ProseMirror-selectednode img { outline: 2px solid var(--sh-accent, var(--primary-color, #4a7bd0)); outline-offset: 2px; border-radius: 2px; }
 #write .md-image-src-span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+/* WebKitGTK paints the DOM selection PM keeps around a selected inline image as a full-width band */
+#write .md-image.ProseMirror-selectednode::selection, #write .md-image.ProseMirror-selectednode *::selection,
+#write p:has(.md-image.ProseMirror-selectednode)::selection, #write p:has(.md-image.ProseMirror-selectednode) *::selection { background: transparent; }

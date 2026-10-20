@@ -8,7 +8,7 @@ import { startNative } from "./wd.mjs";
 const app = process.argv[2]; const display = process.argv[3] ?? ":79";
 const work = fs.mkdtempSync(path.join(os.tmpdir(), "mdn-022-"));
 const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAHElEQVR4nGP8z8DwnwEJMDGgAcYRCRgFAABmLwIfyPo0uQAAAABJRU5ErkJggg==", "base64");
-fs.writeFileSync(path.join(work, "pic.png"), png);
+fs.copyFileSync(path.resolve("dev-data/workspace/real022-test/pic.png"), path.join(work, "pic.png"));
 const doc = path.join(work, "笔记.md");
 const START = "你好 world 这里\n\n```js\nlet a = 1;\n```\n\nAfter\n\n![pic](pic.png)\n";
 fs.writeFileSync(doc, START);
