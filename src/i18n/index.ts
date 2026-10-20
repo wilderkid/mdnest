@@ -12,7 +12,15 @@ export function langSetting(): LangSetting {
   return v === "zh-CN" || v === "en" ? v : "auto";
 }
 
-export function systemLang(langs: readonly string[] = typeof navigator !== "undefined" ? (navigator.languages?.length ? navigator.languages : [navigator.language]) : []): Lang {
+/** navigator.languages, preceded by the desktop locale the native host injects (Linux: LANG/LANGUAGE) */
+function defaultLangs(): string[] {
+  const out: string[] = [];
+  const sys = typeof window !== "undefined" ? (window as { __MDNEST_SYS_LANG__?: unknown }).__MDNEST_SYS_LANG__ : undefined;
+  if (typeof sys === "string" && sys) out.push(sys);
+  if (typeof navigator !== "undefined") out.push(...(navigator.languages?.length ? navigator.languages : [navigator.language]));
+  return out;
+}
+export function systemLang(langs: readonly string[] = defaultLangs()): Lang {
   const first = String(langs[0] || "en").toLowerCase();
   return first.startsWith("zh") ? "zh-CN" : "en";
 }

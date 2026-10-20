@@ -92,7 +92,10 @@ pub fn decode_mdfile_path(raw: &str) -> Result<PathBuf, ()> {
 
 fn is_windows_drive_path(s: &str) -> bool {
     let b = s.as_bytes();
-    b.len() >= 2 && b[0].is_ascii_alphabetic() && b[1] == b':' && (b.len() == 2 || b[2] == b'/' || b[2] == b'\\')
+    b.len() >= 2
+        && b[0].is_ascii_alphabetic()
+        && b[1] == b':'
+        && (b.len() == 2 || b[2] == b'/' || b[2] == b'\\')
 }
 
 /// `mdtheme://localhost/<relative>` serves a file from the themes directory.

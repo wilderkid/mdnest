@@ -46,7 +46,11 @@ pub async fn pick_folder(app: tauri::AppHandle) -> Option<String> {
 
 /// Native save dialog. `default_name` arrives as camelCase `defaultName` from invoke.
 #[tauri::command]
-pub async fn pick_save_path(app: tauri::AppHandle, default_name: String, ext: Option<String>) -> Option<String> {
+pub async fn pick_save_path(
+    app: tauri::AppHandle,
+    default_name: String,
+    ext: Option<String>,
+) -> Option<String> {
     let ext_owned = ext.clone().unwrap_or_default();
     let (label, filter_exts): (&str, Vec<&str>) = match ext.as_deref() {
         Some("html") => ("HTML", vec!["html", "htm"]),
@@ -61,7 +65,11 @@ pub async fn pick_save_path(app: tauri::AppHandle, default_name: String, ext: Op
         Some("textile") => ("Textile", vec!["textile"]),
         Some("opml") => ("OPML", vec!["opml"]),
         Some("org") => ("Org", vec!["org"]),
-        Some(other) if !other.is_empty() && other.len() <= 16 && other.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') => {
+        Some(other)
+            if !other.is_empty()
+                && other.len() <= 16
+                && other.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') =>
+        {
             ("Export", vec![ext_owned.as_str()])
         }
         _ => ("Markdown", vec!["md", "markdown"]),
@@ -91,7 +99,9 @@ pub async fn read_file_bytes(path: String) -> Result<String, String> {
 #[tauri::command]
 pub async fn write_file_bytes(path: String, data: String) -> Result<(), String> {
     use base64::Engine;
-    let bytes = base64::engine::general_purpose::STANDARD.decode(data.as_bytes()).map_err(|e| e.to_string())?;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(data.as_bytes())
+        .map_err(|e| e.to_string())?;
     write_bytes_atomic(&path, &bytes)
 }
 
@@ -207,33 +217,60 @@ pub async fn cli_file() -> Option<String> {
     // skip flags and the values of flags that take one
     const WITH_VALUE: [&str; 4] = ["--theme", "--export-html", "--export-pdf", "--debug-log"];
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let mut arg = None; let mut i = 0;
+    let mut arg = None;
+    let mut i = 0;
     while i < args.len() {
-        if WITH_VALUE.contains(&args[i].as_str()) { i += 2; continue; }
-        if !args[i].starts_with('-') { arg = Some(args[i].clone()); break; }
+        if WITH_VALUE.contains(&args[i].as_str()) {
+            i += 2;
+            continue;
+        }
+        if !args[i].starts_with('-') {
+            arg = Some(args[i].clone());
+            break;
+        }
         i += 1;
     }
     let arg = arg?;
     let p = std::path::PathBuf::from(arg);
-    let abs = if p.is_absolute() { p } else { std::env::current_dir().ok()?.join(p) };
+    let abs = if p.is_absolute() {
+        p
+    } else {
+        std::env::current_dir().ok()?.join(p)
+    };
     abs.is_file().then(|| abs.to_string_lossy().into_owned())
 }
-
 
 /// Write base64 data (pasted/dropped images). With `unique`, picks "name-1.ext", "name-2.ext"…
 /// instead of overwriting. Returns the final absolute path.
 #[tauri::command]
 pub async fn write_binary_file(path: String, data: String, unique: bool) -> Result<String, String> {
     use base64::Engine;
-    let bytes = base64::engine::general_purpose::STANDARD.decode(data.as_bytes()).map_err(|e| e.to_string())?;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(data.as_bytes())
+        .map_err(|e| e.to_string())?;
     let mut dest = std::path::PathBuf::from(&path);
-    if let Some(parent) = dest.parent() { fs::create_dir_all(parent).map_err(|e| e.to_string())?; }
+    if let Some(parent) = dest.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
     if unique && dest.exists() {
-        let stem = dest.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
-        let ext = dest.extension().map(|s| format!(".{}", s.to_string_lossy())).unwrap_or_default();
+        let stem = dest
+            .file_stem()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let ext = dest
+            .extension()
+            .map(|s| format!(".{}", s.to_string_lossy()))
+            .unwrap_or_default();
         let parent = dest.parent().map(|p| p.to_path_buf()).unwrap_or_default();
         let mut i = 1;
-        loop { let cand = parent.join(format!("{stem}-{i}{ext}")); if !cand.exists() { dest = cand; break; } i += 1; }
+        loop {
+            let cand = parent.join(format!("{stem}-{i}{ext}"));
+            if !cand.exists() {
+                dest = cand;
+                break;
+            }
+            i += 1;
+        }
     }
     fs::write(&dest, bytes).map_err(|e| e.to_string())?;
     Ok(dest.to_string_lossy().into_owned())
@@ -244,16 +281,35 @@ pub async fn write_binary_file(path: String, data: String, unique: bool) -> Resu
 #[tauri::command]
 pub async fn copy_file(src: String, dest: String, unique: bool) -> Result<String, String> {
     let meta = fs::metadata(&src).map_err(|e| format!("{src}: {e}"))?;
-    if !meta.is_file() { return Err(format!("{src}: not a file")); }
+    if !meta.is_file() {
+        return Err(format!("{src}: not a file"));
+    }
     let mut dest = std::path::PathBuf::from(&dest);
-    if let Some(parent) = dest.parent() { fs::create_dir_all(parent).map_err(|e| e.to_string())?; }
-    if fs::canonicalize(&src).ok() == fs::canonicalize(&dest).ok() { return Ok(dest.to_string_lossy().into_owned()); }
+    if let Some(parent) = dest.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    if fs::canonicalize(&src).ok() == fs::canonicalize(&dest).ok() {
+        return Ok(dest.to_string_lossy().into_owned());
+    }
     if unique && dest.exists() {
-        let stem = dest.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
-        let ext = dest.extension().map(|s| format!(".{}", s.to_string_lossy())).unwrap_or_default();
+        let stem = dest
+            .file_stem()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let ext = dest
+            .extension()
+            .map(|s| format!(".{}", s.to_string_lossy()))
+            .unwrap_or_default();
         let parent = dest.parent().map(|p| p.to_path_buf()).unwrap_or_default();
         let mut i = 1;
-        loop { let cand = parent.join(format!("{stem}-{i}{ext}")); if !cand.exists() { dest = cand; break; } i += 1; }
+        loop {
+            let cand = parent.join(format!("{stem}-{i}{ext}"));
+            if !cand.exists() {
+                dest = cand;
+                break;
+            }
+            i += 1;
+        }
     }
     fs::copy(&src, &dest).map_err(|e| e.to_string())?;
     Ok(dest.to_string_lossy().into_owned())
@@ -267,10 +323,14 @@ pub async fn file_mtime(path: String) -> Option<u64> {
 }
 
 #[tauri::command]
-pub async fn cli_args() -> Vec<String> { std::env::args().skip(1).collect() }
+pub async fn cli_args() -> Vec<String> {
+    std::env::args().skip(1).collect()
+}
 
 #[tauri::command]
-pub async fn quit_app(app: tauri::AppHandle, code: i32) { app.exit(code); }
+pub async fn quit_app(app: tauri::AppHandle, code: i32) {
+    app.exit(code);
+}
 
 /// Render `html` to a PDF at `out`.
 /// Linux: loads the HTML into a hidden WebKitGTK webview and prints it to file with
@@ -279,9 +339,14 @@ pub async fn quit_app(app: tauri::AppHandle, code: i32) { app.exit(code); }
 #[tauri::command]
 pub async fn export_pdf(app: tauri::AppHandle, html: String, out: String) -> Result<(), String> {
     #[cfg(any(target_os = "linux", target_os = "macos", windows))]
-    { crate::pdf::export_pdf(app, html, out).await }
+    {
+        crate::pdf::export_pdf(app, html, out).await
+    }
     #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
-    { let _ = (app, html, out); Err("unsupported".into()) }
+    {
+        let _ = (app, html, out);
+        Err("unsupported".into())
+    }
 }
 
 /// Store a secret. The value never comes back across IPC.
@@ -347,42 +412,87 @@ fn kb_data_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
 
 /// One index request (`{op, root, ...}`, see kb::dispatch). Runs on a blocking worker thread.
 #[tauri::command]
-pub async fn kb_call(app: tauri::AppHandle, req: serde_json::Value) -> Result<serde_json::Value, String> {
+pub async fn kb_call(
+    app: tauri::AppHandle,
+    req: serde_json::Value,
+) -> Result<serde_json::Value, String> {
     #[cfg(feature = "library")]
     {
         let dir = kb_data_dir(&app)?;
-        tauri::async_runtime::spawn_blocking(move || crate::kb::dispatch(&dir, req)).await.map_err(|e| e.to_string())?
+        tauri::async_runtime::spawn_blocking(move || crate::kb::dispatch(&dir, req))
+            .await
+            .map_err(|e| e.to_string())?
     }
     #[cfg(not(feature = "library"))]
-    { let _ = (app, req); Err("library support not built".into()) }
+    {
+        let _ = (app, req);
+        Err("library support not built".into())
+    }
 }
 
 /// Watch a folder for any non-hidden path change. Debounced batches arrive on `on_change`.
 /// Without the library feature this returns an error and the frontend refreshes on focus.
 #[tauri::command]
-pub async fn fs_watch(id: String, root: String, on_change: tauri::ipc::Channel<Vec<String>>) -> Result<(), String> {
+pub async fn fs_watch(
+    id: String,
+    root: String,
+    on_change: tauri::ipc::Channel<Vec<String>>,
+) -> Result<(), String> {
     #[cfg(feature = "library")]
-    { crate::kb::watch::start_fs(&id, std::path::Path::new(&root), std::time::Duration::from_millis(400), move |b| { let _ = on_change.send(b); }) }
+    {
+        crate::kb::watch::start_fs(
+            &id,
+            std::path::Path::new(&root),
+            std::time::Duration::from_millis(400),
+            move |b| {
+                let _ = on_change.send(b);
+            },
+        )
+    }
     #[cfg(not(feature = "library"))]
-    { let _ = (id, root, on_change); Err("library support not built".into()) }
+    {
+        let _ = (id, root, on_change);
+        Err("library support not built".into())
+    }
 }
 
 /// Stop a watch started by `fs_watch` or `kb_watch`.
 #[tauri::command]
 pub async fn fs_unwatch(id: String) -> bool {
     #[cfg(feature = "library")]
-    { crate::kb::watch::stop(&id) }
+    {
+        crate::kb::watch::stop(&id)
+    }
     #[cfg(not(feature = "library"))]
-    { let _ = id; false }
+    {
+        let _ = id;
+        false
+    }
 }
 
 /// Watch a workspace folder; debounced batches of changed Markdown paths arrive on `on_change`.
 #[tauri::command]
-pub async fn kb_watch(id: String, root: String, on_change: tauri::ipc::Channel<Vec<String>>) -> Result<(), String> {
+pub async fn kb_watch(
+    id: String,
+    root: String,
+    on_change: tauri::ipc::Channel<Vec<String>>,
+) -> Result<(), String> {
     #[cfg(feature = "library")]
-    { crate::kb::watch::start(&id, std::path::Path::new(&root), std::time::Duration::from_millis(1500), move |b| { let _ = on_change.send(b); }) }
+    {
+        crate::kb::watch::start(
+            &id,
+            std::path::Path::new(&root),
+            std::time::Duration::from_millis(1500),
+            move |b| {
+                let _ = on_change.send(b);
+            },
+        )
+    }
     #[cfg(not(feature = "library"))]
-    { let _ = (id, root, on_change); Err("library support not built".into()) }
+    {
+        let _ = (id, root, on_change);
+        Err("library support not built".into())
+    }
 }
 
 // ---------- file tree (plan section 5) ----------
@@ -405,9 +515,11 @@ pub async fn create_dir(path: String) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn rename_path(from: String, to: String) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || crate::files::rename_path(Path::new(&from), Path::new(&to)))
-        .await
-        .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::files::rename_path(Path::new(&from), Path::new(&to))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -449,10 +561,18 @@ pub fn find_pandoc() -> Option<std::path::PathBuf> {
     {
         let mut extra = Vec::new();
         if let Ok(local) = std::env::var("LOCALAPPDATA") {
-            extra.push(std::path::PathBuf::from(local).join("Pandoc").join("pandoc.exe"));
+            extra.push(
+                std::path::PathBuf::from(local)
+                    .join("Pandoc")
+                    .join("pandoc.exe"),
+            );
         }
-        extra.push(std::path::PathBuf::from(r"C:\Program Files\Pandoc\pandoc.exe"));
-        extra.push(std::path::PathBuf::from(r"C:\Program Files (x86)\Pandoc\pandoc.exe"));
+        extra.push(std::path::PathBuf::from(
+            r"C:\Program Files\Pandoc\pandoc.exe",
+        ));
+        extra.push(std::path::PathBuf::from(
+            r"C:\Program Files (x86)\Pandoc\pandoc.exe",
+        ));
         for p in extra {
             if p.is_file() {
                 return Some(p);
@@ -513,18 +633,36 @@ pub async fn pandoc_info() -> PandocInfo {
             version: pandoc_version_line(&p),
             path: p.to_string_lossy().into_owned(),
         },
-        None => PandocInfo { found: false, version: String::new(), path: String::new() },
+        None => PandocInfo {
+            found: false,
+            version: String::new(),
+            path: String::new(),
+        },
     })
     .await
-    .unwrap_or(PandocInfo { found: false, version: String::new(), path: String::new() })
+    .unwrap_or(PandocInfo {
+        found: false,
+        version: String::new(),
+        path: String::new(),
+    })
 }
 
 /// Run pandoc with Markdown on stdin. `cwd` is the document folder so relative images resolve.
 /// Returns stderr (and a non-zero status) as Err. Times out after 120 seconds.
 #[tauri::command]
-pub async fn pandoc_export(markdown: String, to: String, out: String, cwd: Option<String>) -> Result<(), String> {
+pub async fn pandoc_export(
+    markdown: String,
+    to: String,
+    out: String,
+    cwd: Option<String>,
+) -> Result<(), String> {
     let to = to.trim().to_string();
-    if to.is_empty() || to.len() > 64 || to.chars().any(|c| !(c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '+')) {
+    if to.is_empty()
+        || to.len() > 64
+        || to
+            .chars()
+            .any(|c| !(c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '+'))
+    {
         return Err("invalid pandoc writer".into());
     }
     tauri::async_runtime::spawn_blocking(move || {
@@ -596,7 +734,10 @@ pub async fn reveal_path(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn list_files(root: String, max: Option<usize>) -> Result<Vec<crate::files::ListedFile>, String> {
+pub async fn list_files(
+    root: String,
+    max: Option<usize>,
+) -> Result<Vec<crate::files::ListedFile>, String> {
     let max = max.unwrap_or(5000);
     tauri::async_runtime::spawn_blocking(move || crate::files::list_files(Path::new(&root), max))
         .await
@@ -620,17 +761,25 @@ pub async fn recent_previews(paths: Vec<String>) -> Result<Vec<crate::files::Pre
 #[tauri::command]
 pub async fn path_kind(path: String) -> String {
     let path = path.clone();
-    tauri::async_runtime::spawn_blocking(move || crate::files::path_kind(Path::new(&path)).to_string())
-        .await
-        .unwrap_or_else(|_| "missing".into())
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::files::path_kind(Path::new(&path)).to_string()
+    })
+    .await
+    .unwrap_or_else(|_| "missing".into())
 }
 
 #[tauri::command]
-pub async fn search_files(root: String, query: String, max: Option<usize>) -> Result<Vec<crate::files::SearchHit>, String> {
+pub async fn search_files(
+    root: String,
+    query: String,
+    max: Option<usize>,
+) -> Result<Vec<crate::files::SearchHit>, String> {
     let max = max.unwrap_or(80);
-    tauri::async_runtime::spawn_blocking(move || crate::files::search_files(Path::new(&root), &query, max))
-        .await
-        .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::files::search_files(Path::new(&root), &query, max)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 /// Label of the webview that invoked the command (`main`, `w-1`, …).
@@ -655,7 +804,10 @@ pub async fn open_window(app: tauri::AppHandle, file: Option<String>) -> Result<
     if let Some(f) = file {
         if !f.is_empty() {
             query.push(format!("file={}", urlencoding_min(&f)));
-            let dir = Path::new(&f).parent().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
+            let dir = Path::new(&f)
+                .parent()
+                .map(|p| p.to_string_lossy().into_owned())
+                .unwrap_or_default();
             if !dir.is_empty() {
                 query.push(format!("folder={}", urlencoding_min(&dir)));
             }
@@ -665,12 +817,13 @@ pub async fn open_window(app: tauri::AppHandle, file: Option<String>) -> Result<
     url.push_str(&query.join("&"));
     let label2 = label.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let win = tauri::WebviewWindowBuilder::new(&app, &label2, tauri::WebviewUrl::App(url.into()))
-            .title("MD Nest")
-            .inner_size(1200.0, 800.0)
-            .resizable(true)
-            .build()
-            .map_err(|e| e.to_string())?;
+        let win =
+            tauri::WebviewWindowBuilder::new(&app, &label2, tauri::WebviewUrl::App(url.into()))
+                .title("MD Nest")
+                .inner_size(1200.0, 800.0)
+                .resizable(true)
+                .build()
+                .map_err(|e| e.to_string())?;
         crate::disable_webview_chrome(&win);
         Ok::<(), String>(())
     })
@@ -683,7 +836,9 @@ fn urlencoding_min(s: &str) -> String {
     let mut out = String::new();
     for b in s.bytes() {
         match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' | b'/' => out.push(b as char),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' | b'/' => {
+                out.push(b as char)
+            }
             b'\\' => out.push('/'),
             _ => out.push_str(&format!("%{b:02X}")),
         }
@@ -694,7 +849,12 @@ fn urlencoding_min(s: &str) -> String {
 #[tauri::command]
 pub async fn kb_unwatch(id: String) -> bool {
     #[cfg(feature = "library")]
-    { crate::kb::watch::stop(&id) }
+    {
+        crate::kb::watch::stop(&id)
+    }
     #[cfg(not(feature = "library"))]
-    { let _ = id; false }
+    {
+        let _ = id;
+        false
+    }
 }

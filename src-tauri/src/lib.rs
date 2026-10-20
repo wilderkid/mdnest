@@ -66,10 +66,57 @@ fn bundled_themes_dir(app: &tauri::AppHandle) -> Option<PathBuf> {
         .filter(|p| p.is_dir())
 }
 
+/// The desktop language from the POSIX locale variables ("zh_CN.UTF-8" → "zh-CN"). WebKitGTK only
+/// reports it as navigator.language when that locale is installed, so the UI language would fall
+/// back to English on some systems. Windows/macOS webviews report the OS language themselves.
+pub fn env_lang(get: impl Fn(&str) -> Option<String>) -> Option<String> {
+    for var in ["LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG"] {
+        let Some(v) = get(var) else { continue };
+        let first = v
+            .split(':')
+            .next()
+            .unwrap_or("")
+            .split(['.', '@'])
+            .next()
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        if first.is_empty() || first == "C" || first == "POSIX" {
+            continue;
+        }
+        let tag: String = first
+            .replace('_', "-")
+            .chars()
+            .filter(|c| c.is_ascii_alphanumeric() || *c == '-')
+            .collect();
+        if !tag.is_empty() {
+            return Some(tag);
+        }
+    }
+    None
+}
+
+/// Exposes the system language to every webview before page scripts run (read by src/i18n).
+fn locale_plugin<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
+    let lang = if cfg!(any(target_os = "windows", target_os = "macos")) {
+        None
+    } else {
+        env_lang(|k| std::env::var(k).ok())
+    };
+    let script = match lang {
+        Some(l) => format!("window.__MDNEST_SYS_LANG__ = {:?};", l),
+        None => String::new(),
+    };
+    tauri::plugin::Builder::new("mdnest-locale")
+        .js_init_script(script)
+        .build()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(locale_plugin())
         .register_asynchronous_uri_scheme_protocol("mdtheme", protocols::handle_mdtheme)
         .register_asynchronous_uri_scheme_protocol("mdfile", protocols::handle_mdfile)
         .setup(|app| {
@@ -110,7 +157,8 @@ pub fn run() {
             commands::list_themes,
             commands::default_workspace,
             commands::cli_file,
-            commands::write_binary_file, commands::copy_file,
+            commands::write_binary_file,
+            commands::copy_file,
             commands::file_mtime,
             commands::cli_args,
             commands::quit_app,
@@ -158,8 +206,12 @@ pub fn disable_webview_chrome(win: &tauri::WebviewWindow) {
         use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Settings3;
         use windows::core::Interface;
         unsafe {
-            let Ok(core) = webview.controller().CoreWebView2() else { return };
-            let Ok(settings) = core.Settings() else { return };
+            let Ok(core) = webview.controller().CoreWebView2() else {
+                return;
+            };
+            let Ok(settings) = core.Settings() else {
+                return;
+            };
             let _ = settings.SetAreDefaultContextMenusEnabled(false);
             if let Ok(settings3) = settings.cast::<ICoreWebView2Settings3>() {
                 let _ = settings3.SetAreBrowserAcceleratorKeysEnabled(false);
@@ -197,3 +249,33 @@ pub fn set_spellcheck(win: &tauri::WebviewWindow, enabled: bool) {
 
 #[cfg(not(target_os = "linux"))]
 pub fn set_spellcheck(_win: &tauri::WebviewWindow, _enabled: bool) {}
+
+#[cfg(test)]
+mod locale_tests {
+    use super::env_lang;
+    fn with<'a>(pairs: &'a [(&'a str, &'a str)]) -> impl Fn(&str) -> Option<String> + 'a {
+        move |k| {
+            pairs
+                .iter()
+                .find(|(n, _)| *n == k)
+                .map(|(_, v)| v.to_string())
+        }
+    }
+    #[test]
+    fn env_lang_reads_posix_locale() {
+        assert_eq!(
+            env_lang(with(&[("LANG", "zh_CN.UTF-8")])).as_deref(),
+            Some("zh-CN")
+        );
+        assert_eq!(
+            env_lang(with(&[("LANGUAGE", "zh_TW:zh"), ("LANG", "en_US.UTF-8")])).as_deref(),
+            Some("zh-TW")
+        );
+        assert_eq!(
+            env_lang(with(&[("LC_ALL", "C"), ("LANG", "de_DE@euro")])).as_deref(),
+            Some("de-DE")
+        );
+        assert_eq!(env_lang(with(&[("LANG", "C.UTF-8")])), None);
+        assert_eq!(env_lang(with(&[])), None);
+    }
+}

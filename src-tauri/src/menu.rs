@@ -19,19 +19,31 @@ pub struct MenuNode {
 
 fn accel_of(node: &MenuNode) -> Option<String> {
     let raw = node.accel.as_deref()?.trim();
-    if raw.is_empty() { None } else { Some(raw.to_string()) }
+    if raw.is_empty() {
+        None
+    } else {
+        Some(raw.to_string())
+    }
 }
 
 fn leaf_id(node: &MenuNode) -> String {
-    node.id.clone().filter(|s| !s.is_empty()).unwrap_or_else(|| node.label.clone().unwrap_or_default())
+    node.id
+        .clone()
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| node.label.clone().unwrap_or_default())
 }
 
-fn fill_submenu<R: Runtime>(app: &AppHandle<R>, sub: &Submenu<R>, nodes: &[MenuNode]) -> Result<(), String> {
+fn fill_submenu<R: Runtime>(
+    app: &AppHandle<R>,
+    sub: &Submenu<R>,
+    nodes: &[MenuNode],
+) -> Result<(), String> {
     for node in nodes {
         if let Some(children) = &node.submenu {
             let text = node.label.clone().unwrap_or_else(|| "Menu".into());
             let id = node.id.clone().unwrap_or_else(|| format!("sub-{text}"));
-            let child = Submenu::with_id(app, &id, text, node.enabled.unwrap_or(true)).map_err(|e| e.to_string())?;
+            let child = Submenu::with_id(app, &id, text, node.enabled.unwrap_or(true))
+                .map_err(|e| e.to_string())?;
             fill_submenu(app, &child, children)?;
             sub.append(&child).map_err(|e| e.to_string())?;
             continue;
@@ -41,7 +53,11 @@ fn fill_submenu<R: Runtime>(app: &AppHandle<R>, sub: &Submenu<R>, nodes: &[MenuN
     Ok(())
 }
 
-fn push_leaf<R: Runtime>(app: &AppHandle<R>, sub: &Submenu<R>, node: &MenuNode) -> Result<(), String> {
+fn push_leaf<R: Runtime>(
+    app: &AppHandle<R>,
+    sub: &Submenu<R>,
+    node: &MenuNode,
+) -> Result<(), String> {
     let role = node.role.as_deref().unwrap_or("");
     if role == "separator" {
         let item = PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?;
@@ -50,7 +66,8 @@ fn push_leaf<R: Runtime>(app: &AppHandle<R>, sub: &Submenu<R>, node: &MenuNode) 
     }
     // Predefined undo/redo are unsupported on Linux and would not emit our command id.
     // Honour the role only on Windows and macOS.
-    let predefined_history = cfg!(any(windows, target_os = "macos")) && (role == "undo" || role == "redo");
+    let predefined_history =
+        cfg!(any(windows, target_os = "macos")) && (role == "undo" || role == "redo");
     if matches!(role, "cut" | "copy" | "paste" | "select_all") || predefined_history {
         let text = node.label.as_deref();
         let item = match role {
@@ -74,11 +91,19 @@ fn push_leaf<R: Runtime>(app: &AppHandle<R>, sub: &Submenu<R>, node: &MenuNode) 
     let enabled = node.enabled.unwrap_or(true);
     let accel = accel_of(node);
     if node.checked.is_some() {
-        let item = CheckMenuItem::with_id(app, &id, text, enabled, node.checked.unwrap_or(false), accel.as_deref())
-            .map_err(|e| e.to_string())?;
+        let item = CheckMenuItem::with_id(
+            app,
+            &id,
+            text,
+            enabled,
+            node.checked.unwrap_or(false),
+            accel.as_deref(),
+        )
+        .map_err(|e| e.to_string())?;
         sub.append(&item).map_err(|e| e.to_string())?;
     } else {
-        let item = MenuItem::with_id(app, &id, text, enabled, accel.as_deref()).map_err(|e| e.to_string())?;
+        let item = MenuItem::with_id(app, &id, text, enabled, accel.as_deref())
+            .map_err(|e| e.to_string())?;
         sub.append(&item).map_err(|e| e.to_string())?;
     }
     Ok(())
@@ -87,8 +112,16 @@ fn push_leaf<R: Runtime>(app: &AppHandle<R>, sub: &Submenu<R>, node: &MenuNode) 
 /// macOS application menu: About, Preferences, Quit. Other platforms omit it (Quit lives in File).
 fn macos_app_menu(app: &AppHandle) -> Result<Submenu<tauri::Wry>, String> {
     let sub = Submenu::with_id(app, "menu.app", "MD Nest", true).map_err(|e| e.to_string())?;
-    let about = MenuItem::with_id(app, "help.about", "About MD Nest", true, None::<&str>).map_err(|e| e.to_string())?;
-    let prefs = MenuItem::with_id(app, "file.preferences", "Preferences…", true, Some("CmdOrCtrl+,")).map_err(|e| e.to_string())?;
+    let about = MenuItem::with_id(app, "help.about", "About MD Nest", true, None::<&str>)
+        .map_err(|e| e.to_string())?;
+    let prefs = MenuItem::with_id(
+        app,
+        "file.preferences",
+        "Preferences…",
+        true,
+        Some("CmdOrCtrl+,"),
+    )
+    .map_err(|e| e.to_string())?;
     let sep = PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?;
     let quit = PredefinedMenuItem::quit(app, Some("Quit MD Nest")).map_err(|e| e.to_string())?;
     sub.append(&about).map_err(|e| e.to_string())?;
@@ -101,10 +134,13 @@ fn macos_app_menu(app: &AppHandle) -> Result<Submenu<tauri::Wry>, String> {
 fn build_menu(app: &AppHandle, spec: &[MenuNode]) -> Result<Menu<tauri::Wry>, String> {
     let menu = Menu::new(app).map_err(|e| e.to_string())?;
     if cfg!(target_os = "macos") {
-        menu.append(&macos_app_menu(app)?).map_err(|e| e.to_string())?;
+        menu.append(&macos_app_menu(app)?)
+            .map_err(|e| e.to_string())?;
     }
     for node in spec {
-        let Some(children) = &node.submenu else { continue };
+        let Some(children) = &node.submenu else {
+            continue;
+        };
         let text = node.label.clone().unwrap_or_else(|| "Menu".into());
         let id = node.id.clone().unwrap_or_else(|| format!("sub-{text}"));
         let sub = Submenu::with_id(app, &id, text, true).map_err(|e| e.to_string())?;
@@ -117,7 +153,11 @@ fn build_menu(app: &AppHandle, spec: &[MenuNode]) -> Result<Menu<tauri::Wry>, St
 /// Replace the menu on the calling window. macOS also sets the application menu.
 /// Extra windows created later call this themselves, so each window keeps its own menu.
 #[tauri::command]
-pub fn set_app_menu(app: AppHandle, window: tauri::WebviewWindow, spec: Vec<MenuNode>) -> Result<(), String> {
+pub fn set_app_menu(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    spec: Vec<MenuNode>,
+) -> Result<(), String> {
     let menu = build_menu(&app, &spec)?;
     if cfg!(target_os = "macos") {
         let _ = app.set_menu(menu.clone());

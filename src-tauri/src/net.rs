@@ -35,7 +35,9 @@ pub struct StreamRequest {
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum StreamEvent {
-    Open { status: u16 },
+    Open {
+        status: u16,
+    },
     Data {
         #[serde(skip_serializing_if = "Option::is_none")]
         event: Option<String>,
@@ -60,7 +62,10 @@ impl CancelFlag {
         let (tx, rx) = tokio::sync::watch::channel(false);
         let flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
         (
-            Self { flag: flag.clone(), tx },
+            Self {
+                flag: flag.clone(),
+                tx,
+            },
             CancelWait { flag, rx },
         )
     }
@@ -101,7 +106,9 @@ fn http_client() -> &'static reqwest::Client {
     static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
     CLIENT.get_or_init(|| {
         // TLS comes from the platform: OpenSSL (Linux), schannel (Windows), Security.framework (macOS).
-        reqwest::Client::builder().build().unwrap_or_else(|_| reqwest::Client::new())
+        reqwest::Client::builder()
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new())
     })
 }
 
@@ -126,9 +133,7 @@ fn auth_header_name(auth: Option<&str>) -> Result<String, String> {
                 return Err("auth must be \"bearer\" or \"header:<name>\"".into());
             };
             let name = name.trim();
-            if name.is_empty()
-                || !name.bytes().all(|c| c.is_ascii_graphic() && c != b':')
-            {
+            if name.is_empty() || !name.bytes().all(|c| c.is_ascii_graphic() && c != b':') {
                 return Err("invalid auth header name".into());
             }
             Ok(name.to_string())
@@ -138,7 +143,8 @@ fn auth_header_name(auth: Option<&str>) -> Result<String, String> {
 
 fn apply_secret(value: &str, auth: Option<&str>) -> Result<(String, String), String> {
     let name = auth_header_name(auth)?;
-    let header_value = if name.eq_ignore_ascii_case("authorization") && !value.to_ascii_lowercase().starts_with("bearer ")
+    let header_value = if name.eq_ignore_ascii_case("authorization")
+        && !value.to_ascii_lowercase().starts_with("bearer ")
     {
         format!("Bearer {value}")
     } else {
@@ -306,7 +312,12 @@ async fn execute(channel: Channel<StreamEvent>, prep: Prepared, mut cancel: Canc
                     }
                     continue;
                 }
-                send(&channel, StreamEvent::Open { status: status.as_u16() });
+                send(
+                    &channel,
+                    StreamEvent::Open {
+                        status: status.as_u16(),
+                    },
+                );
                 if !status.is_success() {
                     let bytes = resp.bytes().await.unwrap_or_default();
                     let mut message = truncate_body(&bytes);
@@ -454,7 +465,12 @@ async fn stream_body(
 }
 
 /// Start a stream. Events are pushed on `on_event`. `id` is the cancel key.
-pub fn start(app: tauri::AppHandle, id: String, req: StreamRequest, on_event: Channel<StreamEvent>) -> Result<(), String> {
+pub fn start(
+    app: tauri::AppHandle,
+    id: String,
+    req: StreamRequest,
+    on_event: Channel<StreamEvent>,
+) -> Result<(), String> {
     if id.is_empty() || id.len() > 64 || !id.bytes().all(|c| c.is_ascii_graphic()) {
         return Err("invalid stream id".into());
     }
@@ -470,15 +486,22 @@ pub fn start(app: tauri::AppHandle, id: String, req: StreamRequest, on_event: Ch
             .unwrap_or_else(|e| e.into_inner())
             .remove(&id_for_task);
     });
-    inflight()
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .insert(id, Inflight { handle, cancel: flag });
+    inflight().lock().unwrap_or_else(|e| e.into_inner()).insert(
+        id,
+        Inflight {
+            handle,
+            cancel: flag,
+        },
+    );
     Ok(())
 }
 
 pub fn cancel(id: &str) -> bool {
-    if let Some(entry) = inflight().lock().unwrap_or_else(|e| e.into_inner()).remove(id) {
+    if let Some(entry) = inflight()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .remove(id)
+    {
         entry.cancel.cancel();
         entry.handle.abort();
         true
@@ -504,7 +527,10 @@ mod tests {
     fn auth_forms() {
         assert_eq!(auth_header_name(None).unwrap(), "Authorization");
         assert_eq!(auth_header_name(Some("bearer")).unwrap(), "Authorization");
-        assert_eq!(auth_header_name(Some("header:X-Api-Key")).unwrap(), "X-Api-Key");
+        assert_eq!(
+            auth_header_name(Some("header:X-Api-Key")).unwrap(),
+            "X-Api-Key"
+        );
         assert!(auth_header_name(Some("basic")).is_err());
         assert!(auth_header_name(Some("header:")).is_err());
         assert!(auth_header_name(Some("header:Bad Name")).is_err());

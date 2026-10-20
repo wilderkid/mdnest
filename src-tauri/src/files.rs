@@ -45,7 +45,9 @@ pub fn unique_copy_name(name: &str, exists: impl Fn(&str) -> bool) -> String {
 }
 
 fn millis(t: SystemTime) -> Option<u64> {
-    t.duration_since(UNIX_EPOCH).ok().map(|d| d.as_millis() as u64)
+    t.duration_since(UNIX_EPOCH)
+        .ok()
+        .map(|d| d.as_millis() as u64)
 }
 
 fn skip_dir(name: &str) -> bool {
@@ -114,7 +116,16 @@ fn walk_docs(dir: &Path, cap: usize, out: &mut Vec<ListedFile>) -> Result<(), St
 /// First ~240 characters of text, skipping a leading YAML front-matter block.
 pub fn excerpt_of(text: &str) -> String {
     let body = strip_front_matter(text);
-    let flat: String = body.chars().map(|c| if c == '\n' || c == '\r' || c == '\t' { ' ' } else { c }).collect();
+    let flat: String = body
+        .chars()
+        .map(|c| {
+            if c == '\n' || c == '\r' || c == '\t' {
+                ' '
+            } else {
+                c
+            }
+        })
+        .collect();
     let trimmed = flat.split_whitespace().collect::<Vec<_>>().join(" ");
     let mut out = String::new();
     for ch in trimmed.chars() {
@@ -133,7 +144,11 @@ pub fn strip_front_matter(text: &str) -> &str {
     if !text.starts_with("---\n") && !text.starts_with("---\r\n") && text != "---" {
         return text;
     }
-    let after = if text.starts_with("---\r\n") { &text[5..] } else { &text[4..] };
+    let after = if text.starts_with("---\r\n") {
+        &text[5..]
+    } else {
+        &text[4..]
+    };
     if let Some(idx) = after.find("\n---") {
         let tail = &after[idx + 4..];
         return tail.trim_start_matches(['\r', '\n']);
@@ -263,7 +278,10 @@ pub fn rename_path(from: &Path, to: &Path) -> Result<(), String> {
 /// Copy a file or directory to `"name copy.ext"` beside the original. Returns the new path.
 pub fn duplicate_path(path: &Path) -> Result<String, String> {
     let parent = path.parent().unwrap_or_else(|| Path::new(""));
-    let name = path.file_name().map(|s| s.to_string_lossy().into_owned()).ok_or("no name")?;
+    let name = path
+        .file_name()
+        .map(|s| s.to_string_lossy().into_owned())
+        .ok_or("no name")?;
     let new_name = unique_copy_name(&name, |n| parent.join(n).exists());
     let dest = parent.join(&new_name);
     copy_recursive(path, &dest)?;
@@ -304,10 +322,17 @@ pub fn trash_path(path: &Path, fallback_dir: Option<&Path>) -> Result<(), String
     }
     if let Some(dir) = fallback_dir {
         fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-        let name = path.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| "item".into());
+        let name = path
+            .file_name()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "item".into());
         let dest_name = unique_copy_name(&name, |n| dir.join(n).exists());
         // unique_copy_name always inserts " copy"; a plain move is fine if the name is free.
-        let dest = if !dir.join(&name).exists() { dir.join(&name) } else { dir.join(dest_name) };
+        let dest = if !dir.join(&name).exists() {
+            dir.join(&name)
+        } else {
+            dir.join(dest_name)
+        };
         return fs::rename(path, dest).map_err(|e| e.to_string());
     }
     platform_trash(path)
@@ -317,13 +342,16 @@ pub fn trash_path(path: &Path, fallback_dir: Option<&Path>) -> Result<(), String
 fn platform_trash(path: &Path) -> Result<(), String> {
     use gtk::gio::prelude::FileExt;
     let file = gtk::gio::File::for_path(path);
-    file.trash(gtk::gio::Cancellable::NONE).map_err(|e| e.to_string())
+    file.trash(gtk::gio::Cancellable::NONE)
+        .map_err(|e| e.to_string())
 }
 
 #[cfg(windows)]
 fn platform_trash(path: &Path) -> Result<(), String> {
     use std::os::windows::ffi::OsStrExt;
-    use windows::Win32::UI::Shell::{SHFileOperationW, FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_SILENT, FO_DELETE, SHFILEOPSTRUCTW};
+    use windows::Win32::UI::Shell::{
+        SHFileOperationW, FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_SILENT, FO_DELETE, SHFILEOPSTRUCTW,
+    };
     let abs = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
     // Double-NUL terminated wide path, as SHFileOperation requires.
     let mut wide: Vec<u16> = abs.as_os_str().encode_wide().collect();
@@ -353,7 +381,8 @@ fn platform_trash(path: &Path) -> Result<(), String> {
     unsafe {
         let url = NSURL::fileURLWithPath(&NSString::from_str(&s));
         let fm = NSFileManager::defaultManager();
-        fm.trashItemAtURL_resultingItemURL_error(&url, None).map_err(|e| e.to_string())
+        fm.trashItemAtURL_resultingItemURL_error(&url, None)
+            .map_err(|e| e.to_string())
     }
 }
 
@@ -381,7 +410,8 @@ pub fn open_external(url: &str) -> Result<(), String> {
     if let Some(path) = file {
         return spawn_open_path(&path);
     }
-    if lower.starts_with("http://") || lower.starts_with("https://") || lower.starts_with("mailto:") {
+    if lower.starts_with("http://") || lower.starts_with("https://") || lower.starts_with("mailto:")
+    {
         if url.chars().any(|c| c.is_control() || c == '"' || c == '\'') {
             return Err("url contains a disallowed character".into());
         }
@@ -415,12 +445,18 @@ fn spawn_open_path(path: &std::path::Path) -> Result<(), String> {
     }
     #[cfg(target_os = "macos")]
     {
-        std::process::Command::new("open").arg(path).spawn().map_err(|e| e.to_string())?;
+        std::process::Command::new("open")
+            .arg(path)
+            .spawn()
+            .map_err(|e| e.to_string())?;
         return Ok(());
     }
     #[cfg(target_os = "linux")]
     {
-        std::process::Command::new("xdg-open").arg(path).spawn().map_err(|e| e.to_string())?;
+        std::process::Command::new("xdg-open")
+            .arg(path)
+            .spawn()
+            .map_err(|e| e.to_string())?;
         return Ok(());
     }
     #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
@@ -437,12 +473,18 @@ fn spawn_open_url(url: &str) -> Result<(), String> {
     }
     #[cfg(target_os = "macos")]
     {
-        std::process::Command::new("open").arg(url).spawn().map_err(|e| e.to_string())?;
+        std::process::Command::new("open")
+            .arg(url)
+            .spawn()
+            .map_err(|e| e.to_string())?;
         return Ok(());
     }
     #[cfg(target_os = "linux")]
     {
-        std::process::Command::new("xdg-open").arg(url).spawn().map_err(|e| e.to_string())?;
+        std::process::Command::new("xdg-open")
+            .arg(url)
+            .spawn()
+            .map_err(|e| e.to_string())?;
         return Ok(());
     }
     #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
@@ -458,9 +500,24 @@ fn spawn_shell_execute(target: &str) -> Result<(), String> {
     use windows::core::PCWSTR;
     use windows::Win32::UI::Shell::ShellExecuteW;
     use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
-    let wide: Vec<u16> = std::ffi::OsStr::new(target).encode_wide().chain(std::iter::once(0)).collect();
-    let op: Vec<u16> = std::ffi::OsStr::new("open").encode_wide().chain(std::iter::once(0)).collect();
-    let rc = unsafe { ShellExecuteW(None, PCWSTR(op.as_ptr()), PCWSTR(wide.as_ptr()), None, None, SW_SHOWNORMAL) };
+    let wide: Vec<u16> = std::ffi::OsStr::new(target)
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    let op: Vec<u16> = std::ffi::OsStr::new("open")
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    let rc = unsafe {
+        ShellExecuteW(
+            None,
+            PCWSTR(op.as_ptr()),
+            PCWSTR(wide.as_ptr()),
+            None,
+            None,
+            SW_SHOWNORMAL,
+        )
+    };
     if (rc.0 as isize) <= 32 {
         return Err(format!("ShellExecuteW failed ({})", rc.0 as isize));
     }
@@ -469,16 +526,27 @@ fn spawn_shell_execute(target: &str) -> Result<(), String> {
 
 /// Reveal in the file manager. Linux tries FileManager1.ShowItems, then `xdg-open` of the parent.
 pub fn reveal_path(path: &Path) -> Result<(), String> {
-    let target = if path.exists() { path.to_path_buf() } else { path.to_path_buf() };
+    let target = if path.exists() {
+        path.to_path_buf()
+    } else {
+        path.to_path_buf()
+    };
     #[cfg(windows)]
     {
         let arg = format!("/select,{}", target.display());
-        std::process::Command::new("explorer").arg(arg).spawn().map_err(|e| e.to_string())?;
+        std::process::Command::new("explorer")
+            .arg(arg)
+            .spawn()
+            .map_err(|e| e.to_string())?;
         return Ok(());
     }
     #[cfg(target_os = "macos")]
     {
-        std::process::Command::new("open").arg("-R").arg(&target).spawn().map_err(|e| e.to_string())?;
+        std::process::Command::new("open")
+            .arg("-R")
+            .arg(&target)
+            .spawn()
+            .map_err(|e| e.to_string())?;
         return Ok(());
     }
     #[cfg(target_os = "linux")]
@@ -487,7 +555,10 @@ pub fn reveal_path(path: &Path) -> Result<(), String> {
             return Ok(());
         }
         let parent = target.parent().unwrap_or(Path::new("."));
-        std::process::Command::new("xdg-open").arg(parent).spawn().map_err(|e| e.to_string())?;
+        std::process::Command::new("xdg-open")
+            .arg(parent)
+            .spawn()
+            .map_err(|e| e.to_string())?;
         return Ok(());
     }
     #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
@@ -517,7 +588,13 @@ fn show_items_dbus(path: &Path) -> Result<(), String> {
     let startup = gtk::glib::Variant::from("");
     let params = gtk::glib::Variant::tuple_from_iter([uris, startup].into_iter());
     proxy
-        .call_sync("ShowItems", Some(&params), gtk::gio::DBusCallFlags::NONE, 1500, Cancellable::NONE)
+        .call_sync(
+            "ShowItems",
+            Some(&params),
+            gtk::gio::DBusCallFlags::NONE,
+            1500,
+            Cancellable::NONE,
+        )
         .map(|_| ())
         .map_err(|e| e.to_string())
 }
@@ -539,8 +616,11 @@ pub struct Preview {
 const PREVIEW_READ: usize = 512 * 1024;
 const PREVIEW_CACHE_MAX: usize = 64;
 
-fn preview_cache() -> &'static std::sync::Mutex<std::collections::HashMap<String, (u64, u64, Preview)>> {
-    static CACHE: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<String, (u64, u64, Preview)>>> = std::sync::OnceLock::new();
+fn preview_cache(
+) -> &'static std::sync::Mutex<std::collections::HashMap<String, (u64, u64, Preview)>> {
+    static CACHE: std::sync::OnceLock<
+        std::sync::Mutex<std::collections::HashMap<String, (u64, u64, Preview)>>,
+    > = std::sync::OnceLock::new();
     CACHE.get_or_init(Default::default)
 }
 
@@ -573,7 +653,10 @@ pub fn count_words(text: &str) -> u64 {
 /// Excerpt = the text after it with Markdown markers dropped.
 pub fn preview_of(path: &Path, text: &str) -> (String, String) {
     let body = strip_front_matter(text);
-    let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+    let stem = path
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default();
     let mut title = String::new();
     let mut rest = body;
     for (i, line) in body.lines().enumerate().take(12) {
@@ -657,14 +740,37 @@ pub fn strip_inline(s: &str) -> String {
 fn preview_uncached(path: &Path) -> Preview {
     let p = path.to_string_lossy().into_owned();
     let mut buf = Vec::new();
-    let ok = fs::File::open(path).and_then(|f| f.take(PREVIEW_READ as u64).read_to_end(&mut buf)).is_ok();
+    let ok = fs::File::open(path)
+        .and_then(|f| f.take(PREVIEW_READ as u64).read_to_end(&mut buf))
+        .is_ok();
     if !ok {
-        return Preview { path: p, exists: false, title: path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default(), excerpt: String::new(), words: 0, mtime: 0 };
+        return Preview {
+            path: p,
+            exists: false,
+            title: path
+                .file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_default(),
+            excerpt: String::new(),
+            words: 0,
+            mtime: 0,
+        };
     }
     let text = String::from_utf8_lossy(&buf);
     let (title, excerpt) = preview_of(path, &text);
-    let mtime = fs::metadata(path).ok().and_then(|m| m.modified().ok()).and_then(millis).unwrap_or(0);
-    Preview { path: p, exists: true, title, excerpt, words: count_words(strip_front_matter(&text)), mtime }
+    let mtime = fs::metadata(path)
+        .ok()
+        .and_then(|m| m.modified().ok())
+        .and_then(millis)
+        .unwrap_or(0);
+    Preview {
+        path: p,
+        exists: true,
+        title,
+        excerpt,
+        words: count_words(strip_front_matter(&text)),
+        mtime,
+    }
 }
 
 /// Previews for the welcome page. Cached by (mtime, size), so reopening the welcome page reads
@@ -676,7 +782,9 @@ pub fn recent_previews(paths: &[String]) -> Vec<Preview> {
         .map(|p| {
             let path = Path::new(p);
             let meta = fs::metadata(path).ok();
-            let key = meta.as_ref().map(|m| (m.modified().ok().and_then(millis).unwrap_or(0), m.len()));
+            let key = meta
+                .as_ref()
+                .map(|m| (m.modified().ok().and_then(millis).unwrap_or(0), m.len()));
             if let Some((mt, len)) = key {
                 if let Ok(cache) = preview_cache().lock() {
                     if let Some((cm, cl, pv)) = cache.get(p) {
@@ -708,7 +816,12 @@ mod tests {
         assert!(excerpt.starts_with("这周开源社区格外热闹。"), "{excerpt}");
         assert!(!excerpt.contains("code()"));
         assert_eq!(super::count_words("Hello world 你好"), 4);
-        assert_eq!(super::strip_inline("has **bold**, *it*, ~~s~~, ==m==, `c`, [link](http://x/(y)) and ![img](a.png)"), "has bold, it, s, m, c, link and img");
+        assert_eq!(
+            super::strip_inline(
+                "has **bold**, *it*, ~~s~~, ==m==, `c`, [link](http://x/(y)) and ![img](a.png)"
+            ),
+            "has bold, it, s, m, c, link and img"
+        );
         assert_eq!(super::count_words("it's a well-known fact"), 4);
         let (t2, _) = super::preview_of(std::path::Path::new("/w/notes.md"), "plain text only");
         assert_eq!(t2, "notes");
@@ -720,9 +833,16 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let f = dir.join("p.md");
         std::fs::write(&f, "# T\n\nbody one two").unwrap();
-        let paths = vec![f.to_string_lossy().into_owned(), dir.join("gone.md").to_string_lossy().into_owned()];
+        let paths = vec![
+            f.to_string_lossy().into_owned(),
+            dir.join("gone.md").to_string_lossy().into_owned(),
+        ];
         let a = super::recent_previews(&paths);
-        assert!(a[0].exists && a[0].title == "T" && a[0].words == 4, "{:?}", a[0]);
+        assert!(
+            a[0].exists && a[0].title == "T" && a[0].words == 4,
+            "{:?}",
+            a[0]
+        );
         assert!(!a[1].exists);
         let b = super::recent_previews(&paths);
         assert_eq!(a[0], b[0]);

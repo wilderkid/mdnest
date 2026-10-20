@@ -134,14 +134,26 @@ mod tests {
     #[test]
     fn data_lines_and_default_event() {
         let got = events(&[b"data: hello\n\n"]);
-        assert_eq!(got, vec![SseItem::Event { event: None, data: "hello".into() }]);
+        assert_eq!(
+            got,
+            vec![SseItem::Event {
+                event: None,
+                data: "hello".into()
+            }]
+        );
     }
 
     #[test]
     fn multiline_data_joined_by_newline() {
         let raw = b"data: one\ndata: two\ndata:three\n\n";
         let got = events(&[raw]);
-        assert_eq!(got, vec![SseItem::Event { event: None, data: "one\ntwo\nthree".into() }]);
+        assert_eq!(
+            got,
+            vec![SseItem::Event {
+                event: None,
+                data: "one\ntwo\nthree".into()
+            }]
+        );
     }
 
     #[test]
@@ -150,7 +162,10 @@ mod tests {
         let got = events(&[raw]);
         assert_eq!(
             got,
-            vec![SseItem::Event { event: Some("delta".into()), data: "{\"t\":1}".into() }]
+            vec![SseItem::Event {
+                event: Some("delta".into()),
+                data: "{\"t\":1}".into()
+            }]
         );
     }
 
@@ -158,26 +173,50 @@ mod tests {
     fn comments_are_ignored() {
         let raw = b": keep-alive\n: another\ndata: x\n\n";
         let got = events(&[raw]);
-        assert_eq!(got, vec![SseItem::Event { event: None, data: "x".into() }]);
+        assert_eq!(
+            got,
+            vec![SseItem::Event {
+                event: None,
+                data: "x".into()
+            }]
+        );
     }
 
     #[test]
     fn crlf() {
         let raw = b"event: ping\r\ndata: pong\r\n\r\n";
         let got = events(&[raw]);
-        assert_eq!(got, vec![SseItem::Event { event: Some("ping".into()), data: "pong".into() }]);
+        assert_eq!(
+            got,
+            vec![SseItem::Event {
+                event: Some("ping".into()),
+                data: "pong".into()
+            }]
+        );
     }
 
     #[test]
     fn chunk_boundary_splits_a_line() {
         let got = events(&[b"data: hel", b"lo\n\n"]);
-        assert_eq!(got, vec![SseItem::Event { event: None, data: "hello".into() }]);
+        assert_eq!(
+            got,
+            vec![SseItem::Event {
+                event: None,
+                data: "hello".into()
+            }]
+        );
     }
 
     #[test]
     fn chunk_boundary_splits_crlf_and_blank_line() {
         let got = events(&[b"data: a\r", b"\n", b"data: b\r\n", b"\r\n"]);
-        assert_eq!(got, vec![SseItem::Event { event: None, data: "a\nb".into() }]);
+        assert_eq!(
+            got,
+            vec![SseItem::Event {
+                event: None,
+                data: "a\nb".into()
+            }]
+        );
     }
 
     #[test]
@@ -193,7 +232,10 @@ mod tests {
         assert_eq!(
             got,
             vec![
-                SseItem::Event { event: None, data: "{\"a\":1}".into() },
+                SseItem::Event {
+                    event: None,
+                    data: "{\"a\":1}".into()
+                },
                 SseItem::Done,
             ]
         );
@@ -205,8 +247,14 @@ mod tests {
         assert_eq!(
             got,
             vec![
-                SseItem::Event { event: None, data: "a".into() },
-                SseItem::Event { event: None, data: "b".into() },
+                SseItem::Event {
+                    event: None,
+                    data: "a".into()
+                },
+                SseItem::Event {
+                    event: None,
+                    data: "b".into()
+                },
             ]
         );
     }
@@ -215,7 +263,13 @@ mod tests {
     fn field_without_colon_is_empty_data() {
         // "data" with no colon is a field name and an empty value.
         let got = events(&[b"data\n\n"]);
-        assert_eq!(got, vec![SseItem::Event { event: None, data: String::new() }]);
+        assert_eq!(
+            got,
+            vec![SseItem::Event {
+                event: None,
+                data: String::new()
+            }]
+        );
     }
 
     #[test]
@@ -224,7 +278,10 @@ mod tests {
         assert!(p.push(b"data: tail", false).is_empty());
         assert_eq!(
             p.push(b"", true),
-            vec![SseItem::Event { event: None, data: "tail".into() }]
+            vec![SseItem::Event {
+                event: None,
+                data: "tail".into()
+            }]
         );
     }
 }

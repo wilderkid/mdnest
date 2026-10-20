@@ -183,7 +183,10 @@ pub fn backend_name(app: Option<&tauri::AppHandle>) -> Result<String, String> {
 }
 
 fn file_dir_of(state: &State) -> Result<&Path, String> {
-    state.file_dir.as_deref().ok_or_else(|| "no secrets dir".into())
+    state
+        .file_dir
+        .as_deref()
+        .ok_or_else(|| "no secrets dir".into())
 }
 
 pub fn set(app: Option<&tauri::AppHandle>, id: &str, value: &str) -> Result<(), String> {
@@ -304,7 +307,10 @@ mod tests {
 
     #[test]
     fn scrub_removes_secret() {
-        assert_eq!(scrub("bearer sk-live-abc failed", "sk-live-abc"), "bearer [redacted] failed");
+        assert_eq!(
+            scrub("bearer sk-live-abc failed", "sk-live-abc"),
+            "bearer [redacted] failed"
+        );
         assert_eq!(scrub("nothing", ""), "nothing");
         assert_eq!(scrub("aa aa", "aa"), "[redacted] [redacted]");
     }
