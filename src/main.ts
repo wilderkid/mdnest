@@ -1881,7 +1881,7 @@ sidebar.addTab("settings", "Settings", undefined, {
     const folderVal = ["./assets", "./${filename}.assets"].includes(folder) ? folder : "custom";
     const ls = langSetting();
     // Language sits above every group, always visible, labelled in both languages
-    const langBlock = `<div class="set-lang-top" role="radiogroup" aria-label="Language / 语言"><span class="set-lang-label">${icon("globe", 15)}<b>语言</b> / Language</span><div class="set-seg">`
+    const langBlock = `<div class="set-lang-top" role="radiogroup" aria-label="${escapeHtml(t("Language"))}"><span class="set-lang-label">${icon("globe", 15)}<b>语言</b> / Language</span><div class="set-seg">`
       + ([["auto", t("Follow system")], ["zh-CN", "简体中文"], ["en", "English"]] as [LangSetting, string][]).map(([v, l]) => `<button type="button" role="radio" class="set-seg-btn${v === ls ? " on" : ""}" aria-checked="${v === ls}" data-lang="${v}">${escapeHtml(l)}</button>`).join("")
       + `</div></div>`;
     const appearance = settingsGroup("appearance", "Appearance", "palette",

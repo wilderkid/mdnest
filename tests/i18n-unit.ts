@@ -32,7 +32,7 @@ ok(tTitle("File: Reopen with Encoding") === "文件：以其他编码重新打�
 ok(tTitle("View: Toggle Sidebar") === "视图：切换侧边栏", "palette pattern/exact");
 
 // Every menu label (both platforms) must be translated or be a proper noun / format name.
-const KEEP = /^(UTF-8|windows-1252|UTF-16LE|UTF-16BE|OPML|Word（.*|OpenOffice（.*|UTF-16 LE|UTF-16 BE|GBK|GB18030|Big5|Shift_JIS|EUC-KR|Windows-1252|ISO-8859-1|LF|CRLF|HTML|PDF|Image|LaTeX|EPUB|RTF|reStructuredText|MediaWiki|Textile|Org mode|YAML Front Matter|Unix \(LF\)|Windows \(CRLF\)|Markdown|MD Nest|Services|Hide.*|Show All|About MD Nest)$/;
+const KEEP = /^(UTF-8|windows-1252|UTF-16LE|UTF-16BE|OPML|Word（.*|OpenOffice（.*|UTF-16 LE|UTF-16 BE|GBK|GB18030|Big5|Shift_JIS|EUC-KR|Windows-1252|ISO-8859-1|LF|CRLF|HTML|PDF|Image|LaTeX|EPUB|RTF|reStructuredText|MediaWiki|Textile|Org mode|YAML Front Matter|Unix \(LF\)|Windows \(CRLF\)|Markdown|MD Nest|Services|Hide.*|Show All|About MD Nest|English)$/;
 const missing: string[] = [];
 const walk = (ns: MenuNode[]) => { for (const n of ns) {
   if (n.label && /[A-Za-z]/.test(n.label) && !/[\u4e00-\u9fff]/.test(n.label) && !KEEP.test(n.label)) missing.push(n.label);
@@ -45,7 +45,9 @@ ok(Object.values(ZH).every((v) => v.trim().length > 0), "no empty translations")
 
 setLang("en");
 const en: string[] = [];
-const walkEn = (ns: MenuNode[]) => { for (const n of ns) { if (n.label && /[\u4e00-\u9fff]/.test(n.label)) en.push(n.label); if (n.submenu) walkEn(n.submenu); } };
+// Language names are endonyms, and the Language submenu is labelled in both languages on purpose.
+const ENDONYM = new Set(["view.language", "lang.zh-CN"]);
+const walkEn = (ns: MenuNode[]) => { for (const n of ns) { if (n.label && /[\u4e00-\u9fff]/.test(n.label) && !ENDONYM.has(n.id ?? "")) en.push(n.label); if (n.submenu) walkEn(n.submenu); } };
 walkEn(menuTemplate(false).map(localize));
 ok(en.length === 0, "English menus stay English");
 

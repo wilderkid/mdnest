@@ -25,7 +25,9 @@ const KEEP_WORDS = new Set(("MD Nest MDNest Markdown HTML PDF Word EPUB LaTeX RT
   "Typora Drake Lapis Purple Vue Mdmdt GitHub Night Ayu Black Dark Light Google JB Juejin Material Vue3 Cesno Classic Green Plain Blue mdnest drake lapis purple vue mdmdt " +
   "js ts md png jpg svg html docx odt pdf tex rst org opml epub rtf txt " +
   "OpenOffice MediaWiki Textile reStructuredText Org mode Windows Linux macOS Unix JSON CSV SVG PNG JPEG KB MB GB ms px em pt " +
-  "localhost http https www com cn x pic notes docs other i18n test Front Matter H1 H2 H3 H4 H5 H6 RSS ID OK Emoji emoji SQLite Rust JavaScript TypeScript Python").split(/\s+/));
+  "localhost http https www com cn x pic notes docs other i18n test Front Matter H1 H2 H3 H4 H5 H6 RSS ID OK Emoji emoji SQLite Rust JavaScript TypeScript Python " +
+  // language switch: endonym "English" and the deliberately bilingual "语言 / Language" label
+  "English Language").split(/\s+/));
 const THEMES = fs.existsSync("dev-data/themes") ? fs.readdirSync("dev-data/themes").filter((f) => f.endsWith(".css")).map((f) => f.slice(0, -4).split("-").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ")) : [];
 const keepString = (s) => {
   s = s.replace(/^[✓✔•·]\s*/, "");
