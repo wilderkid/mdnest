@@ -6,6 +6,9 @@ import os from "node:os";
 import path from "node:path";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// WebDriver special keys
+const KEY = { Enter: "\uE007", Backspace: "\uE003", Tab: "\uE004", Escape: "\uE00C", Delete: "\uE017", Home: "\uE011", End: "\uE010",
+  ArrowLeft: "\uE012", ArrowUp: "\uE013", ArrowRight: "\uE014", ArrowDown: "\uE015", Control: "\uE009", Shift: "\uE008", Alt: "\uE00A" };
 
 export async function startNative({ app, display = ":78", port = 4444, env = {}, width = 1200, height = 800, args = [], profile: keep = null } = {}) {
   const procs = [];
@@ -60,6 +63,29 @@ export async function startNative({ app, display = ":78", port = 4444, env = {},
         if (Date.now() - t0 > timeout) throw new Error("waitFor timeout: " + fn.toString().slice(0, 160));
         await sleep(interval);
       }
+    },
+    /** real key events through WebDriver actions: type("abc"), press("Enter"), press("Home", ["Control"]) */
+    async type(text) {
+      const actions = [];
+      for (const ch of text) actions.push({ type: "keyDown", value: ch === "\n" ? KEY.Enter : ch }, { type: "keyUp", value: ch === "\n" ? KEY.Enter : ch });
+      await call("POST", `${S}/actions`, { actions: [{ type: "key", id: "kbd", actions }] });
+      await call("DELETE", `${S}/actions`).catch(() => {});
+    },
+    async press(key, mods = []) {
+      const k = KEY[key] ?? key;
+      const m = mods.map((x) => KEY[x]);
+      const actions = [...m.map((v) => ({ type: "keyDown", value: v })), { type: "keyDown", value: k }, { type: "keyUp", value: k }, ...m.reverse().map((v) => ({ type: "keyUp", value: v }))];
+      await call("POST", `${S}/actions`, { actions: [{ type: "key", id: "kbd", actions }] });
+      await call("DELETE", `${S}/actions`).catch(() => {});
+    },
+    /** real pointer click at the centre of the first element matching css (button 0 left, 2 right) */
+    async click(css, { button = 0, dx = null } = {}) {
+      const r = await this.exec((css) => { const e = document.querySelector(css); if (!e) return null; e.scrollIntoView({ block: "center" }); const b = e.getBoundingClientRect(); return { x: b.left, y: b.top, w: b.width, h: b.height }; }, css);
+      if (!r) throw new Error("no element " + css);
+      const x = Math.round(r.x + (dx ?? r.w / 2)), y = Math.round(r.y + r.h / 2);
+      await call("POST", `${S}/actions`, { actions: [{ type: "pointer", id: "mouse", parameters: { pointerType: "mouse" }, actions: [
+        { type: "pointerMove", duration: 0, x, y, origin: "viewport" }, { type: "pointerDown", button }, { type: "pointerUp", button }] }] });
+      await call("DELETE", `${S}/actions`).catch(() => {});
     },
     async screenshot(file) {
       const b64 = await call("GET", `${S}/screenshot`);

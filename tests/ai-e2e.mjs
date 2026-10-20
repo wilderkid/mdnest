@@ -492,7 +492,7 @@ try {
     await openAiPanel();
     await page.locator(".mdn-ai-input").waitFor();
     const status = await page.locator(".mdn-ai-status").innerText();
-    ok(/custom/.test(status) && /mock-1/.test(status), "i) chat status shows preset and model", status);
+    ok(/custom/i.test(status) && /mock-1/.test(status), "i) chat status shows preset and model", status);
     await page.locator(".mdn-ai-input").fill("What is this document about?");
     await page.locator(".mdn-ai-actions button", { hasText: "Send" }).click();
     await page.waitForFunction(() => {

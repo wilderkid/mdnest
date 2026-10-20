@@ -145,6 +145,13 @@ export function headingSrcPlugin() {
       if (trs.some((t) => t.getMeta("composition"))) return null;
       return process(trs, old, state);
     },
+    // Node views (footnote refs, code blocks, HTML blocks…) stop their events from reaching handleDOMEvents,
+    // so mark the document as touched in the capture phase on the editor root as well.
+    view(view) {
+      const touch = () => { const s = headingSrcKey.getState(view.state); if (s) s.touched = true; };
+      for (const ev of ["mousedown", "keydown", "touchstart", "compositionstart"]) view.dom.addEventListener(ev, touch, true);
+      return { destroy() { for (const ev of ["mousedown", "keydown", "touchstart", "compositionstart"]) view.dom.removeEventListener(ev, touch, true); } };
+    },
     props: {
       handleDOMEvents: {
         mousedown(view) {

@@ -58,7 +58,8 @@ ok(rawLink.startsWith("[link](https://example.com"), "markers: link reveals [tex
 // click-then-type immediately (no wait) lands where clicked
 await page.locator("#write h2:text('Lists')").click();
 await page.keyboard.press("End"); await page.keyboard.type("Z");
-ok((await parent()).includes('heading("ListsZ")'), "cursor: click-then-type lands in clicked heading", await parent());
+// 0.2.1: the caret's heading carries its editable "## " prefix (md_hprefix), the text itself is unchanged
+ok(/^heading\((md_hprefix\("## "\), )?"ListsZ"\)/.test(await parent()), "cursor: click-then-type lands in clicked heading", await parent());
 await page.keyboard.press("Backspace");
 // inline math: click → raw $…$ + live preview popover
 await page.locator("#write .md-inline-math").first().click(); await page.waitForTimeout(400);
