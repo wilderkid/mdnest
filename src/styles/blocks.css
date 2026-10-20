@@ -41,8 +41,8 @@ body.shell-b .mdn-saved[data-state="failed"] { background: color-mix(in srgb, va
 
 /* ---------- gap cursor: a caret between two blocks (Typora has none; this is where a new paragraph will go) ---------- */
 #write .ProseMirror-gapcursor { position: relative; display: none; height: 0; pointer-events: none; }
-.ProseMirror-focused .ProseMirror-gapcursor { display: block; }
-#write .ProseMirror-gapcursor:before { content: ""; position: absolute; left: 0; right: 0; top: -1px; border-top: 1px dashed color-mix(in srgb, var(--sh-accent, #2f7d6d) 45%, transparent); }
+#write.ProseMirror-focused .ProseMirror-gapcursor { display: block; }
+#write .ProseMirror-gapcursor:before { content: ""; position: absolute; left: 0; right: 0; top: -1px; border-top: 1px dashed color-mix(in srgb, var(--sh-accent, #2f7d6d) 60%, transparent); }
 #write .ProseMirror-gapcursor:after { content: ""; position: absolute; left: 0; top: -2px; width: 28px; border-top: 2px solid var(--sh-accent, var(--text-color, #333)); animation: mdn-blink 1.1s steps(2, start) infinite; }
 
 /* ---------- grip handle at the left of a block ---------- */

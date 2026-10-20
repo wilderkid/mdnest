@@ -181,7 +181,7 @@ async function caretEnd(page, sel) { await page.locator(sel).last().click(); awa
 }
 // Chinese UI screenshot of the format submenu
 if (SHOTS) {
-  const page = await open("ctxzh.md", "你好 world 这里\n", { lang: "zh" });
+  const page = await open("ctxzh.md", "你好 world 这里\n", { lang: "zh-CN" });
   const b = await dblWord(page, "world");
   await page.mouse.click(b.x, b.y, { button: "right" }); await page.waitForTimeout(150);
   await page.locator('.context-menu .mdn-menu-item[data-id="format"]').hover(); await page.waitForTimeout(250);
@@ -444,7 +444,9 @@ if (SHOTS) {
   ok(re === saved && saved === 'Intro text\n\n<img src="pic.png" alt="pic" style="display:block;margin:0 auto;zoom:33%;" />\n\nAfter\n' && Math.abs(+z2 - 0.33) < 0.01, "image: reopen round-trips byte for byte and renders at 33%", [saved, re, z2]);
   await page.locator("#write span.md-image img").click({ button: "right" }); await page.waitForTimeout(150);
   await page.locator('.context-menu .mdn-menu-item[data-id="image-align"]').hover(); await page.waitForTimeout(150);
-  if (SHOTS) { await page.locator('.context-menu .mdn-menu-item[data-id="image-zoom"]').hover(); await page.waitForTimeout(200); await page.shot("after-image-context-menu.png"); await page.locator('.context-menu .mdn-menu-item[data-id="image-align"]').hover(); await page.waitForTimeout(150); }
+  if (SHOTS) { await page.locator('.context-menu .mdn-menu-item[data-id="image-zoom"]').hover(); await page.waitForTimeout(200); await page.shot("after-image-context-menu.png"); await page.keyboard.press("Escape"); await page.waitForTimeout(100); await page.keyboard.press("Escape");
+    await page.locator("#write span.md-image img").click({ button: "right" }); await page.waitForTimeout(150);
+    await page.locator('.context-menu .mdn-menu-item[data-id="image-align"]').hover(); await page.waitForTimeout(150); }
   await page.locator('.context-menu .mdn-menu-item[data-id="format.image.reset"]').click(); await page.waitForTimeout(200);
   await page.locator('.mdn-imgbar [data-a=center]').click(); await page.waitForTimeout(150);
   ok((await page.md()) === "Intro text\n\n![pic](pic.png)\n\nAfter\n", "image: Original Size + un-align returns to plain ![]()", await page.md());
