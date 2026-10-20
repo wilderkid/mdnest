@@ -162,6 +162,8 @@ const marks: Record<string, MarkSpec> = {
   },
   // Raw-markdown region: while the caret is inside a formatted span, the span is replaced by its
   // Markdown source carrying this mark; it is re-parsed into real marks when the caret leaves.
+  // Typora-style editable heading prefix ("## ") while the caret is in a heading (see headingsrc.ts)
+  md_hprefix: { inclusive: false, excludes: "", parseDOM: [], toDOM: () => ["span", { class: "md-meta md-before md-heading-meta md-hprefix", spellcheck: "false" }, 0] as any },
   md_src: { inclusive: true, excludes: "", parseDOM: [], toDOM: () => ["span", { class: "md-expand md-src" }, 0] as any },
 };
 

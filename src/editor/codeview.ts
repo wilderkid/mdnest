@@ -106,7 +106,9 @@ export class CodeView implements NodeView {
     if (kind === "math" || this.isDiagram()) this.ensurePreview();
     this.applyMode();
     this.cm.on("beforeChange", () => (this.incomingChanges = this.updating));
-    this.cm.on("cursorActivity", () => { if (!this.updating && !this.incomingChanges) this.forwardSelection(); });
+    // CodeMirror fires cursorActivity before "changes": while its text is ahead of the node, forwarding
+    // the selection would make ProseMirror re-render this view with the old text and undo the keystroke.
+    this.cm.on("cursorActivity", () => { if (!this.updating && !this.incomingChanges && this.cm.getValue() === this.node.textContent) this.forwardSelection(); });
     this.cm.on("changes", () => { if (!this.updating) { this.valueChanged(); this.forwardSelection(); } this.incomingChanges = false; });
     this.cm.on("focus", () => this.forwardSelection());
     setTimeout(() => this.cm.refresh(), 0);
@@ -206,6 +208,9 @@ export class CodeView implements NodeView {
   update(node: PMNode, _outer?: readonly any[], inner?: any) {
     if (node.type !== this.node.type) return false;
     queueMicrotask(() => this.syncDecorations(inner));
+    // Same node (only decorations/selection changed): the doc text did not change, so never push it into
+    // CodeMirror — CodeMirror may hold a keystroke that has not been dispatched yet.
+    if (node === this.node) return true;
     const langChanged = node.attrs.params !== this.node.attrs.params;
     this.node = node;
     if (this.kind === "fence") {

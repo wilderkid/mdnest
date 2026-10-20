@@ -1,6 +1,7 @@
 import type { Host, DirEntry, ListedFile } from "../host/types";
 import type { SidebarPanel } from "../plugins/api";
 import { EditorView } from "prosemirror-view";
+import { headingText } from "../editor/headingsrc";
 import { escapeHtml } from "../editor/render";
 import { osClass } from "./os";
 import { icon, hasIcon, iconButton } from "./icons";
@@ -996,7 +997,7 @@ export class Sidebar {
     if (key !== this.outlineFor) { this.outlineCollapsed.clear(); this.outlineFor = key; }
     const items: { level: number; text: string; pos: number; children: boolean }[] = [];
     view.state.doc.descendants((n, pos) => {
-      if (n.type.name === "heading") items.push({ level: n.attrs.level, text: n.textContent, pos, children: false });
+      if (n.type.name === "heading") items.push({ level: n.attrs.level, text: headingText(n), pos, children: false });
       return n.type.name !== "heading" && !n.isTextblock;
     });
     for (let i = 0; i < items.length; i++) {

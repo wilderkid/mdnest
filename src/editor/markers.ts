@@ -10,9 +10,13 @@ import { Transform } from "prosemirror-transform";
 import { schema } from "./schema";
 import { parser, serializer, refEnvFor } from "./markdown";
 import { renderTex } from "./render";
+import { stripHeadingPrefixes, headingPrefixLen, userTouched } from "./headingsrc";
 
 const CARET = "\uE000", LEAD = "\uE001";
 const src = schema.marks.md_src;
+const hprefix = schema.marks.md_hprefix;
+/** marks that make a span "formatted" (expandable); the heading prefix mark is not formatting */
+const fmt = (m: Mark) => m.type !== src && m.type !== hprefix;
 
 /** inline fragment → markdown source; optional caret offset (within fragment) is tracked */
 export function inlineToMarkdown(frag: Fragment, caret?: number): { text: string; caret: number } {
@@ -73,7 +77,10 @@ const SPECIAL = /[*_`~=\[\]$\\<]/;
  * is tracked with a sentinel; returns its new position (or null).
  */
 function collapseBlock(tr: Transform, blockPos: number, caret: number | null): number | null {
-  const block = tr.doc.nodeAt(blockPos)!; const start = blockPos + 1;
+  const whole = tr.doc.nodeAt(blockPos)!;
+  // a revealed heading prefix ("## ") stays verbatim in front of the re-parsed inline content
+  const skip = headingPrefixLen(whole);
+  const block = skip ? whole.copy(whole.content.cut(skip)) : whole; const start = blockPos + 1 + skip;
   const raws: string[] = []; const parts: PMNode[] = [];
   let run = null as string | null;
   const flush = () => { if (run != null) { parts.push(schema.text(String.fromCharCode(PH + raws.length))); raws.push(run); run = null; } };
@@ -125,6 +132,7 @@ function collapseRange(tr: Transform, r: { from: number; to: number }) {
 }
 /** re-parse every raw region (used before serializing / exporting) */
 export function collapseAll(doc: PMNode): PMNode {
+  doc = stripHeadingPrefixes(doc);
   const ranges = srcRanges(doc); if (!ranges.length) return doc;
   const tr = new Transform(doc);
   const blocks = [...new Set(ranges.map((r) => doc.resolve(r.from).before()))].sort((a, b) => b - a);
@@ -141,13 +149,13 @@ function expandable(doc: PMNode, pos: number) {
   const segs: Seg[] = [];
   parent.forEach((n, off) => segs.push({ from: start + off, to: start + off + n.nodeSize, node: n }));
   const ATOMS = ["inline_math", "footnote_ref"];
-  const formatted = (n: PMNode) => ATOMS.includes(n.type.name) || n.marks.some((m) => m.type !== src);
+  const formatted = (n: PMNode) => !hprefix.isInSet(n.marks) && (ATOMS.includes(n.type.name) || n.marks.some(fmt));
   // segments that touch the caret and are formatted
   let lo = -1, hi = -1;
   segs.forEach((s, i) => { if (formatted(s.node) && s.from <= pos && pos <= s.to) { if (lo < 0) lo = i; hi = i; } });
   if (lo < 0) return null;
   // grow while neighbours share any non-src mark with the current edge (covers nested/overlapping marks)
-  const shares = (a: PMNode, b: PMNode) => a.marks.some((m) => m.type !== src && m.isInSet(b.marks));
+  const shares = (a: PMNode, b: PMNode) => a.marks.some((m) => fmt(m) && m.isInSet(b.marks));
   while (lo > 0 && shares(segs[lo].node, segs[lo - 1].node)) lo--;
   while (hi < segs.length - 1 && shares(segs[hi].node, segs[hi + 1].node)) hi++;
   if (segs.slice(lo, hi + 1).some((s) => !s.node.isText && !ATOMS.includes(s.node.type.name))) return null; // images etc.
@@ -179,7 +187,8 @@ export function syncSelectionFromDOM(view: EditorView, force = false): boolean {
   } catch { return false; }
 }
 
-function expandAt(tr: Transaction) {
+function expandAt(tr: Transaction, state: EditorState) {
+  if (!userTouched(state)) return; // not on a freshly loaded document before the user clicks/types
   const sel = tr.selection;
   if (!sel.empty || !(sel instanceof TextSelection)) return;
   const pos = sel.head;
@@ -224,7 +233,7 @@ export function markersPlugin() {
       for (const [a, b] of inserted) {
         tr.doc.nodesBetween(a, b, (n, pos, parent) => {
           if (!n.isText || !parent || !parent.isTextblock || parent.type.spec.code) return;
-          if (n.marks.some((m) => m.type === src || m.type.spec.code)) return;
+          if (n.marks.some((m) => m.type === src || m.type === hprefix || m.type.spec.code)) return;
           const f = Math.max(a, pos), t2 = Math.min(b, pos + n.nodeSize);
           const after = tr.doc.resolve(t2).nodeAfter;
           const touchesRaw = !!after && after.isText && !!src.isInSet(after.marks) && t2 === pos + n.nodeSize;
@@ -248,7 +257,7 @@ export function markersPlugin() {
       }
       if (caret != null) tr.setSelection(TextSelection.create(tr.doc, caret));
       // 3) expand the formatted span at the caret
-      expandAt(tr);
+      expandAt(tr, state);
       return tr.docChanged || tr.selectionSet ? tr : null;
     },
     props: {

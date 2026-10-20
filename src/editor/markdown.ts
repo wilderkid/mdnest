@@ -477,6 +477,7 @@ export const serializer = new MarkdownSerializer({
     },
     mixable: (d.marks.link as any).mixable,
   },
+  md_hprefix: { open: "", close: "" }, // stripped before serializing (headingsrc.ts)
   md_src: { open: "", close: "" }, // never reached: raw regions are collapsed before serializing
 });
 

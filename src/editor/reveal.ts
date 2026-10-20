@@ -34,13 +34,7 @@ export function revealPlugin() {
           }
           return DecorationSet.create(state.doc, decos);
         }
-        const parent = $from.parent;
-        if (parent.isTextblock && !parent.type.spec.code) {
-          const blockStart = $from.start();
-          if (parent.type.name === "heading") {
-            decos.push(Decoration.widget(blockStart, meta("#".repeat(parent.attrs.level) + " ", "md-before md-heading-meta"), { side: -1, marks: [] }));
-          }
-        }
+        // heading "#" prefixes are real, editable text now (headingsrc.ts)
         return DecorationSet.create(state.doc, decos);
       },
     },

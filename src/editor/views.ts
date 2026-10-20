@@ -1,4 +1,5 @@
 import { Node as PMNode } from "prosemirror-model";
+import { headingText } from "./headingsrc";
 import { EditorView, NodeView } from "prosemirror-view";
 import { NodeSelection, TextSelection } from "prosemirror-state";
 import CodeMirror from "codemirror";
@@ -83,7 +84,7 @@ export class TocView implements NodeView {
     const items: string[] = [];
     let i = 0;
     doc.descendants((n) => {
-      if (n.type.name === "heading") items.push(`<span class="md-toc-item md-toc-h${n.attrs.level}" data-ref="h${i++}"><a class="md-toc-inner" href="#">${escapeHtml(n.textContent)}</a></span>`);
+      if (n.type.name === "heading") items.push(`<span class="md-toc-item md-toc-h${n.attrs.level}" data-ref="h${i++}"><a class="md-toc-inner" href="#">${escapeHtml(headingText(n))}</a></span>`);
       return n.type.name !== "heading";
     });
     this.dom.innerHTML = `<p class="md-toc-content" role="list">${items.join("")}</p>`;

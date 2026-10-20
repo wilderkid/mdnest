@@ -7,6 +7,7 @@ import { tableEditing, columnResizing } from "prosemirror-tables";
 import { schema } from "./schema";
 import { parseMarkdown, serializeMarkdown } from "./markdown";
 import { revealPlugin } from "./reveal";
+import { headingSrcPlugin, markPristine } from "./headingsrc";
 import { markersPlugin, collapseAll } from "./markers";
 import { defsPlugin, defsKeymap } from "./defs";
 import { tableToolbarPlugin } from "./tabletools";
@@ -59,7 +60,7 @@ export function createEditor(mount: HTMLElement, markdown: string, hooks: Editor
     liveCommandKeymap(() => hooks.commands?.() ?? []),
     defsPlugin(), defsKeymap(),
     autoPairPlugin(), smartPunctPlugin(), emojiPlugin(), buildInputRules(schema), ...buildKeymaps(schema, hooks.keys), history(), dropCursor(), gapCursor(),
-    columnResizing(), tableEditing(), revealPlugin(), tableToolbarPlugin(), searchPlugin(), externalDecorations(hooks),
+    columnResizing(), tableEditing(), revealPlugin(), headingSrcPlugin(), tableToolbarPlugin(), searchPlugin(), externalDecorations(hooks),
   ];
   const mkState = (md: string) => {
     const doc = parseMarkdown(md);
@@ -68,7 +69,9 @@ export function createEditor(mount: HTMLElement, markdown: string, hooks: Editor
     let pos = -1;
     doc.descendants((n, p) => { if (pos >= 0) return false; if (n.isTextblock && !n.type.spec.code) { pos = p + 1; return false; } return true; });
     const selection = pos >= 0 ? TextSelection.create(doc, pos) : undefined;
-    return EditorState.create({ doc, plugins, selection });
+    const st = EditorState.create({ doc, plugins, selection });
+    markPristine(st); // a freshly loaded document reveals no Markdown source until the user clicks/types
+    return st;
   };
   const view = new EditorView({ mount }, {
     state: mkState(markdown),
