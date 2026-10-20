@@ -1,5 +1,5 @@
 import { Node as PMNode } from "prosemirror-model";
-import { headingText } from "./headingsrc";
+import { headingText, userTouched } from "./headingsrc";
 import { EditorView, NodeView } from "prosemirror-view";
 import { NodeSelection, TextSelection, Selection } from "prosemirror-state";
 import CodeMirror from "codemirror";
@@ -98,6 +98,9 @@ export class TocView implements NodeView {
   stopEvent() { return true; }
 }
 
+/** the block's source as shown in its editor: without the newline that ends every HTML block */
+const srcOf = (html: string | undefined) => (html || "").replace(/\n$/, "");
+
 /** Raw HTML block. A CodeMirror editor holds the source; a sandboxed preview shows the rendered HTML. */
 class HtmlBlockView implements NodeView {
   dom: HTMLElement;
@@ -115,7 +118,7 @@ class HtmlBlockView implements NodeView {
     editor.className = "md-htmlblock-editor";
     this.dom.appendChild(editor);
     this.cm = CodeMirror(editor, {
-      value: node.attrs.html || "",
+      value: srcOf(node.attrs.html),
       mode: "htmlmixed",
       theme: "inner",
       lineWrapping: true,
@@ -179,8 +182,9 @@ class HtmlBlockView implements NodeView {
   private commit() {
     const p = this.getPos();
     if (p == null) return;
-    const html = this.cm.getValue();
-    if (html === this.node.attrs.html) return;
+    const old = this.node.attrs.html || "";
+    const html = this.cm.getValue() + (old.endsWith("\n") ? "\n" : "");
+    if (html === old) return;
     this.view.dispatch(this.view.state.tr.setNodeMarkup(p, undefined, { ...this.node.attrs, html }));
   }
   private paint(preview: HTMLElement, html: string) {
@@ -205,9 +209,9 @@ class HtmlBlockView implements NodeView {
   update(node: PMNode) {
     if (node.type !== this.node.type) return false;
     this.node = node;
-    if (!this.cm.hasFocus() && this.cm.getValue() !== node.attrs.html) {
+    if (!this.cm.hasFocus() && this.cm.getValue() !== srcOf(node.attrs.html)) {
       this.updating = true;
-      this.cm.setValue(node.attrs.html || "");
+      this.cm.setValue(srcOf(node.attrs.html));
       this.updating = false;
     }
     const preview = this.dom.querySelector<HTMLElement>(".md-htmlblock-container");
@@ -218,7 +222,8 @@ class HtmlBlockView implements NodeView {
     return this.dom.contains(e.target as Node);
   }
   ignoreMutation() { return true; }
-  selectNode() { this.dom.classList.add("ProseMirror-selectednode"); this.focusInside(); }
+  // A freshly opened file whose first block is HTML starts with this node selected: stay rendered until the user acts
+  selectNode() { this.dom.classList.add("ProseMirror-selectednode"); if (userTouched(this.view.state)) this.focusInside(); }
   deselectNode() { this.dom.classList.remove("ProseMirror-selectednode"); if (!this.cm.hasFocus()) this.setEditing(false); }
 }
 

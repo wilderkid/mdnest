@@ -7,6 +7,9 @@ import { Selection, TextSelection } from "prosemirror-state";
 import { exitCode } from "prosemirror-commands";
 import { undo, redo } from "prosemirror-history";
 import { renderTex, renderMermaid } from "./render";
+import { attachLangPicker } from "./langpicker";
+import { userTouched } from "./headingsrc";
+import { t } from "../i18n";
 
 // Language modes are lazy-loaded chunks (Phase 2 size work): only the modes a document uses are fetched.
 const MODE_LOADERS: Record<string, () => Promise<unknown>> = {
@@ -78,22 +81,25 @@ export class CodeView implements NodeView {
       const tip = document.createElement("div");
       tip.className = "code-tooltip md-hover-tip"; tip.contentEditable = "false";
       const inp = document.createElement("input");
-      inp.className = "ty-cm-lang-input"; inp.placeholder = "language"; inp.value = node.attrs.params;
-      inp.addEventListener("change", () => { const p = this.getPos(); if (p != null) view.dispatch(view.state.tr.setNodeMarkup(p, undefined, { params: inp.value.trim() })); });
+      inp.className = "ty-cm-lang-input"; inp.value = node.attrs.params;
+      attachLangPicker(inp, (lang) => {
+        const p = this.getPos();
+        if (p != null && lang !== this.node.attrs.params) view.dispatch(view.state.tr.setNodeMarkup(p, undefined, { ...this.node.attrs, params: lang }));
+      }, () => this.cm.focus());
       const copy = document.createElement("button");
       copy.type = "button";
       copy.className = "mdn-code-copy";
-      copy.textContent = "Copy";
-      copy.title = "Copy code content";
+      copy.textContent = t("Copy");
+      copy.title = t("Copy code content");
       copy.addEventListener("mousedown", (e) => e.preventDefault());
       copy.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
         const text = this.cm.getValue();
         const done = () => {
-          copy.textContent = "Copied";
-          window.dispatchEvent(new CustomEvent("mdn-notify", { detail: "Copied" }));
-          setTimeout(() => { if (copy.isConnected) copy.textContent = "Copy"; }, 1200);
+          copy.textContent = t("Copied");
+          window.dispatchEvent(new CustomEvent("mdn-notify", { detail: t("Copied") }));
+          setTimeout(() => { if (copy.isConnected) copy.textContent = t("Copy"); }, 1200);
         };
         if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(done, () => done());
         else done();
@@ -235,7 +241,7 @@ export class CodeView implements NodeView {
     if (this.preview) this.schedulePreview();
     return true;
   }
-  selectNode() { this.cm.focus(); }
+  selectNode() { if (userTouched(this.view.state)) this.cm.focus(); }
   stopEvent() { return true; }
   ignoreMutation() { return true; }
   destroy() { clearTimeout(this.renderTimer); }

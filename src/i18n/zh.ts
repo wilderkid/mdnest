@@ -147,4 +147,6 @@ export const ZH: Record<string, string> = {
   // slash menu
   "Bullet List": "无序列表", "Numbered List": "有序列表", "Code Block": "代码块", "Image…": "图片…", Link: "链接",
   "Front Matter": "元数据（Front Matter）", "Callout/Alert": "提示块", "No slash commands": "没有可用的斜杠命令",
+  // code block tools
+  "language…": "语言…", "Code language": "代码语言", "Copy code content": "复制代码内容", "Plain Text": "纯文本",
 };

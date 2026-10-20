@@ -1,0 +1,12 @@
+FAIL bug6: freshly opened file shows no '#' marker — # 标题一
+FAIL bug6: still hidden after load settles (no focus yet)
+PASS bug2: caret in heading reveals '# '
+FAIL bug2: typing '#' in the marker makes it H2
+FAIL bug2: deleting the marker turns it into a paragraph — # 题一
+PASS bug2/IME: '## ' + IME 标题二 → H2, marker clean after leaving
+PASS bug2: marker hidden again when the caret leaves
+FAIL bug4: typing into a new code block — Intro
+FAIL bug4/IME: composition commits into the code block — Intro
+FAIL bug4: Ctrl+Home stays inside CodeMirror — Intro
+FAIL bug4: focusing the language input opens suggestions
+  name: 'TimeoutError'
