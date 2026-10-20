@@ -327,9 +327,10 @@ await page.goto(base + `?theme=mdnest&file=${encodeURIComponent(DOC)}&folder=${e
 await page.waitForSelector("body.mdn-ready");
 await page.waitForTimeout(250);
 await page.screenshot({ path: path.join(OUT, "file-tree-toolbar.png") });
-const svg = await page.locator("#sidebar-footer button svg").count();
-ok(svg >= 5, "sidebar footer uses svg icons", String(svg));
-ok(await page.locator("#sidebar-sort-btn").innerText().then((t) => t.includes("Sort")), "sort button keeps Sort text");
+// Shell B: the old footer toolbar moved into the files panel header (+ the sort button in the section header)
+const svg = await page.locator('.mdn-head[data-for="files"] .ph-btn svg, #sidebar-sort-btn svg').count();
+ok(svg >= 5, "files header actions use svg icons", String(svg));
+ok(await page.locator("#sidebar-sort-btn").getAttribute("title").then((t) => t === "Sort") && /Name/.test(await page.locator("#sidebar-sort-btn").innerText()), "sort button keeps Sort title + key label");
 
 ok(errors.length === 0, "no page errors", errors.join(" | "));
 await browser.close();

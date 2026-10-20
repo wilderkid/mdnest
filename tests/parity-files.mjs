@@ -43,8 +43,8 @@ try {
   await page.evaluate(() => { localStorage.removeItem("mdnest.autosave"); localStorage.setItem("mdnest.reopenLast", "0"); });
   await page.waitForSelector("body.mdn-ready");
   await page.waitForSelector("#mdn-welcome");
-  const welcomeText = await page.locator("#mdn-welcome h1").innerText();
-  ok(welcomeText.includes("MD Nest"), "welcome page #mdn-welcome", welcomeText);
+  const welcomeText = await page.locator("#mdn-welcome .wel-sub").innerText();
+  ok(welcomeText.includes("MD Nest") && /start writing today/.test(await page.locator("#mdn-welcome h1").innerText()), "welcome page #mdn-welcome", welcomeText);
   ok(await page.locator("#mdn-welcome button", { hasText: "New File" }).count() === 1, "welcome New File button");
   ok(await page.locator("#mdn-welcome button", { hasText: "Open File…" }).count() === 1, "welcome Open File button");
   ok(await page.locator("#mdn-welcome button", { hasText: "Open Folder…" }).count() === 1, "welcome Open Folder button");
@@ -165,14 +165,14 @@ try {
   ok(fs.existsSync(path.join(TMP, "beta-renamed.md")), "inline rename");
 
   // New file from the footer
-  await page.locator("#sidebar-footer button[title='New File']").click();
+  await page.locator(".mdn-head[data-for=files] .ph-btn[title='New File']").click();
   await page.waitForTimeout(200);
   await page.keyboard.press("Escape");
   await page.waitForTimeout(200);
   ok(fs.readdirSync(TMP).some((n) => n.startsWith("Untitled") && n.endsWith(".md")), "footer new file", fs.readdirSync(TMP).join(","));
 
   // New folder
-  await page.locator("#sidebar-footer button[title='New Folder']").click();
+  await page.locator(".mdn-head[data-for=files] .ph-btn[title='New Folder']").click();
   await page.waitForTimeout(200);
   await page.keyboard.press("Escape");
   await page.waitForTimeout(200);

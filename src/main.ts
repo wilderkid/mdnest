@@ -1817,7 +1817,7 @@ function switchRow(id: string, label: string, on: boolean, hint = "", attrs = ""
 function selectRow(id: string, label: string, options: [string, string][], value: string, hint = ""): string {
   return `<label class="set-row"><span class="set-txt"><span class="set-label">${escapeHtml(t(label))}</span>${hint ? `<small>${escapeHtml(t(hint))}</small>` : ""}</span><select id="${id}" class="set-select">${options.map(([v, l]) => `<option value="${escapeHtml(v)}" ${v === value ? "selected" : ""}>${escapeHtml(t(l))}</option>`).join("")}</select></label>`;
 }
-function settingsGroup(id: string, title: string, ic: string, rows: string, summary = "", openByDefault = false): string {
+function settingsGroup(id: string, title: string, ic: string, rows: string, summary = "", openByDefault = true): string {
   const open = settingsGroupsOpen()[id] ?? openByDefault;
   return `<section class="set-grp${open ? "" : " closed"}" data-grp="${id}"><div class="set-head" role="button" tabindex="0">${icon("chevronDown", 12, 2, "set-caret")}${icon(ic, 15)}<span class="set-title">${escapeHtml(t(title))}</span><small>${escapeHtml(summary)}</small></div><div class="set-body">${rows}</div></section>`;
 }

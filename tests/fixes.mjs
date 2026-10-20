@@ -125,7 +125,7 @@ try {
   m = await md(); ok(!m.includes("\\["), "no escaped brackets in output", m.match(/.{0,20}\\\[.{0,20}/)?.[0] ?? "");
   // --no-restore equivalent in the browser: ?restore=0 with no file → welcome page
   await page.goto(base + "?restore=0"); await page.waitForSelector("body.mdn-ready"); await page.waitForTimeout(300);
-  ok(await page.locator("#mdn-welcome h1").innerText().then((t) => t.includes("MD Nest")) && (await page.locator("#footer-word-count").innerText()) === "0 words", "?restore=0 starts on the welcome page");
+  ok(await page.locator("#mdn-welcome .wel-sub").innerText().then((t) => t.includes("MD Nest")) && (await page.locator("#footer-word-count").innerText()) === "0 words", "?restore=0 starts on the welcome page");
   await page.evaluate(() => localStorage.setItem("mdnest.lastFile", "/workspace/mdnest/dev-data/workspace/sample.md"));
   await page.goto(base); await page.waitForSelector("body.mdn-ready"); await page.waitForTimeout(300);
   ok((await page.locator("#write h1").first().innerText()).includes("Feature Tour"), "default: last file reopened");

@@ -207,7 +207,8 @@ await page.locator("#write h2").first().click();
 fs.writeFileSync(DOC, fs.readFileSync(DOC, "utf8").replace("Final paragraph.", "Final paragraph — edited externally."));
 await page.waitForTimeout(3500);
 ok((await md()).includes("edited externally"), "file watching: external change reloaded");
-await page.click('.sidebar-tab[data-id="recent"]');
+// Shell B: recent files are a section at the top of the Files panel
+await page.evaluate(() => window.mdnest.sidebar.select("recent"));
 ok(await page.locator(".recent-file").count() >= 1, "recent files: listed", await page.locator(".recent-file .file-node-title").first().innerText().catch(() => ""));
 await page.evaluate(() => localStorage.removeItem("mdnest.autosave"));
 
