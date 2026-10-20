@@ -16,8 +16,8 @@ const ok = (c: boolean, name: string, info = "") => {
 };
 
 ok(imageStyle(null, "center") === "display:block;margin:0 auto", "center style");
-ok(imageStyle("50", "center") === "display:block;margin:0 auto;width:50%;zoom:50%", "center plus zoom");
-ok(imageStyle("50", "left").includes("float:left") && imageStyle("50", "left").includes("width:50%"), "left plus zoom");
+ok(imageStyle("50", "center") === "display:block;margin:0 auto;zoom:50%", "center plus zoom (0.2.2: zoom only)");
+ok(imageStyle("50", "left") === "display:block;margin-right:auto;zoom:50%", "left plus zoom");
 ok(imageStyle(null, null) === "", "default style is empty");
 ok(imageAlignFromStyle("float:right;margin:0 0 8px 12px") === "right", "parse right");
 ok(imageAlignFromStyle("display:block;margin:0 auto;width:50%;zoom:50%") === "center", "parse center with zoom");

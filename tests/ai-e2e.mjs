@@ -106,7 +106,8 @@ try {
         if (k && k.startsWith("mdnest.plugin.ai.")) drop.push(k);
       }
       drop.forEach((k) => localStorage.removeItem(k));
-      localStorage.removeItem("mdnest.autosave");
+      // autosave is on by default since 0.2.2; these sections edit one shared fixture and expect it untouched on disk
+      localStorage.setItem("mdnest.autosave", "0");
       try { await window.mdnest.host.secrets.delete("ai.apikey"); } catch { /* none */ }
     });
   }

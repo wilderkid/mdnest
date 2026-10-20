@@ -164,7 +164,7 @@ export const ZH: Record<string, string> = {
   "code": "代码", "list": "列表", "task": "任务",
   "quote": "引用", "link": "链接", "Themes: {path}": "主题：{path}",
   "Theme folder: {error}": "主题文件夹：{error}", "Not an image": "不是图片文件", "Secret: {error}": "密钥：{error}",
-  "No closed file to reopen": "没有可重新打开的已关闭文件", "Save cancelled": "已取消保存", "No file to reopen": "没有可重新打开的文件",
+  "No closed file to reopen": "没有可重新打开的已关闭文件", "Save cancelled": "已取消保存", "Save as:": "另存为：", "Some characters cannot be saved as {encoding} ({sample}). Save as UTF-8 instead?": "部分字符无法以 {encoding} 保存（{sample}）。改为以 UTF-8 保存吗？", "No file to reopen": "没有可重新打开的文件",
   "File changed on disk — you have unsaved edits. Run “File: Reload from Disk” to discard them, or save to overwrite.": "文件已在磁盘上被修改，而你有未保存的编辑。运行“文件：从磁盘重新载入”可放弃编辑，或保存以覆盖。", "Reloaded — file changed on disk": "文件已在磁盘上更改，已重新载入", "Exporting HTML…": "正在导出 HTML…",
   "Exporting Word…": "正在导出 Word…", "Exporting with Pandoc…": "正在通过 Pandoc 导出…", "Not a pandoc writer name": "不是有效的 Pandoc 输出格式名",
   "Exporting PDF…": "正在导出 PDF…", "Open a folder first": "请先打开文件夹", "Copied path": "已复制路径",

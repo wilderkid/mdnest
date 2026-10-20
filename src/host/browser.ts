@@ -10,7 +10,7 @@ export const browserHost: Host = {
       : prompt(t("Path of a Markdown file (inside the dev workspace):"), (await this.defaultWorkspace()) + "/sample.md");
   },
   async pickFolder() { return prompt("Folder path:", (await this.defaultWorkspace()) ?? ""); },
-  async pickSavePath(name = "untitled.md", _ext?: string) { return prompt("Save as:", (await this.defaultWorkspace()) + "/" + name); },
+  async pickSavePath(name = "untitled.md", _ext?: string) { return prompt(t("Save as:"), (await this.defaultWorkspace()) + "/" + name); },
   async readFile(path) { return (await j(await fetch("/api/read?path=" + encodeURIComponent(path)))).text; },
   async writeFile(path, text) { await j(await fetch("/api/write", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path, text }) })); },
   async readFileBytes(path) { return (await j(await fetch("/api/readb?path=" + encodeURIComponent(path)))).data; },

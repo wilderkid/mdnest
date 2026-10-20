@@ -109,6 +109,8 @@ try {
   await page.evaluate(() => window.mdnest.editor.setMarkdown("# scratch\n"));
   await page.evaluate(() => { window.mdnest.state.path = null; });
   await page.locator(".mdn-ai-cite").first().click();
+  // 0.2.2: leaving an unsaved untitled doc asks first (it used to drop the edits silently)
+  await page.locator('.modal [data-c="discard"]').click({ timeout: 3000 }).catch(() => {});
   await page.waitForFunction(() => window.mdnest.state.path?.endsWith("cats.md"));
   await page.waitForTimeout(150);
   const cite = await page.evaluate(() => window.mdnest.editor.view.state.selection.$from.node(1)?.textContent ?? "");

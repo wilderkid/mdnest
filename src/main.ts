@@ -507,7 +507,7 @@ async function save(as: boolean) {
     const encoded = encodeText(applyEol(md, state.eol), state.encoding);
     if (encoded.unmapped.length) {
       const sample = encoded.unmapped.join(" ");
-      const useUtf8 = confirm(`Some characters cannot be saved as ${state.encoding} (${sample}). Save as UTF-8 instead?`);
+      const useUtf8 = confirm(t("Some characters cannot be saved as {encoding} ({sample}). Save as UTF-8 instead?", { encoding: state.encoding, sample }));
       if (!useUtf8) { notify("Save cancelled"); return; }
       state.encoding = "UTF-8";
       const again = encodeText(applyEol(md, state.eol), "UTF-8");
@@ -656,6 +656,8 @@ async function reloadFromDisk(force = false) {
       if (text === state.lastSaved || text === currentMarkdown()) return;
     } catch { /* fall through */ }
   }
+  // edits still inside the change debounce count as unsaved too
+  if (!force) syncDirty();
   if (state.dirty && !force) { state.conflict = true; notify("File changed on disk — you have unsaved edits. Run “File: Reload from Disk” to discard them, or save to overwrite."); return; }
   const scroll = content.scrollTop; const p = state.path;
   await openFile(p, undefined, true); content.scrollTop = scroll; notify("Reloaded — file changed on disk");

@@ -361,10 +361,10 @@ try {
   await run("format.image.zoom50");
   await page.waitForTimeout(60);
   const both = await md();
-  ok(/width:50%/.test(both) && /margin:0 auto/.test(both), "A7 align and zoom share one style", both);
+  ok(/zoom:50%/.test(both) && !/width:50%/.test(both) && /margin:0 auto/.test(both), "A7 align and zoom share one style (0.2.2: zoom only, Typora-style)", both);
   await setMd(both);
   const rt = await md();
-  ok(/margin:0 auto/.test(rt) && /width:50%/.test(rt), "A7 alignment round-trips with zoom", rt);
+  ok(/margin:0 auto/.test(rt) && /zoom:50%/.test(rt), "A7 alignment round-trips with zoom", rt);
   await page.locator("#write img[alt='pic']").click({ button: "right" });
   await page.waitForSelector(".context-menu button[data-id='image-align']");
   await page.locator(".context-menu button[data-id='image-align']").hover();
@@ -375,10 +375,10 @@ try {
   await page.keyboard.press("Escape");
   await run("format.image.alignLeft");
   await page.waitForTimeout(40);
-  ok(/float:left/.test(await md()), "A7 Align Left uses float", await md());
+  ok(/display:block;margin-right:auto/.test(await md()), "A7 Align Left (0.2.2: block + margin-right:auto)", await md());
   await run("format.image.alignDefault");
   await page.waitForTimeout(40);
-  ok(!/float:|margin:0 auto/.test(await md()), "A7 Default clears alignment and keeps zoom", await md());
+  ok(!/float:|margin:0 auto|margin-right:auto/.test(await md()), "A7 Default clears alignment and keeps zoom", await md());
 
   // ---------- A8: open link / copy link address ----------
   await setMd("[site](https://example.com/a8)\n\n[other](other.md)\n");
